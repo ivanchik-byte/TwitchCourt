@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Tribunal — Панель управления</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="gavel-icon">⚖</span>
+        <h1>Stream Tribunal</h1>
+        <span class="badge">MVP Core</span>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-indicator">
+          <span id="ws-dot" class="dot disconnected"></span>
+          <span id="ws-label">Подключение...</span>
+        </div>
+        <button id="btn-panic" class="btn btn-panic">PANIC BUTTON (F12)</button>
+      </div>
+    </header>
+
+    <main class="grid-layout">
+      <section class="card trial-control">
+        <h2>Запуск судебного заседания</h2>
+        <form id="trial-form">
+          <div class="field">
+            <label for="defendant-input">Подсудимый</label>
+            <input type="text" id="defendant-input" value="Стример" required>
+          </div>
+
+          <div class="field">
+            <label for="crime-input">Обвинение</label>
+            <input type="text" id="crime-input" value="Покупка AWP при нулевом балансе команды и стрельба по воробьям" required>
+          </div>
+
+          <div class="field">
+            <label for="context-input">Контекст из чата или игры</label>
+            <textarea id="context-input" rows="3">Чат спамит: Стример опять слил раунд! Позор! Кикните его!</textarea>
+          </div>
+
+          <div class="presets-row">
+            <span>Быстрые пресеты:</span>
+            <button type="button" class="btn-chip" data-crime="Слив клатча 1v1 с ножом наперевес">Клатч 1v1</button>
+            <button type="button" class="btn-chip" data-crime="Бросок ослепляющей гранаты в спину своей же команде">Тим-флеш</button>
+            <button type="button" class="btn-chip" data-crime="Падение в лаву со всеми алмазами">Лава в Minecraft</button>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="btn-start-trial" class="btn btn-primary">Начать процесс</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card live-status">
+        <h2>Текущий статус заседания</h2>
+        <div class="court-status-box">
+          <div class="status-row">
+            <span class="label">Состояние суда:</span>
+            <span id="current-state" class="state-badge">Ожидание</span>
+          </div>
+          <div class="status-row">
+            <span class="label">Текущее дело:</span>
+            <span id="active-case-title">Нет активного дела</span>
+          </div>
+        </div>
+
+        <div class="voting-tester">
+          <h3>Симулятор голосования чата</h3>
+          <div class="vote-counts">
+            <div class="vote-stat guilty">
+              <span>Виновен</span>
+              <strong id="stat-guilty">0</strong>
+            </div>
+            <div class="vote-stat innocent">
+              <span>Оправдан</span>
+              <strong id="stat-innocent">0</strong>
+            </div>
+          </div>
+          <div class="vote-buttons">
+            <button type="button" id="btn-vote-guilty" class="btn btn-danger">+1 Виновен (!guilty)</button>
+            <button type="button" id="btn-vote-innocent" class="btn btn-success">+1 Оправдан (!innocent)</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card obs-guide">
+        <h2>Подключение к OBS Studio</h2>
+        <p class="guide-desc">Добавьте в OBS источник типа <strong>«Браузер»</strong> с параметрами ниже:</p>
+        <div class="copy-box">
+          <input type="text" id="obs-url-input" readonly value="http://localhost:7890/overlay">
+          <button type="button" id="btn-copy-url" class="btn btn-secondary">Копировать</button>
+        </div>
+        <ul class="guide-bullets">
+          <li>Ширина: <strong>1920</strong>, Высота: <strong>1080</strong></li>
+          <li>Обязательно включите: <strong>«Управлять звуком через OBS»</strong></li>
+          <li>Включите: <strong>«Обновлять браузер, когда сцена становится активной»</strong></li>
+        </ul>
+        <div class="test-preview-row">
+          <a href="/overlay" target="_blank" class="link-preview">Открыть оверлей в новой вкладке ↗</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

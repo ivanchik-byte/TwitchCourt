@@ -1,0 +1,30 @@
+server:
+  host: "127.0.0.1"
+  port: 7890
+
+ai:
+  provider: "groq"
+  api_key: ""
+  model: "llama-3.3-70b-versatile"
+  temperature: 0.85
+  stream: true
+
+tts:
+  enabled: true
+  piper_binary: ""
+  model_path: "models/ru_dmitri.onnx"
+  config_path: "models/ru_dmitri.onnx.json"
+  speaker_id: 0
+  speed: 1.15
+
+courtroom:
+  theme: "ace_attorney"
+  prosecutor_name: "Прокурор Карлов"
+  title: "Инквизитор Твича"
+  sue_threshold: 5
+  voting_duration_sec: 45
+
+safety:
+  filter_enabled: true
+  custom_blacklist: []
+  panic_hotkey: "F12"

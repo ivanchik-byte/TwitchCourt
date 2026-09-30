@@ -1,0 +1,14 @@
+# Documentation & notes
+MoneyPrinter.md
+draft.md
+
+# Binaries
+*.exe
+stream-tribunal-server
+bin/
+
+# Local configs and models
+config.yaml
+models/*.onnx
+models/*.onnx.json
+models/*.bin
