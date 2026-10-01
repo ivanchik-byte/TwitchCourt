@@ -1,19 +1,21 @@
-/* Stream Tribunal overlay: midnight courtroom ledger.
-   Ink canvas, hairline gold rules, serif verdicts, mono docket meta. */
+/* Tribunal overlay: broadcast black. Full-bleed stage, white grotesque,
+   hairline rules, single signal red. Reads over any gameplay. */
 
 :root {
-  --ink: #0e0d12;
-  --ink-soft: #17161d;
-  --parchment: #f2ead8;
-  --muted: #a79f8d;
-  --gold: #c9a227;
-  --gold-bright: #e8c55a;
-  --blood: #b3202c;
-  --acquit: #3f7d5d;
-  --font-h1: clamp(2.25rem, 1.458rem + 3.38vw, 4.5rem);
-  --font-serif: Georgia, "Times New Roman", serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  --black: #000;
+  --panel: #0a0a0a;
+  --bar: rgba(0, 0, 0, 0.78);
+  --ink: #fafafa;
+  --dim: #a1a1a1;
+  --faint: #525252;
+  --line: rgba(255, 255, 255, 0.14);
+  --signal: #ff3b30;
+  --signal-deep: #c1110b;
+  --acquit: #30d158;
+  --guilty: #ff453a;
+  --font-display: "Bahnschrift", "DIN Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
 }
 
 * {
@@ -35,7 +37,7 @@ body {
   width: 100vw;
   height: 100vh;
   min-height: 100dvh;
-  background: radial-gradient(in oklch ellipse 120% 90% at 50% 0%, #1c1a24 0%, #0e0d12 55%, #060609 100%);
+  background: #000;
   overflow: hidden;
 }
 
@@ -55,10 +57,13 @@ body {
   width: 1920px;
   height: 1080px;
   overflow: hidden;
-  color: var(--parchment);
+  color: var(--ink);
   font-family: var(--font-sans);
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 110%, rgba(255, 59, 48, 0.07) 0%, transparent 60%),
+    #000;
   opacity: 0;
-  transition: opacity 320ms ease;
+  transition: opacity 200ms ease;
 }
 
 .court-stage.active,
@@ -69,84 +74,92 @@ body {
 .court-stage.idle .character-container,
 .court-stage.idle .dialog-panel,
 .court-stage.idle .docket-strip {
-  opacity: 0.16;
-  filter: grayscale(0.6);
+  opacity: 0.14;
+  filter: grayscale(0.7);
 }
 
-.stage-frame {
-  position: absolute;
-  inset: 28px;
-  border: 1px solid rgba(201, 162, 39, 0.35);
-  pointer-events: none;
-}
-
-.stage-frame::before {
-  content: "";
+/* Top docket: full-bleed black bar, white rule. */
+.docket-strip {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 1px;
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22), transparent);
-}
-
-.docket-strip {
-  position: absolute;
-  top: 64px;
-  left: 120px;
-  right: 120px;
   display: flex;
-  align-items: baseline;
-  gap: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(201, 162, 39, 0.4);
+  align-items: center;
+  gap: 16px;
+  padding: 26px 64px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
+  border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  font-size: 20px;
+  font-size: 22px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .docket-no {
-  color: var(--muted);
+  color: var(--faint);
 }
 
 .case-title {
-  color: var(--gold-bright);
+  color: var(--ink);
   font-weight: 700;
 }
 
 .docket-sep {
-  color: rgba(201, 162, 39, 0.6);
+  color: var(--signal);
+  font-weight: 700;
 }
 
 .docket-court {
   margin-left: auto;
-  color: var(--muted);
-  font-size: 17px;
+  color: var(--dim);
+  font-size: 18px;
 }
 
+.docket-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.docket-live::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--signal);
+}
+
+/* Prosecutor owns the left two thirds, floor to ceiling. */
 .character-container {
   position: absolute;
-  left: 220px;
-  bottom: 300px;
-  width: 420px;
-  height: 560px;
+  left: 140px;
+  bottom: 0;
+  width: 560px;
+  height: 860px;
 }
 
 .character-shadow {
   position: absolute;
-  bottom: 18px;
-  left: 60px;
-  width: 300px;
-  height: 40px;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.65) 0%, transparent 70%);
+  bottom: 40px;
+  left: 80px;
+  width: 400px;
+  height: 46px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.9) 0%, transparent 70%);
 }
 
 .character-sprite {
   position: absolute;
-  bottom: 30px;
-  left: 40px;
-  transition: transform 180ms ease;
+  bottom: 60px;
+  left: 60px;
+  transform-origin: bottom center;
+}
+
+.character-sprite .prosecutor-svg {
+  width: 440px;
+  height: 663px;
+  filter: drop-shadow(0 24px 60px rgba(0, 0, 0, 0.9));
 }
 
 .character-sprite.talking #mouth {
@@ -163,142 +176,156 @@ body {
 }
 
 .character-sprite.slam {
-  transform: translateY(26px) rotate(-1.2deg);
+  transform: translateY(30px);
 }
 
 .court-bench {
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
-  height: 120px;
-  background: linear-gradient(in oklch to bottom, #2b2118, #17100a);
-  border-top: 2px solid rgba(201, 162, 39, 0.55);
+  left: -140px;
+  width: 840px;
+  height: 150px;
+  background: #050505;
+  border-top: 2px solid var(--ink);
 }
 
+/* Objection: full-width broadcast slab. */
 .objection-banner {
   position: absolute;
-  top: 200px;
+  top: 330px;
   left: 0;
   right: 0;
-  text-align: center;
   z-index: 5;
+  background: var(--signal-deep);
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  padding: 26px 64px 30px;
 }
 
 .objection-kicker {
   font-family: var(--font-mono);
-  font-size: 22px;
-  letter-spacing: 0.3em;
-  color: var(--muted);
-  margin-bottom: 8px;
+  font-size: 24px;
+  letter-spacing: 0.32em;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 6px;
 }
 
 .objection-text {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 700;
-  font-size: 150px;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: condensed;
+  font-size: 170px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  text-transform: uppercase;
   text-wrap: balance;
-  color: var(--blood);
-  text-shadow: 0 4px 40px rgba(179, 32, 44, 0.45);
+  color: #fff;
 }
 
+/* Verdict: centered black plate, white type, red or green rule. */
 .verdict-stamp {
   position: absolute;
-  top: 240px;
+  top: 300px;
   left: 0;
   right: 0;
-  text-align: center;
   z-index: 5;
-  transform: rotate(-6deg);
+  text-align: center;
 }
 
 .stamp-kicker {
   font-family: var(--font-mono);
-  font-size: 22px;
-  letter-spacing: 0.3em;
-  color: var(--muted);
-  margin-bottom: 8px;
+  font-size: 24px;
+  letter-spacing: 0.32em;
+  color: var(--dim);
+  margin-bottom: 14px;
 }
 
 .stamp-text {
   display: inline-block;
-  font-family: var(--font-serif);
-  font-weight: 700;
-  font-size: 130px;
-  letter-spacing: -0.02em;
-  color: var(--blood);
-  border: 6px double var(--blood);
-  padding: 8px 64px;
-  background: rgba(14, 13, 18, 0.55);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: condensed;
+  font-size: 160px;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #fff;
+  background: #050505;
+  border: 3px solid var(--guilty);
+  padding: 18px 90px 26px;
 }
 
 .stamp-text.innocent {
-  color: var(--acquit);
   border-color: var(--acquit);
 }
 
+/* Dialog: bottom broadcast bar, edge to edge. */
 .dialog-panel {
   position: absolute;
-  left: 720px;
-  right: 120px;
-  bottom: 90px;
-  background: rgba(14, 13, 18, 0.82);
-  border: 1px solid rgba(201, 162, 39, 0.35);
-  border-radius: 14px;
-  padding: 30px 36px 26px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bar);
+  border-top: 1px solid var(--line);
+  padding: 30px 64px 34px 700px;
+  min-height: 250px;
 }
 
 .dialog-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 18px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .speaker-name {
-  font-family: var(--font-mono);
-  font-size: 20px;
-  letter-spacing: 0.12em;
-  color: var(--gold-bright);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: condensed;
+  font-size: 30px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--ink);
   white-space: nowrap;
+  border-left: 6px solid var(--signal);
+  padding-left: 16px;
 }
 
 .dialog-rule {
   flex: 1;
   height: 1px;
-  background: linear-gradient(to right, rgba(201, 162, 39, 0.6), transparent);
+  background: var(--line);
 }
 
 .dialog-text {
-  font-family: var(--font-serif);
-  font-size: 40px;
-  line-height: 1.3;
+  font-size: 44px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   text-wrap: pretty;
-  color: var(--parchment);
-  min-height: 120px;
+  color: var(--ink);
+  min-height: 110px;
 }
 
 .voting-bar-container {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(201, 162, 39, 0.25);
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
 .voting-labels {
   display: flex;
   align-items: baseline;
-  font-family: var(--font-mono);
-  font-size: 20px;
-  letter-spacing: 0.06em;
-  margin-bottom: 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: condensed;
+  font-size: 30px;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
 }
 
 .vote-label-guilty {
-  color: #e0808a;
+  color: var(--guilty);
 }
 
 .vote-label-guilty strong,
@@ -308,48 +335,49 @@ body {
 
 .vote-timer {
   margin: 0 auto;
-  color: var(--gold-bright);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
 .vote-label-innocent {
-  color: #8fc3a5;
+  color: var(--acquit);
 }
 
 .voting-progress {
   display: flex;
-  height: 12px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
+  height: 10px;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .guilty-fill {
-  background: var(--blood);
-  transition: width 240ms ease;
+  background: var(--guilty);
+  transition: width 200ms linear;
 }
 
 .innocent-fill {
   background: var(--acquit);
-  transition: width 240ms ease;
+  transition: width 200ms linear;
 }
 
 .speed-lines {
   position: absolute;
   inset: 0;
-  background: repeating-conic-gradient(from 0deg at 50% 45%, rgba(232, 197, 90, 0.06) 0deg 2deg, transparent 2deg 6deg);
+  background: repeating-conic-gradient(from 0deg at 50% 45%, rgba(255, 255, 255, 0.05) 0deg 2deg, transparent 2deg 6deg);
   pointer-events: none;
 }
 
 .screen-shake {
-  animation: shake 300ms ease;
+  animation: shake 280ms linear;
 }
 
 @keyframes shake {
   0%, 100% { transform: translate(0, 0); }
-  25% { transform: translate(-14px, 6px); }
-  50% { transform: translate(12px, -8px); }
-  75% { transform: translate(-6px, -4px); }
+  25% { transform: translate(-16px, 8px); }
+  50% { transform: translate(14px, -10px); }
+  75% { transform: translate(-8px, -6px); }
 }
 
 .hidden {
@@ -363,8 +391,7 @@ body {
   }
   .court-stage,
   .guilty-fill,
-  .innocent-fill,
-  .character-sprite {
+  .innocent-fill {
     transition: none;
   }
 }
