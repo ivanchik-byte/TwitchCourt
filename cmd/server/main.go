@@ -169,14 +169,11 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
 
-	overlaySub, err := fs.Sub(web.StaticFS, "overlay")
-	if err != nil {
-		log.Fatalf("failed embedding overlay fs: %v", err)
+	overlayGone := func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "overlay dismantled, back after settings are done", http.StatusGone)
 	}
-	mux.Handle("/overlay/", http.StripPrefix("/overlay/", http.FileServer(http.FS(overlaySub))))
-	mux.HandleFunc("/overlay", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/overlay/", http.StatusMovedPermanently)
-	})
+	mux.Handle("/overlay/", http.HandlerFunc(overlayGone))
+	mux.HandleFunc("/overlay", overlayGone)
 
 	dashboardSub, err := fs.Sub(web.StaticFS, "dashboard")
 	if err != nil {
@@ -426,7 +423,7 @@ func main() {
 
 	go func() {
 		log.Printf("Stream Tribunal MVP server running at http://%s", addr)
-		log.Printf("OBS Browser Source URL: http://%s/overlay", addr)
+		log.Printf("Overlay disabled for now, control desk at http://%s", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("http server error: %v", err)
 		}

@@ -3,320 +3,127 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal — Студийный пульт управления</title>
+  <title>Stream Tribunal — Канцелярия суда</title>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-  <div class="dashboard-shell">
-    <!-- Top Command Bar (Raycast / Linear style) -->
-    <header class="command-bar">
-      <div class="brand-badge">
-        <span class="brand-symbol">⚖</span>
-        <div class="brand-info">
-          <strong>STREAM TRIBUNAL</strong>
-          <span class="brand-sub">TACTICAL STUDIO DESK v1.2</span>
-        </div>
+  <div class="ledger">
+    <header class="masthead">
+      <div class="masthead-title">
+        <p class="overline">Реестр №404 · открыто</p>
+        <h1>Stream Tribunal</h1>
+        <p class="subline">Канцелярия суда над стримером</p>
       </div>
-
-      <div class="command-search">
-        <span class="search-icon">⚡</span>
-        <input type="text" id="quick-command-input" placeholder="Быстрая команда или поиск дела... (F9 запуск, F12 сброс)">
-        <kbd class="kbd-badge">F9</kbd>
-      </div>
-
-      <div class="status-pill-group">
-        <div class="status-pill stage-pill">
-          <span id="stage-dot" class="dot idle"></span>
-          <span id="stage-label" class="label-text">ОЖИДАНИЕ</span>
+      <div class="masthead-status">
+        <p class="docket-line">Связь: <span id="ws-label">Подключение...</span> <span id="ws-dot" class="dot" aria-hidden="true"></span></p>
+        <p class="docket-line">Состояние суда: <span id="current-state" class="state-badge">Ожидание</span></p>
+        <p class="docket-line">Дело: <span id="active-case-title">Нет активного дела</span></p>
+        <div class="masthead-keys">
+          <input type="password" id="secret-input" placeholder="Секрет" autocomplete="off">
+          <button type="button" id="btn-panic" class="btn btn-seal">Сбросить суд</button>
         </div>
-        <div class="status-pill ping-pill">
-          <span class="dot-online"></span>
-          <span id="ws-status-text">WS: 0ms</span>
-        </div>
-        <div class="status-pill tts-pill">
-          <span class="tts-icon">🎙</span>
-          <span id="tts-status-text">PIPER ONNX</span>
-        </div>
-        <button type="button" id="btn-copy-obs" class="btn-obs-pill">
-          <span>OBS ССЫЛКА</span>
-          <span class="copy-hint">копировать</span>
-        </button>
-        <button type="button" id="btn-panic" class="btn-panic">
-          <span class="panic-icon">⚠</span>
-          <span>PANIC (F12)</span>
-        </button>
-        <input type="password" id="secret-input" class="secret-pill" placeholder="Секрет" autocomplete="off">
       </div>
     </header>
 
-    <!-- 3-Column Tactical Command Grid -->
-    <main class="tactical-grid">
-      <!-- Col 1: Incident Dispatcher & Quick Presets -->
-      <section class="panel incident-panel">
-        <div class="panel-header">
-          <div class="header-title">
-            <span class="panel-tag">QUEUE</span>
-            <h2>ДИСПЕТЧЕР ДЕЛ</h2>
+    <main class="folio">
+      <section class="article" aria-labelledby="case-heading">
+        <p class="overline">Статья первая</p>
+        <h2 id="case-heading">Новое дело</h2>
+        <form id="trial-form">
+          <label class="field">
+            <span>Подсудимый</span>
+            <input type="text" id="defendant-input" value="Стример" required>
+          </label>
+          <label class="field">
+            <span>Обвинение</span>
+            <input type="text" id="crime-input" value="Купание в лаве с полным инвентарем" required>
+          </label>
+          <label class="field">
+            <span>Контекст из чата или игры</span>
+            <textarea id="context-input" rows="3">Чат: Стример опять слил все алмазы!</textarea>
+          </label>
+          <div class="presets">
+            <span class="presets-caption">Готовые статьи:</span>
+            <button type="button" class="chip" data-crime="Купание в лаве с полным инвентарем">Лава</button>
+            <button type="button" class="chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
+            <button type="button" class="chip" data-crime="Падение в пустоту с алмазами">Шахта</button>
+            <button type="button" class="chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание</button>
           </div>
-          <span class="badge-count">4 ПРЕСЕТА</span>
-        </div>
+          <button type="submit" class="btn btn-verdict">Открыть заседание</button>
+        </form>
 
-        <div class="incident-presets">
-          <div class="incident-card critical" data-defendant="Стример" data-crime="Слив клатча 1v1 с ножом наперевес при счете 14:15" data-context="Чат: Какой позор! Кикните его! Зачем полез с ножом?!">
-            <div class="card-meta">
-              <span class="meta-tag tag-red">CS2 КЛАТЧ</span>
-              <span class="meta-time">ВЫСОКАЯ ВИНА</span>
-            </div>
-            <div class="suspect-title">Слив клатча 1v1 с ножом</div>
-            <p class="incident-desc">Покупка AWP без брони, выход с ножом в решающем раунде и падение от P250.</p>
-            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
+        <hr class="rule">
+
+        <h3>Проверка доната вживую</h3>
+        <form id="donate-sim-form">
+          <div class="row">
+            <label class="field">
+              <span>Кто кинул</span>
+              <input type="text" id="sim-donor" value="Аноним">
+            </label>
+            <label class="field">
+              <span>Сумма</span>
+              <input type="number" id="sim-amount" min="1" step="1" value="150">
+            </label>
+            <label class="field">
+              <span>Валюта</span>
+              <input type="text" id="sim-currency" value="RUB">
+            </label>
           </div>
-
-          <div class="incident-card warning" data-defendant="Стример" data-crime="Бросок световой гранаты в спину всему скваду" data-context="Чат: Минус глаза! Ослепил всю свою команду! Гений баллистики!">
-            <div class="card-meta">
-              <span class="meta-tag tag-amber">ТИМ-ФЛЕШ</span>
-              <span class="meta-time">САБОТАЖ</span>
-            </div>
-            <div class="suspect-title">Бросок гранаты в спину команды</div>
-            <p class="incident-desc">Стример ослепил четверых тиммейтов прямо перед выходом вражеского пуша.</p>
-            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
-          </div>
-
-          <div class="incident-card notice" data-defendant="Стример" data-crime="Купание в лаве с 64 алмазами и незеритовой киркой" data-context="Чат: F алмазам! Ты куда копал под себя?! Все сгорело!">
-            <div class="card-meta">
-              <span class="meta-tag tag-blue">MINECRAFT</span>
-              <span class="meta-time">ХАЛАТНОСТЬ</span>
-            </div>
-            <div class="suspect-title">Падение в лаву с алмазами</div>
-            <p class="incident-desc">Копание вертикально вниз вопреки первому правилу игры, потеря всех ресурсов.</p>
-            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
-          </div>
-
-          <div class="incident-card notice" data-defendant="Стример" data-crime="АФК уход за чаем в момент ключевого файта" data-context="Чат: Стример ушел кушать пельмени, пока команду сносили на базе!">
-            <div class="card-meta">
-              <span class="meta-tag tag-slate">АФК ДЕЗЕРТИР</span>
-              <span class="meta-time">БРОСИЛ ПОСТ</span>
-            </div>
-            <div class="suspect-title">Самовольный уход за чаем</div>
-            <p class="incident-desc">Стример оставил персонажа в центре карты, пока вражеская команда ломала трон.</p>
-            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
-          </div>
-        </div>
-
-        <!-- Custom Case Form -->
-        <div class="custom-case-box">
-          <div class="box-title">РУЧНОЙ ВВОД ОБВИНЕНИЯ</div>
-          <form id="custom-trial-form">
-            <div class="input-row">
-              <div class="field-group">
-                <label for="defendant-input">Подсудимый</label>
-                <input type="text" id="defendant-input" value="Стример" required>
-              </div>
-            </div>
-            <div class="field-group">
-              <label for="crime-input">Статья обвинения</label>
-              <input type="text" id="crime-input" value="Нарушение законов ньютоновской физики и стрельба по облакам" required>
-            </div>
-            <div class="field-group">
-              <label for="context-input">Логи чата / контекст</label>
-              <textarea id="context-input" rows="2">Чат негодует: Снова мимо! Руки дрожат! Суд, накажи его!</textarea>
-            </div>
-            <button type="submit" id="btn-start-trial" class="btn-dispatch-primary">
-              <span>СТАРТ ЗАСЕДАНИЯ</span>
-              <kbd>Enter</kbd>
-            </button>
-          </form>
-        </div>
+          <label class="field">
+            <span>Текст доната</span>
+            <input type="text" id="sim-message" value="Накинь ему статью!">
+          </label>
+          <button type="submit" class="btn">Кинуть тестовый донат</button>
+        </form>
+        <p id="donate-status" class="footnote" aria-live="polite"></p>
       </section>
 
-      <!-- Col 2: Tactile Hardware Deck & Live Audio Spectrum -->
-      <section class="panel deck-panel">
-        <div class="panel-header">
-          <div class="header-title">
-            <span class="panel-tag">HARDWARE</span>
-            <h2>КОНСОЛЬ УПРАВЛЕНИЯ</h2>
+      <section class="article" aria-labelledby="settings-heading">
+        <p class="overline">Статья вторая</p>
+        <h2 id="settings-heading">Настройки суда</h2>
+        <form id="settings-form">
+          <h3>Пороги доната для суда</h3>
+          <div class="row">
+            <label class="field"><span>RUB</span><input type="number" id="min-rub" min="0" step="1"></label>
+            <label class="field"><span>USD</span><input type="number" id="min-usd" min="0" step="1"></label>
+            <label class="field"><span>EUR</span><input type="number" id="min-eur" min="0" step="1"></label>
+            <label class="field"><span>BITS</span><input type="number" id="min-bits" min="0" step="1"></label>
+            <label class="field"><span>Остальные</span><input type="number" id="min-default" min="0" step="1"></label>
           </div>
-          <span class="badge-status">60 FPS SPECTRUM</span>
-        </div>
+          <h3>Наказания <small>(по одному на строку, выпадает за «виновен»)</small></h3>
+          <label class="field">
+            <span class="visually-hidden">Наказания</span>
+            <textarea id="punishments-input" rows="4"></textarea>
+          </label>
+          <button type="submit" class="btn btn-verdict">Сохранить настройки</button>
+        </form>
+        <p id="settings-status" class="footnote" aria-live="polite"></p>
 
-        <!-- Real-Time Audio Visualizer Canvas -->
-        <div class="visualizer-container">
-          <div class="visualizer-header">
-            <span class="vis-label">СПЕКТР РЕЧИ ИИ-СУДЬИ (RMS & PEAK)</span>
-            <span id="audio-peak-readout" class="vis-peak">-3.2 dBFS [CLEAN]</span>
-          </div>
-          <canvas id="audio-visualizer-canvas" height="130"></canvas>
-          <div class="visualizer-footer">
-            <span>20 Hz</span>
-            <span>VOCAL CADENCE MONITOR</span>
-            <span>20 kHz</span>
-          </div>
-        </div>
+        <hr class="rule">
 
-        <!-- Tactile 3D Stream Deck Keypad -->
-        <div class="hardware-keypad-section">
-          <div class="section-label">ТАКТИЛЬНЫЕ МАКРОСЫ СУДА (STREAM DECK)</div>
-          <div class="keypad-matrix">
-            <button type="button" id="key-objection" class="tactile-key key-objection">
-              <span class="key-glyph">⚡</span>
-              <strong class="key-label">ПРОТЕСТУЮ!</strong>
-              <span class="key-sub">[OBJECTION]</span>
-            </button>
+        <h3>Портрет стримера</h3>
+        <form id="profile-form">
+          <label class="field"><span>Имя</span><input type="text" id="profile-name" placeholder="Стример"></label>
+          <label class="field"><span>Титулы (через запятую)</span><input type="text" id="profile-titles"></label>
+          <label class="field"><span>Черты (через запятую)</span><input type="text" id="profile-traits"></label>
+          <label class="field"><span>Дежурные мемы (через запятую)</span><input type="text" id="profile-gags"></label>
+          <label class="field"><span>Строгость суда</span><input type="text" id="profile-mercy"></label>
+          <button type="submit" class="btn">Сохранить портрет</button>
+        </form>
+        <p id="profile-status" class="footnote" aria-live="polite"></p>
 
-            <button type="button" id="key-slam" class="tactile-key key-slam">
-              <span class="key-glyph">🔨</span>
-              <strong class="key-label">УДАР МОЛОТКОМ</strong>
-              <span class="key-sub">[DESK SLAM]</span>
-            </button>
+        <hr class="rule">
 
-            <button type="button" id="key-verdict" class="tactile-key key-verdict">
-              <span class="key-glyph">⚖</span>
-              <strong class="key-label">ВЕРДИКТ</strong>
-              <span class="key-sub">[FINAL RULING]</span>
-            </button>
-
-            <button type="button" id="key-reset" class="tactile-key key-reset">
-              <span class="key-glyph">↺</span>
-              <strong class="key-label">СБРОС В IDLE</strong>
-              <span class="key-sub">[RESET STAGE]</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Simulated Chat Voters -->
-        <div class="simulator-box">
-          <div class="sim-header">СИМУЛЯТОР ГОЛОСОВ ТВИТЧ-ЧАТА</div>
-          <div class="sim-buttons">
-            <button type="button" id="btn-vote-guilty" class="btn-sim sim-guilty">
-              <span>+1 ВИНОВЕН</span>
-              <kbd>!guilty</kbd>
-            </button>
-            <button type="button" id="btn-vote-innocent" class="btn-sim sim-innocent">
-              <span>+1 ОПРАВДАН</span>
-              <kbd>!innocent</kbd>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Col 3: Live Stenographer Transcript Feed -->
-      <section class="panel transcript-panel">
-        <div class="panel-header">
-          <div class="header-title">
-            <span class="panel-tag">TELEMETRY</span>
-            <h2>СТЕНОГРАММА СУДА</h2>
-          </div>
-          <span class="badge-status blink">REC</span>
-        </div>
-
-        <div class="case-meta-card">
-          <div class="meta-row">
-            <span class="row-label">ТЕКУЩЕЕ ДЕЛО:</span>
-            <strong id="active-case-name" class="row-value">Нет активного слушания</strong>
-          </div>
-          <div class="meta-row">
-            <span class="row-label">ФАЗА ПРОЦЕССА:</span>
-            <span id="active-phase-badge" class="phase-tag">IDLE</span>
-          </div>
-        </div>
-
-        <div id="transcript-feed" class="transcript-feed">
-          <div class="feed-line system">
-            <span class="time-stamp">[00:00:00]</span>
-            <span class="speaker-tag sys">СИСТЕМА:</span>
-            <span class="line-text">Студийный пульт готов к работе. Нажмите F9 или пресет для открытия дела.</span>
-          </div>
-        </div>
-
-        <div class="transcript-footer">
-          <button type="button" id="btn-clear-transcript" class="btn-clear-feed">Очистить лог</button>
-          <span class="auto-scroll-hint">АВТОСКРОЛЛ ВКЛ</span>
-        </div>
+        <h3>Ключи интеграций</h3>
+        <p class="footnote">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются: DonationAlerts — токен виджета (<code>DONATE_TOKEN</code>), DonatePay — API-ключ (<code>DONATEPAY_API_KEY</code>), Twitch — токен (<code>TWITCH_TOKEN</code>) плюс <code>client_id</code> и <code>broadcaster_id</code> в конфиге.</p>
       </section>
     </main>
 
-    <!-- Court settings: donation gates, punishments, live simulate -->
-    <section class="panel settings-panel">
-      <div class="panel-header">
-        <div class="header-title">
-          <span class="panel-tag">CONFIG</span>
-          <h2>НАСТРОЙКИ СУДА</h2>
-        </div>
-        <span class="badge-status">РЕЖИМ: СУД НАД СТРИМЕРОМ</span>
-      </div>
-
-      <form id="court-settings-form" class="settings-grid">
-        <div class="field-group">
-          <label>Мин. донат для суда (по валютам)</label>
-          <div class="threshold-row">
-            <label class="threshold-cell">RUB<input type="number" id="min-rub" min="0" step="1"></label>
-            <label class="threshold-cell">USD<input type="number" id="min-usd" min="0" step="1"></label>
-            <label class="threshold-cell">EUR<input type="number" id="min-eur" min="0" step="1"></label>
-            <label class="threshold-cell">BITS<input type="number" id="min-bits" min="0" step="1"></label>
-            <label class="threshold-cell">Остальные<input type="number" id="min-default" min="0" step="1"></label>
-          </div>
-        </div>
-        <div class="field-group">
-          <label for="punishments-input">Наказания (по одному на строку, выпадает за ВИНОВЕН)</label>
-          <textarea id="punishments-input" rows="4"></textarea>
-        </div>
-        <button type="submit" class="btn-dispatch-primary"><span>СОХРАНИТЬ НАСТРОЙКИ</span></button>
-        <p id="settings-status" class="settings-status"></p>
-      </form>
-
-      <form id="donate-sim-form" class="settings-grid">
-        <div class="box-title">ПРОВЕРКА ДОНАТА ВЖИВУЮ</div>
-        <div class="field-group">
-          <label for="sim-donor">Кто кинул</label>
-          <input type="text" id="sim-donor" value="Аноним">
-        </div>
-        <div class="threshold-row">
-          <label class="threshold-cell">Сумма<input type="number" id="sim-amount" min="1" step="1" value="150"></label>
-          <label class="threshold-cell">Валюта<input type="text" id="sim-currency" value="RUB"></label>
-        </div>
-        <div class="field-group">
-          <label for="sim-message">Текст доната</label>
-          <input type="text" id="sim-message" value="Накинь ему статью!">
-        </div>
-        <button type="submit" class="btn-dispatch-primary"><span>КИНУТЬ ТЕСТОВЫЙ ДОНАТ</span></button>
-      </form>
-    </section>
-
-    <!-- Persistent Bottom Dock: Jury Gauge / Verdict Meter -->
-    <footer class="verdict-dock">
-      <div class="verdict-meta-bar">
-        <div class="verdict-col guilty-side">
-          <span class="v-label">ТРЕБОВАНИЕ ОБВИНЕНИЯ:</span>
-          <div class="v-number">
-            <strong id="gauge-guilty-pct">50%</strong>
-            <span id="gauge-guilty-votes">(0 голосов)</span>
-          </div>
-        </div>
-
-        <div class="verdict-col center-timer">
-          <span class="timer-sub">ГОЛОСОВАНИЕ ПРИСЯЖНЫХ ЧАТА</span>
-          <div id="gauge-timer" class="timer-value">00:30</div>
-        </div>
-
-        <div class="verdict-col innocent-side">
-          <span class="v-label">СТОРОНА ЗАЩИТЫ:</span>
-          <div class="v-number">
-            <span id="gauge-innocent-votes">(0 голосов)</span>
-            <strong id="gauge-innocent-pct">50%</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="gauge-track">
-        <div id="gauge-fill-guilty" class="gauge-fill-guilty" style="width: 50%;"></div>
-        <div class="gauge-needle"></div>
-        <div id="gauge-fill-innocent" class="gauge-fill-innocent" style="width: 50%;"></div>
-      </div>
+    <footer class="colophon">
+      <p>Суд над стримером · подсудимый всегда стример · ничья в пользу подсудимого</p>
     </footer>
   </div>
-
-  <!-- Hidden input for clipboard copy -->
-  <input type="text" id="obs-hidden-url" value="http://localhost:7890/overlay" style="position: absolute; left: -9999px;">
 
   <script src="app.js"></script>
 </body>
