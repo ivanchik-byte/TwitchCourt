@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -131,6 +132,39 @@ func main() {
 
 	engine = court.NewEngine(cfg, hub, aiClient, voice, filter)
 	engine.AttachMemory(recall)
+	engine.SetPunishments(cfg.Courtroom.Punishments)
+
+	donateGate := bot.NewGate(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
+	var pending bot.Pending
+
+	openDonationTrial := func(donor string, d bot.DonationEvent) {
+		crime := "Донат с требованием суда"
+		if strings.TrimSpace(d.Message) != "" {
+			crime = "Донат: " + strings.TrimSpace(d.Message)
+		}
+		context := "Донат " + strconv.FormatFloat(d.Amount, 'f', -1, 64) + " " + d.Currency + " от " + donor
+		if err := engine.StartTrial(cfg.Game.StreamerName, crime, context); err != nil {
+			pending.Push(d)
+		} else {
+			sueTracker.MarkTrial(time.Now())
+		}
+	}
+
+	handleDonation := func(d bot.Donation) {
+		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message})
+		event := bot.DonationEvent{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message}
+		if !donateGate.Pass(event) {
+			return
+		}
+		donor := d.Donor
+		if donor == "" {
+			donor = "Аноним"
+		}
+		if d.Amount >= 500 && donor != "" {
+			recall.NoteForAI("меценат " + donor + " любит взятки и ждет снисхождения")
+		}
+		openDonationTrial(donor, event)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
@@ -220,6 +254,73 @@ func main() {
 		})
 	})
 
+	mux.HandleFunc("/api/donate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Donor    string  `json:"donor"`
+			Amount   float64 `json:"amount"`
+			Currency string  `json:"currency"`
+			Message  string  `json:"message"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Amount <= 0 {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		handleDonation(bot.Donation{Donor: req.Donor, Amount: req.Amount, Currency: req.Currency, Message: req.Message})
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]any{
+				"min_amounts": cfg.Donations.MinAmounts,
+				"default_min": cfg.Donations.DefaultMin,
+				"punishments": cfg.Courtroom.Punishments,
+			})
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				MinAmounts  map[string]float64 `json:"min_amounts"`
+				DefaultMin  *float64           `json:"default_min"`
+				Punishments []string           `json:"punishments"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if req.MinAmounts != nil {
+				cfg.Donations.MinAmounts = req.MinAmounts
+			}
+			if req.DefaultMin != nil {
+				cfg.Donations.DefaultMin = *req.DefaultMin
+			}
+			if req.Punishments != nil {
+				cfg.Courtroom.Punishments = req.Punishments
+				engine.SetPunishments(req.Punishments)
+			}
+			donateGate.SetMinimums(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
+			json.NewEncoder(w).Encode(map[string]any{
+				"min_amounts": cfg.Donations.MinAmounts,
+				"default_min": cfg.Donations.DefaultMin,
+				"punishments": cfg.Courtroom.Punishments,
+			})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	gameCtx, stopGame := context.WithCancel(context.Background())
 	defer stopGame()
 	if cfg.Game.MinecraftLog != "" {
@@ -232,12 +333,7 @@ func main() {
 		log.Printf("minecraft watcher on %s", cfg.Game.MinecraftLog)
 	}
 
-	donateWatcher := bot.NewDonationsWatcher(cfg.Game.DonateToken, func(d bot.Donation) {
-		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Message: d.Message})
-		if d.Amount >= 500 && d.Donor != "" {
-			recall.NoteForAI("меценат " + d.Donor + " любит взятки и ждет снисхождения")
-		}
-	})
+	donateWatcher := bot.NewDonationsWatcher(cfg.Donations.Token, handleDonation)
 	go donateWatcher.Run(gameCtx)
 
 	var chat *bot.TwitchIRC
@@ -268,9 +364,37 @@ func main() {
 		log.Printf("twitch chat on #%s as %s", cfg.Twitch.Channel, cfg.Twitch.Nick)
 	}
 
-	engine.VerdictHook = func(verdict string, guilty, innocent int) {
-		chat.SendMessage("Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")")
+	engine.VerdictHook = func(verdict, penalty string, guilty, innocent int) {
+		text := "Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")"
+		if penalty != "" {
+			text += ". Наказание: " + penalty
+		}
+		chat.SendMessage(text)
 	}
+
+	engine.SetPunishments(cfg.Courtroom.Punishments)
+
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gameCtx.Done():
+				return
+			case <-ticker.C:
+				if engine.GetState() != court.StateIdle {
+					continue
+				}
+				if event, ok := pending.Pop(); ok {
+					donor := event.Donor
+					if donor == "" {
+						donor = "Аноним"
+					}
+					openDonationTrial(donor, event)
+				}
+			}
+		}
+	}()
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{

@@ -21,10 +21,11 @@ type TrialRecord struct {
 
 // DonationRecord is a single donor bribe attempt.
 type DonationRecord struct {
-	At      time.Time `json:"at"`
-	Donor   string    `json:"donor"`
-	Amount  float64   `json:"amount"`
-	Message string    `json:"message"`
+	At       time.Time `json:"at"`
+	Donor    string    `json:"donor"`
+	Amount   float64   `json:"amount"`
+	Currency string    `json:"currency,omitempty"`
+	Message  string    `json:"message"`
 }
 
 // Participant tracks a chat member across sessions.

@@ -29,6 +29,18 @@ courtroom:
   title: "Инквизитор Твича"
   sue_threshold: 5
   voting_duration_sec: 45
+  punishments:
+    - "10 приседаний в прямом эфире"
+    - "Минута молчания с рукой на сердце"
+    - "Ч/б фильтр на вебку до конца стрима"
+
+donations:
+  token: ""
+  default_min: 100
+  min_amounts:
+    RUB: 100
+    USD: 2
+    EUR: 2
 
 safety:
   filter_enabled: true

@@ -69,6 +69,12 @@ namespace Tribunal {
     votes: number;
   }
 
+  export interface CourtSettings {
+    min_amounts: Record<string, number>;
+    default_min: number;
+    punishments: string[];
+  }
+
   export function socketUrl(path: string): string {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     return protocol + "//" + location.host + path;
@@ -80,6 +86,13 @@ namespace Tribunal {
     } catch {
       return null;
     }
+  }
+
+  export function splitLines(value: string): string[] {
+    return value
+      .split("\n")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
   }
 
   export function splitList(value: string): string[] {
@@ -94,8 +107,7 @@ namespace Tribunal {
   }
 }
 
-
-// OBS courtroom overlay: state machine, voice bus with room DSP, scaled stage.
+// OBS courtroom overlay: poses, voice bus with room DSP, responsive scaling.
 (function () {
   const STAGE_W = 1920;
   const STAGE_H = 1080;
@@ -106,29 +118,56 @@ namespace Tribunal {
     return node as T;
   }
 
+  function maybe<T extends HTMLElement>(id: string): T | null {
+    return document.getElementById(id) as T | null;
+  }
+
   const stage = el("court-stage");
-  const scaler = el("court-scaler");
   const dialogText = el("dialog-text");
   const speakerName = el("speaker-name");
-  const caseTitle = el("case-title");
-  const sprite = el("character-sprite");
+  const caseBadge = el("case-badge");
   const objectionBanner = el("objection-banner");
+  const speedLines = el("speed-lines");
   const verdictStamp = el("verdict-stamp");
+  const stampSeal = el("stamp-seal");
   const stampText = el("stamp-text");
-  const votingPanel = el("voting-bar-container");
+  const votingContainer = el("voting-bar-container");
   const guiltyCount = el("guilty-count");
   const innocentCount = el("innocent-count");
   const voteTimer = el("vote-timer");
   const guiltyFill = el("guilty-fill");
   const innocentFill = el("innocent-fill");
+  const poseConfident = el("pose-confident");
+  const poseObjection = el("pose-objection");
+  const poseSlam = el("pose-slam");
+  const mouths = document.querySelectorAll(".prosecutor-mouth");
 
-  // The 1920x1080 scene scales down to any source size without reflow.
+  type Pose = "confident" | "objection" | "slam";
+  let currentPose: Pose = "confident";
+  let poseTimer: number | null = null;
+
+  function setPose(pose: Pose, lockMs?: number): void {
+    if (poseTimer !== null) {
+      window.clearTimeout(poseTimer);
+      poseTimer = null;
+    }
+    poseConfident.classList.remove("active");
+    poseObjection.classList.remove("active");
+    poseSlam.classList.remove("active");
+    if (pose === "objection") poseObjection.classList.add("active");
+    else if (pose === "slam") poseSlam.classList.add("active");
+    else poseConfident.classList.add("active");
+    currentPose = pose;
+    if (lockMs) {
+      poseTimer = window.setTimeout(() => setPose("confident"), lockMs);
+    }
+  }
+
+  // The fixed scene scales to any source size without reflow.
+  // zoom keeps layout scaling clear of the rumble transform on the stage.
   function fitStage(): void {
-    const host = scaler.parentElement;
-    if (!host) return;
-    const box = host.getBoundingClientRect();
-    const scale = Math.min(box.width / STAGE_W, box.height / STAGE_H);
-    scaler.style.transform = "scale(" + scale + ")";
+    const scale = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+    (document.body.style as CSSStyleDeclaration & { zoom: string }).zoom = String(scale);
   }
   window.addEventListener("resize", fitStage);
 
@@ -139,7 +178,9 @@ namespace Tribunal {
 
   function ctx(): AudioContext {
     if (!audioCtx) {
-      const Impl = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const Impl =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       audioCtx = new Impl();
       voiceBus = buildVoiceBus(audioCtx);
     }
@@ -237,6 +278,18 @@ namespace Tribunal {
     bodyGain.connect(ac.destination);
     body.start(t);
     body.stop(t + 0.25);
+
+    const sub = ac.createOscillator();
+    sub.type = "sine";
+    sub.frequency.setValueAtTime(130, t);
+    sub.frequency.exponentialRampToValueAtTime(40, t + 0.07);
+    const subGain = ac.createGain();
+    subGain.gain.setValueAtTime(0.9, t);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    sub.connect(subGain);
+    subGain.connect(ac.destination);
+    sub.start(t);
+    sub.stop(t + 0.16);
   }
 
   function objectionStinger(when?: number): void {
@@ -251,6 +304,7 @@ namespace Tribunal {
       const osc = ac.createOscillator();
       osc.type = idx % 2 === 0 ? "sawtooth" : "triangle";
       osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.985, t + 0.08);
       const veil = ac.createBiquadFilter();
       veil.type = "lowpass";
       veil.frequency.setValueAtTime(3200, t);
@@ -263,6 +317,24 @@ namespace Tribunal {
       gain.connect(bus);
       osc.start(t);
       osc.stop(t + 0.85);
+    });
+
+    const bell = ac.createOscillator();
+    bell.type = "sine";
+    bell.frequency.setValueAtTime(1760, t);
+    const bellGain = ac.createGain();
+    bellGain.gain.setValueAtTime(0.15, t);
+    bellGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    bell.connect(bellGain);
+    bellGain.connect(bus);
+    bell.start(t);
+    bell.stop(t + 0.95);
+  }
+
+  function setMouthTalking(talking: boolean): void {
+    mouths.forEach((m) => {
+      if (talking) m.classList.add("mouth-talking");
+      else m.classList.remove("mouth-talking");
     });
   }
 
@@ -284,11 +356,11 @@ namespace Tribunal {
   function playNext(): void {
     if (audioQueue.length === 0) {
       playing = false;
-      sprite.classList.remove("talking");
+      setMouthTalking(false);
       return;
     }
     playing = true;
-    sprite.classList.add("talking");
+    setMouthTalking(true);
     const ac = ctx();
     const buffer = audioQueue.shift();
     if (!buffer) {
@@ -303,20 +375,22 @@ namespace Tribunal {
   }
 
   function deskSlam(): void {
-    sprite.classList.add("slam");
-    stage.classList.add("screen-shake");
+    setPose("slam", 500);
+    stage.classList.add("screen-rumble");
     gavelHit();
-    window.setTimeout(() => {
-      sprite.classList.remove("slam");
-      stage.classList.remove("screen-shake");
-    }, 400);
+    window.setTimeout(() => stage.classList.remove("screen-rumble"), 400);
   }
 
   function objection(): void {
+    setPose("objection", 1200);
     objectionStinger();
     objectionBanner.classList.remove("hidden");
-    stage.classList.add("screen-shake");
-    window.setTimeout(() => stage.classList.remove("screen-shake"), 300);
+    speedLines.classList.remove("hidden");
+    stage.classList.add("screen-rumble");
+    window.setTimeout(() => {
+      stage.classList.remove("screen-rumble");
+      speedLines.classList.add("hidden");
+    }, 450);
     window.setTimeout(() => objectionBanner.classList.add("hidden"), 1200);
   }
 
@@ -324,17 +398,23 @@ namespace Tribunal {
     if (payload.state === "idle") {
       stage.classList.remove("active");
       stage.classList.add("idle");
-      votingPanel.classList.add("hidden");
+      votingContainer.classList.add("hidden");
       verdictStamp.classList.add("hidden");
       objectionBanner.classList.add("hidden");
+      speedLines.classList.add("hidden");
+      setPose("confident");
       return;
     }
     stage.classList.remove("idle");
     stage.classList.add("active");
-    if (payload.case_title) caseTitle.textContent = payload.case_title;
+    if (payload.case_title) caseBadge.textContent = payload.case_title;
     if (payload.charge) dialogText.textContent = "Обвинение: " + payload.charge;
-    if (payload.state === "voting") votingPanel.classList.remove("hidden");
-    else votingPanel.classList.add("hidden");
+    if (payload.state === "voting") {
+      votingContainer.classList.remove("hidden");
+      setPose("confident");
+    } else {
+      votingContainer.classList.add("hidden");
+    }
   }
 
   function onVoting(payload: Tribunal.VotingUpdate): void {
@@ -350,21 +430,35 @@ namespace Tribunal {
   }
 
   function onVerdict(payload: Tribunal.Verdict): void {
+    const innocent = payload.verdict === "НЕВИНОВЕН";
     stampText.textContent = payload.verdict;
-    stampText.classList.toggle("innocent", payload.verdict === "НЕВИНОВЕН");
+    stampSeal.className = "stamp-seal " + (innocent ? "innocent" : "guilty");
+    const penalty = maybe("stamp-penalty");
+    if (penalty) {
+      if (!innocent && payload.penalty) {
+        penalty.textContent = "Наказание: " + payload.penalty;
+        penalty.classList.remove("hidden");
+      } else {
+        penalty.textContent = "";
+        penalty.classList.add("hidden");
+      }
+    }
     verdictStamp.classList.remove("hidden");
-    deskSlam();
-    window.setTimeout(() => verdictStamp.classList.add("hidden"), 5000);
+    if (!innocent) deskSlam();
+    else setPose("confident");
+    window.setTimeout(() => verdictStamp.classList.add("hidden"), 5500);
   }
 
   function resetStage(): void {
     audioQueue.length = 0;
     playing = false;
-    sprite.classList.remove("talking");
+    setMouthTalking(false);
     stage.classList.remove("active");
     stage.classList.add("idle");
     verdictStamp.classList.add("hidden");
     objectionBanner.classList.add("hidden");
+    speedLines.classList.add("hidden");
+    setPose("confident");
   }
 
   function connect(): void {

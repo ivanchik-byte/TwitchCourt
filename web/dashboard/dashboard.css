@@ -870,3 +870,58 @@ body {
   transform: translateX(-50%);
   z-index: 10;
 }
+
+/* Court settings: donation gates, punishments, live simulate. */
+.settings-panel {
+  margin-top: 18px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.threshold-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.threshold-cell {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.threshold-cell input,
+.field-group input,
+.field-group textarea {
+  width: 100%;
+  background: #0b1220;
+  border: 1px solid #26314a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-height: 44px;
+  color: #f1f5f9;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.settings-status {
+  font-size: 13px;
+  color: #38bdf8;
+  min-height: 20px;
+}
+
+.secret-pill {
+  background: #0b1220;
+  border: 1px solid #26314a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 40px;
+  width: 120px;
+  color: #f1f5f9;
+  font-size: 13px;
+}

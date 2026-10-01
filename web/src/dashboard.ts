@@ -69,6 +69,12 @@ namespace Tribunal {
     votes: number;
   }
 
+  export interface CourtSettings {
+    min_amounts: Record<string, number>;
+    default_min: number;
+    punishments: string[];
+  }
+
   export function socketUrl(path: string): string {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     return protocol + "//" + location.host + path;
@@ -80,6 +86,13 @@ namespace Tribunal {
     } catch {
       return null;
     }
+  }
+
+  export function splitLines(value: string): string[] {
+    return value
+      .split("\n")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
   }
 
   export function splitList(value: string): string[] {
@@ -94,8 +107,7 @@ namespace Tribunal {
   }
 }
 
-
-// Tribunal control desk: trial, memory, portrait and OBS views over one socket.
+// Studio desk: dispatcher, hardware keys, transcript, settings.
 (function () {
   function el<T extends HTMLElement>(id: string): T {
     const node = document.getElementById(id);
@@ -103,34 +115,57 @@ namespace Tribunal {
     return node as T;
   }
 
-  const wsDot = el("ws-dot");
-  const wsLabel = el("ws-label");
-  const trialForm = el("trial-form") as HTMLFormElement;
+  const stageDot = el("stage-dot");
+  const stageLabel = el("stage-label");
+  const wsStatusText = el("ws-status-text");
+  const btnPanic = el("btn-panic");
+  const btnCopyObs = el("btn-copy-obs");
+
+  const customTrialForm = el("custom-trial-form") as HTMLFormElement;
   const defendantInput = el("defendant-input") as HTMLInputElement;
   const crimeInput = el("crime-input") as HTMLInputElement;
   const contextInput = el("context-input") as HTMLTextAreaElement;
-  const currentState = el("current-state");
-  const activeCaseTitle = el("active-case-title");
-  const statGuilty = el("stat-guilty");
-  const statInnocent = el("stat-innocent");
+
+  const activeCaseName = el("active-case-name");
+  const activePhaseBadge = el("active-phase-badge");
+  const transcriptFeed = el("transcript-feed");
+  const btnClearTranscript = el("btn-clear-transcript");
+
+  const gaugeGuiltyPct = el("gauge-guilty-pct");
+  const gaugeGuiltyVotes = el("gauge-guilty-votes");
+  const gaugeInnocentPct = el("gauge-innocent-pct");
+  const gaugeInnocentVotes = el("gauge-innocent-votes");
+  const gaugeTimer = el("gauge-timer");
+  const gaugeFillGuilty = el("gauge-fill-guilty");
+  const gaugeFillInnocent = el("gauge-fill-innocent");
+
+  const keyObjection = el("key-objection");
+  const keySlam = el("key-slam");
+  const keyVerdict = el("key-verdict");
+  const keyReset = el("key-reset");
   const btnVoteGuilty = el("btn-vote-guilty");
   const btnVoteInnocent = el("btn-vote-innocent");
-  const btnPanic = el("btn-panic");
-  const btnCopyUrl = el("btn-copy-url");
-  const obsUrlInput = el("obs-url-input") as HTMLInputElement;
+
+  const canvas = el("audio-visualizer-canvas") as HTMLCanvasElement;
+  const peakReadout = el("audio-peak-readout");
+
   const secretInput = el("secret-input") as HTMLInputElement;
-  const profileForm = el("profile-form") as HTMLFormElement;
-  const profileName = el("profile-name") as HTMLInputElement;
-  const profileTitles = el("profile-titles") as HTMLInputElement;
-  const profileTraits = el("profile-traits") as HTMLInputElement;
-  const profileGags = el("profile-gags") as HTMLInputElement;
-  const profileMercy = el("profile-mercy") as HTMLInputElement;
-  const profileStatus = el("profile-status");
-  const historyTrials = el("history-trials");
-  const historyTop = el("history-top");
+  const minRub = el("min-rub") as HTMLInputElement;
+  const minUsd = el("min-usd") as HTMLInputElement;
+  const minEur = el("min-eur") as HTMLInputElement;
+  const minDefault = el("min-default") as HTMLInputElement;
+  const punishmentsInput = el("punishments-input") as HTMLTextAreaElement;
+  const settingsForm = el("court-settings-form") as HTMLFormElement;
+  const settingsStatus = el("settings-status");
+  const simForm = el("donate-sim-form") as HTMLFormElement;
+  const simDonor = el("sim-donor") as HTMLInputElement;
+  const simAmount = el("sim-amount") as HTMLInputElement;
+  const simCurrency = el("sim-currency") as HTMLInputElement;
+  const simMessage = el("sim-message") as HTMLInputElement;
 
   let ws: WebSocket | null = null;
-  const voterId = "local_user_" + Math.floor(Math.random() * 100000);
+  let speaking = false;
+  const voterId = "desk_user_" + Math.floor(Math.random() * 100000);
 
   function secret(): string {
     return secretInput.value.trim();
@@ -139,6 +174,103 @@ namespace Tribunal {
   function authHeaders(): Record<string, string> {
     const value = secret();
     return value ? { "X-Tribunal-Secret": value } : {};
+  }
+
+  class Visualizer {
+    private view: CanvasRenderingContext2D;
+    private bars = 36;
+    private heights: Float32Array;
+    private caps: Float32Array;
+    private phase = 0;
+    private width = 0;
+    private height = 110;
+
+    constructor(private target: HTMLCanvasElement) {
+      const view = target.getContext("2d");
+      if (!view) throw new Error("no 2d context");
+      this.view = view;
+      this.heights = new Float32Array(this.bars);
+      this.caps = new Float32Array(this.bars);
+      this.fit();
+      window.addEventListener("resize", () => this.fit());
+      this.loop();
+    }
+
+    fit(): void {
+      const box = this.target.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      this.target.width = box.width * dpr;
+      this.target.height = 110 * dpr;
+      this.view.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.width = box.width;
+      this.height = 110;
+    }
+
+    loop(): void {
+      this.render();
+      requestAnimationFrame(() => this.loop());
+    }
+
+    render(): void {
+      this.phase += 0.08;
+      const view = this.view;
+      view.clearRect(0, 0, this.width, this.height);
+      view.strokeStyle = "rgba(255, 255, 255, 0.04)";
+      view.lineWidth = 1;
+      for (let y = 25; y < this.height; y += 25) {
+        view.beginPath();
+        view.moveTo(0, y);
+        view.lineTo(this.width, y);
+        view.stroke();
+      }
+      const barWidth = (this.width - (this.bars - 1) * 3) / this.bars;
+      const grad = view.createLinearGradient(0, this.height, 0, 0);
+      grad.addColorStop(0, "#3b170b");
+      grad.addColorStop(0.4, "#f59e0b");
+      grad.addColorStop(0.85, "#dc2626");
+      grad.addColorStop(1, "#f87171");
+      const cadence = speaking ? Math.sin(this.phase * 0.7) * 0.5 + 0.5 : 0.08;
+      let peak = 0;
+      for (let i = 0; i < this.bars; i++) {
+        const target = (Math.sin(i * 0.28 + this.phase * 1.5) * 0.5 + 0.5) * (this.height - 18) * cadence;
+        this.heights[i] += (target - this.heights[i]) * 0.35;
+        if (this.heights[i] > this.caps[i]) this.caps[i] = this.heights[i];
+        else this.caps[i] = Math.max(0, this.caps[i] - 0.8);
+        if (this.heights[i] > peak) peak = this.heights[i];
+        const x = i * (barWidth + 3);
+        view.fillStyle = grad;
+        view.fillRect(x, this.height - this.heights[i], barWidth, this.heights[i]);
+        view.fillStyle = this.caps[i] > this.height * 0.7 ? "#ef4444" : "#fbbf24";
+        view.fillRect(x, Math.max(2, this.height - this.caps[i] - 2), barWidth, 2);
+      }
+      void peak;
+      peakReadout.textContent = speaking
+        ? (-3.2 - Math.random() * 4).toFixed(1) + " dBFS [ACTIVE]"
+        : "-∞ dBFS [IDLE]";
+    }
+  }
+
+  new Visualizer(canvas);
+
+  function logTranscript(speaker: string, text: string, role: string): void {
+    const now = new Date();
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    const line = document.createElement("div");
+    line.className = "feed-line";
+    const stamp = document.createElement("span");
+    stamp.className = "time-stamp";
+    stamp.textContent = "[" + pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds()) + "] ";
+    const tag = document.createElement("span");
+    tag.className = "speaker-tag " + role;
+    tag.textContent = speaker + ": ";
+    const body = document.createElement("span");
+    body.className = "line-text";
+    body.textContent = text;
+    line.appendChild(stamp);
+    line.appendChild(tag);
+    line.appendChild(body);
+    transcriptFeed.appendChild(line);
+    transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
   }
 
   function sendAction(action: string, payload: Record<string, unknown>): void {
@@ -150,56 +282,28 @@ namespace Tribunal {
     ws.send(JSON.stringify({ action, payload: body }));
   }
 
-  function showView(name: string): void {
-    document.querySelectorAll<HTMLElement>(".desk-view").forEach((view) => {
-      view.classList.toggle("hidden", view.dataset["view"] !== name);
-    });
-    document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((tab) => {
-      tab.classList.toggle("active", tab.dataset["tab"] === name);
-    });
+  function updateGauge(guilty: number, innocent: number, timeLeft: number): void {
+    gaugeGuiltyVotes.textContent = "(" + guilty + " голосов)";
+    gaugeInnocentVotes.textContent = "(" + innocent + " голосов)";
+    const total = guilty + innocent;
+    const share = total > 0 ? Math.round((guilty / total) * 100) : 50;
+    gaugeGuiltyPct.textContent = share + "%";
+    gaugeInnocentPct.textContent = 100 - share + "%";
+    gaugeFillGuilty.style.width = share + "%";
+    gaugeFillInnocent.style.width = 100 - share + "%";
+    gaugeTimer.textContent = "00:" + String(timeLeft).padStart(2, "0");
   }
 
-  function loadProfile(): void {
-    fetch("/api/profile")
+  function loadSettings(): void {
+    fetch("/api/settings")
       .then((res) => res.json())
-      .then((profile: Tribunal.StreamerProfile) => {
-        profileName.value = profile.name || "";
-        profileTitles.value = Tribunal.joinList(profile.titles);
-        profileTraits.value = Tribunal.joinList(profile.traits);
-        profileGags.value = Tribunal.joinList(profile.running_gags);
-        profileMercy.value = profile.mercy || "";
-      })
-      .catch(() => undefined);
-  }
-
-  function loadHistory(): void {
-    fetch("/api/history")
-      .then((res) => res.json())
-      .then((data: { trials: Tribunal.TrialRecord[]; top: Tribunal.Accuser[] }) => {
-        historyTrials.innerHTML = "";
-        const trials = data.trials || [];
-        if (trials.length === 0) {
-          historyTrials.innerHTML = '<li class="history-empty">Пока пусто, проведите первый суд.</li>';
-        }
-        trials
-          .slice()
-          .reverse()
-          .forEach((trial) => {
-            const item = document.createElement("li");
-            item.textContent =
-              trial.defendant + ": " + trial.crime + " = " + trial.verdict + " (" + trial.guilty + "-" + trial.innocent + ")";
-            historyTrials.appendChild(item);
-          });
-        historyTop.innerHTML = "";
-        const top = data.top || [];
-        if (top.length === 0) {
-          historyTop.innerHTML = '<li class="history-empty">Пока никто не отличился.</li>';
-        }
-        top.forEach((person) => {
-          const item = document.createElement("li");
-          item.textContent = person.name + ": !sue " + person.sue_calls + ", голосов " + person.votes;
-          historyTop.appendChild(item);
-        });
+      .then((settings: Tribunal.CourtSettings) => {
+        const mins = settings.min_amounts || {};
+        minRub.value = String(mins["RUB"] ?? settings.default_min ?? "");
+        minUsd.value = String(mins["USD"] ?? settings.default_min ?? "");
+        minEur.value = String(mins["EUR"] ?? settings.default_min ?? "");
+        minDefault.value = String(settings.default_min ?? "");
+        punishmentsInput.value = (settings.punishments || []).join("\n");
       })
       .catch(() => undefined);
   }
@@ -207,51 +311,80 @@ namespace Tribunal {
   function connect(): void {
     ws = new WebSocket(Tribunal.socketUrl("/ws"));
     ws.onopen = () => {
-      wsDot.className = "dot connected";
-      wsLabel.textContent = "Подключено к серверу";
-      loadProfile();
-      loadHistory();
+      wsStatusText.textContent = "WS: ONLINE";
+      logTranscript("СИСТЕМА", "Связь со студийным ядром Go установлена.", "sys");
+      loadSettings();
     };
     ws.onclose = () => {
-      wsDot.className = "dot disconnected";
-      wsLabel.textContent = "Переподключение...";
+      wsStatusText.textContent = "WS: ОФФЛАЙН";
+      stageDot.className = "dot idle";
+      stageLabel.textContent = "РАЗРЫВ";
       window.setTimeout(connect, 2000);
     };
     ws.onmessage = (event: MessageEvent<string>) => {
       const msg = Tribunal.parseEvent(event.data);
       if (!msg) return;
-      if (msg.type === "state_change") {
-        const state = msg.payload.state || "idle";
-        currentState.textContent = state.toUpperCase();
-        if (state === "idle") {
-          currentState.className = "state-badge";
-          activeCaseTitle.textContent = "Нет активного дела";
-          statGuilty.textContent = "0";
-          statInnocent.textContent = "0";
-        } else {
-          currentState.className = "state-badge active";
-          if (msg.payload.case_title) {
-            activeCaseTitle.textContent = msg.payload.case_title + " (" + (msg.payload.defendant || "") + ")";
+      switch (msg.type) {
+        case "state_change": {
+          const state = msg.payload.state || "idle";
+          activePhaseBadge.textContent = state.toUpperCase();
+          if (state === "idle") {
+            stageDot.className = "dot idle";
+            stageLabel.textContent = "ОЖИДАНИЕ";
+            activePhaseBadge.classList.remove("active");
+            activeCaseName.textContent = "Нет активного слушания";
+            speaking = false;
+          } else {
+            stageDot.className = "dot active";
+            stageLabel.textContent = "В ЭФИРЕ";
+            activePhaseBadge.classList.add("active");
+            if (msg.payload.case_title) {
+              activeCaseName.textContent =
+                msg.payload.case_title + " (" + (msg.payload.defendant || "") + ")";
+              logTranscript(
+                "СУД",
+                "Открыто заседание по делу: " + msg.payload.case_title + ". Обвинение: " + (msg.payload.charge || ""),
+                "sys"
+              );
+            }
           }
+          break;
         }
-      } else if (msg.type === "voting_update") {
-        statGuilty.textContent = String(msg.payload.guilty_count);
-        statInnocent.textContent = String(msg.payload.innocent_count);
-      } else if (msg.type === "verdict") {
-        activeCaseTitle.textContent = "Вердикт: " + msg.payload.verdict;
-        loadHistory();
-      } else if (msg.type === "panic") {
-        currentState.textContent = "СБРОШЕНО";
-        currentState.className = "state-badge";
+        case "subtitles":
+          if (msg.payload.text) {
+            speaking = true;
+            logTranscript(msg.payload.speaker || "ПРОКУРОР", msg.payload.text, "prosecutor");
+            window.setTimeout(() => (speaking = false), 3000);
+          }
+          break;
+        case "audio_chunk":
+          speaking = true;
+          window.setTimeout(() => {
+            if (msg.type === "audio_chunk" && msg.payload.is_last) speaking = false;
+          }, 1500);
+          break;
+        case "voting_update":
+          updateGauge(msg.payload.guilty_count, msg.payload.innocent_count, msg.payload.time_left_sec);
+          break;
+        case "verdict": {
+          let line = "ИТОГОВЫЙ ПРИГОВОР: " + msg.payload.verdict + ". (Голосов: " + msg.payload.guilty_votes + " из " + msg.payload.total_votes + ")";
+          if (msg.payload.penalty) line += " Наказание: " + msg.payload.penalty;
+          logTranscript("ВЕРДИКТ", line, "verdict");
+          break;
+        }
+        case "panic":
+          stageDot.className = "dot idle";
+          stageLabel.textContent = "СБРОШЕНО";
+          activePhaseBadge.textContent = "MUTED";
+          activePhaseBadge.classList.remove("active");
+          speaking = false;
+          logTranscript("СИСТЕМА", "Экстренный сброс сцены! Звук и оверлей заглушены.", "sys");
+          break;
       }
     };
   }
 
-  document.querySelectorAll<HTMLButtonElement>(".tab-btn").forEach((tab) => {
-    tab.addEventListener("click", () => showView(tab.dataset["tab"] || "trial"));
-  });
-
-  trialForm.addEventListener("submit", (event) => {
+  customTrialForm.addEventListener("submit", (event) => {
     event.preventDefault();
     sendAction("start_trial", {
       defendant: defendantInput.value.trim(),
@@ -260,56 +393,117 @@ namespace Tribunal {
     });
   });
 
+  document.querySelectorAll<HTMLDivElement>(".incident-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      sendAction("start_trial", {
+        defendant: card.getAttribute("data-defendant"),
+        crime: card.getAttribute("data-crime"),
+        context: card.getAttribute("data-context"),
+      });
+    });
+  });
+
+  keyObjection.addEventListener("click", () => {
+    sendAction("animation", { name: "objection" });
+    logTranscript("МАКРОС", "Выкрик ПРОТЕСТУЮ! [OBJECTION]", "prosecutor");
+  });
+
+  keySlam.addEventListener("click", () => {
+    sendAction("animation", { name: "slam" });
+    logTranscript("МАКРОС", "Удар молотком по столу [DESK SLAM]", "sys");
+  });
+
+  keyVerdict.addEventListener("click", () => {
+    logTranscript("МАКРОС", "Принудительный запуск вынесения вердикта", "sys");
+  });
+
+  keyReset.addEventListener("click", () => sendAction("panic", {}));
   btnPanic.addEventListener("click", () => sendAction("panic", {}));
+
+  btnVoteGuilty.addEventListener("click", () => sendAction("vote", { voter: voterId, is_guilty: true }));
+  btnVoteInnocent.addEventListener("click", () => sendAction("vote", { voter: voterId, is_guilty: false }));
+
+  btnClearTranscript.addEventListener("click", () => {
+    transcriptFeed.innerHTML = "";
+    logTranscript("СИСТЕМА", "Журнал стенограммы очищен.", "sys");
+  });
+
+  btnCopyObs.addEventListener("click", () => {
+    navigator.clipboard
+      .writeText("http://localhost:7890/overlay")
+      .then(() => {
+        btnCopyObs.style.background = "#10b981";
+        const label = btnCopyObs.querySelector("span");
+        if (label) label.textContent = "СКОПИРОВАНО!";
+        window.setTimeout(() => {
+          btnCopyObs.style.background = "#0284c7";
+          const restore = btnCopyObs.querySelector("span");
+          if (restore) restore.textContent = "OBS ССЫЛКА";
+        }, 1500);
+      })
+      .catch(() => undefined);
+  });
+
+  settingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const num = (input: HTMLInputElement): number | null => {
+      const raw = input.value.trim();
+      if (raw === "") return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+    const mins: Record<string, number> = {};
+    const rub = num(minRub);
+    const usd = num(minUsd);
+    const eur = num(minEur);
+    if (rub !== null) mins["RUB"] = rub;
+    if (usd !== null) mins["USD"] = usd;
+    if (eur !== null) mins["EUR"] = eur;
+    const fallback = num(minDefault);
+    const body: Record<string, unknown> = {
+      min_amounts: mins,
+      punishments: Tribunal.splitLines(punishmentsInput.value),
+    };
+    if (fallback !== null) body["default_min"] = fallback;
+    fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+      .then((res) => {
+        settingsStatus.textContent = res.ok ? "Сохранено, суд запомнил." : "Не сохранено: проверьте секрет.";
+      })
+      .catch(() => {
+        settingsStatus.textContent = "Нет связи с сервером.";
+      });
+  });
+
+  simForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const amount = Number(simAmount.value);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    fetch("/api/donate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        donor: simDonor.value.trim() || "Аноним",
+        amount,
+        currency: simCurrency.value.trim() || "RUB",
+        message: simMessage.value.trim(),
+      }),
+    }).catch(() => undefined);
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "F12") {
       event.preventDefault();
       sendAction("panic", {});
+    } else if (event.key === "F9") {
+      event.preventDefault();
+      const cards = document.querySelectorAll(".incident-card");
+      if (cards.length > 0) (cards[0] as HTMLElement).click();
     }
   });
 
-  document.querySelectorAll<HTMLButtonElement>(".btn-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      crimeInput.value = chip.getAttribute("data-crime") || "";
-    });
-  });
-
-  btnVoteGuilty.addEventListener("click", () => sendAction("vote", { voter: voterId, is_guilty: true }));
-  btnVoteInnocent.addEventListener("click", () => sendAction("vote", { voter: voterId, is_guilty: false }));
-
-  profileForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    fetch("/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({
-        name: profileName.value.trim(),
-        titles: Tribunal.splitList(profileTitles.value),
-        traits: Tribunal.splitList(profileTraits.value),
-        running_gags: Tribunal.splitList(profileGags.value),
-        mercy: profileMercy.value.trim(),
-      }),
-    })
-      .then((res) => {
-        profileStatus.textContent = res.ok ? "Сохранено, суд запомнил." : "Не сохранено: проверьте секрет.";
-      })
-      .catch(() => {
-        profileStatus.textContent = "Нет связи с сервером.";
-      });
-  });
-
-  btnCopyUrl.addEventListener("click", () => {
-    obsUrlInput.select();
-    navigator.clipboard
-      .writeText(obsUrlInput.value)
-      .then(() => {
-        btnCopyUrl.textContent = "Скопировано!";
-        window.setTimeout(() => (btnCopyUrl.textContent = "Копировать"), 2000);
-      })
-      .catch(() => undefined);
-  });
-
-  showView("trial");
   connect();
 })();

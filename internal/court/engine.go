@@ -10,6 +10,7 @@ import (
 
 	"stream-tribunal/internal/ai"
 	"stream-tribunal/internal/audio"
+	"stream-tribunal/internal/bot"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/obs"
@@ -43,8 +44,9 @@ type Engine struct {
 	voice    audio.Synthesizer
 	filter   *safety.Filter
 	recall   *memory.Store
+	deck     *bot.Deck
 	// VerdictHook runs after the verdict broadcast, used for chat announces.
-	VerdictHook func(verdict string, guilty, innocent int)
+	VerdictHook func(verdict, penalty string, guilty, innocent int)
 	mu          sync.RWMutex
 	state       State
 	currCase    *TrialCase
@@ -70,6 +72,13 @@ func (e *Engine) AttachMemory(store *memory.Store) {
 	if store != nil {
 		e.recall = store
 	}
+}
+
+// SetPunishments replaces the guilty-verdict punishment deck.
+func (e *Engine) SetPunishments(items []string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.deck = bot.NewDeck(items)
 }
 
 func (e *Engine) GetState() State {
@@ -329,6 +338,10 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	innocentVotes := c.InnocentVotes
 	defendant := c.Defendant
 	crime := c.Crime
+	penalty := ""
+	if isGuilty && e.deck != nil {
+		penalty = e.deck.Draw()
+	}
 	e.mu.Unlock()
 
 	if e.recall != nil {
@@ -358,11 +371,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		Verdict:     verdictStr,
 		GuiltyVotes: guiltyVotes,
 		TotalVotes:  totalVotes,
-		Penalty:     "Штрафной ч/б фильтр вины в OBS",
+		Penalty:     penalty,
 	})
 
 	if e.VerdictHook != nil {
-		e.VerdictHook(verdictStr, guiltyVotes, innocentVotes)
+		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes)
 	}
 
 	select {

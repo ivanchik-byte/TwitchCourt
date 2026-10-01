@@ -45,6 +45,7 @@
           <span class="panic-icon">⚠</span>
           <span>PANIC (F12)</span>
         </button>
+        <input type="password" id="secret-input" class="secret-pill" placeholder="Секрет" autocomplete="off">
       </div>
     </header>
 
@@ -233,6 +234,52 @@
         </div>
       </section>
     </main>
+
+    <!-- Court settings: donation gates, punishments, live simulate -->
+    <section class="panel settings-panel">
+      <div class="panel-header">
+        <div class="header-title">
+          <span class="panel-tag">CONFIG</span>
+          <h2>НАСТРОЙКИ СУДА</h2>
+        </div>
+        <span class="badge-status">РЕЖИМ: СУД НАД СТРИМЕРОМ</span>
+      </div>
+
+      <form id="court-settings-form" class="settings-grid">
+        <div class="field-group">
+          <label>Мин. донат для суда (по валютам)</label>
+          <div class="threshold-row">
+            <label class="threshold-cell">RUB<input type="number" id="min-rub" min="0" step="1"></label>
+            <label class="threshold-cell">USD<input type="number" id="min-usd" min="0" step="1"></label>
+            <label class="threshold-cell">EUR<input type="number" id="min-eur" min="0" step="1"></label>
+            <label class="threshold-cell">Остальные<input type="number" id="min-default" min="0" step="1"></label>
+          </div>
+        </div>
+        <div class="field-group">
+          <label for="punishments-input">Наказания (по одному на строку, выпадает за ВИНОВЕН)</label>
+          <textarea id="punishments-input" rows="4"></textarea>
+        </div>
+        <button type="submit" class="btn-dispatch-primary"><span>СОХРАНИТЬ НАСТРОЙКИ</span></button>
+        <p id="settings-status" class="settings-status"></p>
+      </form>
+
+      <form id="donate-sim-form" class="settings-grid">
+        <div class="box-title">ПРОВЕРКА ДОНАТА ВЖИВУЮ</div>
+        <div class="field-group">
+          <label for="sim-donor">Кто кинул</label>
+          <input type="text" id="sim-donor" value="Аноним">
+        </div>
+        <div class="threshold-row">
+          <label class="threshold-cell">Сумма<input type="number" id="sim-amount" min="1" step="1" value="150"></label>
+          <label class="threshold-cell">Валюта<input type="text" id="sim-currency" value="RUB"></label>
+        </div>
+        <div class="field-group">
+          <label for="sim-message">Текст доната</label>
+          <input type="text" id="sim-message" value="Накинь ему статью!">
+        </div>
+        <button type="submit" class="btn-dispatch-primary"><span>КИНУТЬ ТЕСТОВЫЙ ДОНАТ</span></button>
+      </form>
+    </section>
 
     <!-- Persistent Bottom Dock: Jury Gauge / Verdict Meter -->
     <footer class="verdict-dock">

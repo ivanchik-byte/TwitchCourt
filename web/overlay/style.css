@@ -467,3 +467,27 @@ body {
 .hidden {
   display: none !important;
 }
+
+/* Responsive scaling: fixed scene zooms to any source size. */
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Guilty punishment line under the verdict seal. */
+.stamp-penalty {
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: 26px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fecaca;
+}

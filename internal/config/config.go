@@ -16,6 +16,7 @@ type Config struct {
 	Safety    SafetyConfig    `yaml:"safety"`
 	Game      GameConfig      `yaml:"game"`
 	Twitch    TwitchConfig    `yaml:"twitch"`
+	Donations DonationsConfig `yaml:"donations"`
 }
 
 type ServerConfig struct {
@@ -48,11 +49,18 @@ type TTSConfig struct {
 }
 
 type CourtroomConfig struct {
-	Theme             string `yaml:"theme"`
-	ProsecutorName    string `yaml:"prosecutor_name"`
-	Title             string `yaml:"title"`
-	SueThreshold      int    `yaml:"sue_threshold"`
-	VotingDurationSec int    `yaml:"voting_duration_sec"`
+	Theme             string   `yaml:"theme"`
+	ProsecutorName    string   `yaml:"prosecutor_name"`
+	Title             string   `yaml:"title"`
+	SueThreshold      int      `yaml:"sue_threshold"`
+	VotingDurationSec int      `yaml:"voting_duration_sec"`
+	Punishments       []string `yaml:"punishments"`
+}
+
+type DonationsConfig struct {
+	Token      string             `yaml:"token"`
+	DefaultMin float64            `yaml:"default_min"`
+	MinAmounts map[string]float64 `yaml:"min_amounts"`
 }
 
 type SafetyConfig struct {
@@ -112,6 +120,11 @@ func DefaultConfig() *Config {
 			Title:             "Инквизитор Твича",
 			SueThreshold:      5,
 			VotingDurationSec: 45,
+			Punishments: []string{
+				"10 приседаний в прямом эфире",
+				"Минута молчания с рукой на сердце",
+				"Ч/б фильтр на вебку до конца стрима",
+			},
 		},
 		Safety: SafetyConfig{
 			FilterEnabled:   true,
@@ -128,6 +141,11 @@ func DefaultConfig() *Config {
 			Channel: "",
 			Nick:    "tribunal_bot",
 			Token:   "",
+		},
+		Donations: DonationsConfig{
+			Token:      "",
+			DefaultMin: 100,
+			MinAmounts: map[string]float64{"RUB": 100, "USD": 2, "EUR": 2},
 		},
 	}
 }
@@ -153,8 +171,11 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.AI.Provider = "cerebras"
 	}
 
-	if key := os.Getenv("DONATE_TOKEN"); key != "" && cfg.Game.DonateToken == "" {
-		cfg.Game.DonateToken = key
+	if key := os.Getenv("DONATE_TOKEN"); key != "" {
+		cfg.Donations.Token = key
+	}
+	if cfg.Donations.Token == "" && cfg.Game.DonateToken != "" {
+		cfg.Donations.Token = cfg.Game.DonateToken
 	}
 	if token := os.Getenv("TWITCH_TOKEN"); token != "" && cfg.Twitch.Token == "" {
 		cfg.Twitch.Token = token
