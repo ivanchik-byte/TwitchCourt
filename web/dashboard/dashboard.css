@@ -359,3 +359,42 @@ body {
 .link-preview:hover {
   text-decoration: underline;
 }
+
+.secret-input {
+  background: #090d16;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #f8fafc;
+  font-size: 13px;
+  width: 130px;
+}
+
+.profile-status {
+  font-size: 13px;
+  color: #38bdf8;
+  min-height: 20px;
+  margin-top: 8px;
+}
+
+.history-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin: 16px 0 8px;
+}
+
+.history-list {
+  list-style: none;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.history-list li {
+  padding: 8px 0;
+  border-top: 1px solid #1e293b;
+}
+
+.history-empty {
+  color: #64748b;
+}

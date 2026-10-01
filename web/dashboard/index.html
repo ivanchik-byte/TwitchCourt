@@ -19,6 +19,7 @@
           <span id="ws-dot" class="dot disconnected"></span>
           <span id="ws-label">Подключение...</span>
         </div>
+        <input type="password" id="secret-input" class="secret-input" placeholder="Секрет" autocomplete="off">
         <button id="btn-panic" class="btn btn-panic">PANIC BUTTON (F12)</button>
       </div>
     </header>
@@ -44,9 +45,10 @@
 
           <div class="presets-row">
             <span>Быстрые пресеты:</span>
-            <button type="button" class="btn-chip" data-crime="Слив клатча 1v1 с ножом наперевес">Клатч 1v1</button>
-            <button type="button" class="btn-chip" data-crime="Бросок ослепляющей гранаты в спину своей же команде">Тим-флеш</button>
-            <button type="button" class="btn-chip" data-crime="Падение в лаву со всеми алмазами">Лава в Minecraft</button>
+            <button type="button" class="btn-chip" data-crime="Купание в лаве с полным инвентарем">Лава в Minecraft</button>
+            <button type="button" class="btn-chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
+            <button type="button" class="btn-chip" data-crime="Падение в пустоту с алмазами">Падение в шахту</button>
+            <button type="button" class="btn-chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание (Just Chatting)</button>
           </div>
 
           <div class="form-actions">
@@ -87,9 +89,51 @@
         </div>
       </section>
 
+      <section class="card profile-card">
+        <h2>Портрет стримера</h2>
+        <p class="guide-desc">Суд помнит это между заседаниями. Списки через запятую.</p>
+        <form id="profile-form">
+          <div class="field">
+            <label for="profile-name">Имя</label>
+            <input type="text" id="profile-name" placeholder="Стример">
+          </div>
+          <div class="field">
+            <label for="profile-titles">Титулы</label>
+            <input type="text" id="profile-titles" placeholder="гроза криперов, король лавы">
+          </div>
+          <div class="field">
+            <label for="profile-traits">Черты</label>
+            <input type="text" id="profile-traits" placeholder="жадный до алмазов, паникует">
+          </div>
+          <div class="field">
+            <label for="profile-gags">Дежурные мемы</label>
+            <input type="text" id="profile-gags" placeholder="лава, крипер у порога">
+          </div>
+          <div class="field">
+            <label for="profile-mercy">Строгость суда</label>
+            <input type="text" id="profile-mercy" placeholder="мягкий, строгий, беспощадный">
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Сохранить портрет</button>
+          </div>
+          <p id="profile-status" class="profile-status"></p>
+        </form>
+      </section>
+
+      <section class="card history-card">
+        <h2>Память суда</h2>
+        <h3>Последние заседания</h3>
+        <ul id="history-trials" class="history-list">
+          <li class="history-empty">Пока пусто, проведите первый суд.</li>
+        </ul>
+        <h3>Заводилы чата</h3>
+        <ul id="history-top" class="history-list">
+          <li class="history-empty">Пока никто не отличился.</li>
+        </ul>
+      </section>
+
       <section class="card obs-guide">
-        <h2>Подключение к OBS Studio</h2>
-        <p class="guide-desc">Добавьте в OBS источник типа <strong>«Браузер»</strong> с параметрами ниже:</p>
+        <h2>Подключение к OBS Studio</h2>        <p class="guide-desc">Добавьте в OBS источник типа <strong>«Браузер»</strong> с параметрами ниже:</p>
         <div class="copy-box">
           <input type="text" id="obs-url-input" readonly value="http://localhost:7890/overlay">
           <button type="button" id="btn-copy-url" class="btn btn-secondary">Копировать</button>
