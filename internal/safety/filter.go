@@ -52,7 +52,7 @@ func (f *Filter) compile() {
 }
 
 func (f *Filter) Sanitize(input string) string {
-	cleaned := html.EscapeString(input)
+	cleaned := input
 
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -64,5 +64,5 @@ func (f *Filter) Sanitize(input string) string {
 		}
 	}
 
-	return cleaned
+	return html.EscapeString(cleaned)
 }

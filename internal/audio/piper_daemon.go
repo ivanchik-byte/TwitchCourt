@@ -3,6 +3,7 @@ package audio
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -18,13 +19,13 @@ import (
 )
 
 type PiperDaemon struct {
-	cfg       config.TTSConfig
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	stdout    *bufio.Reader
-	mu        sync.Mutex
-	isMock    bool
-	closed    bool
+	cfg    config.TTSConfig
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Reader
+	mu     sync.Mutex
+	isMock bool
+	closed bool
 }
 
 type PiperInput struct {
@@ -74,11 +75,27 @@ func (p *PiperDaemon) startProcess() error {
 		return fmt.Errorf("stdout pipe error: %w", err)
 	}
 
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		stdin.Close()
+		stdoutPipe.Close()
+		return fmt.Errorf("stderr pipe error: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		stdin.Close()
 		stdoutPipe.Close()
 		return fmt.Errorf("process start error: %w", err)
 	}
+
+	go func() {
+		drain := make([]byte, 4096)
+		for {
+			if _, err := stderrPipe.Read(drain); err != nil {
+				return
+			}
+		}
+	}()
 
 	p.cmd = cmd
 	p.stdin = stdin
@@ -86,9 +103,15 @@ func (p *PiperDaemon) startProcess() error {
 	return nil
 }
 
-func (p *PiperDaemon) Synthesize(text string) ([]byte, error) {
+func (p *PiperDaemon) Synthesize(ctx context.Context, text string) ([]byte, error) {
 	if text == "" {
 		return nil, nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
 
 	p.mu.Lock()

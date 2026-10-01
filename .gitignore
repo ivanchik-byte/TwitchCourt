@@ -12,3 +12,6 @@ config.yaml
 models/*.onnx
 models/*.onnx.json
 models/*.bin
+
+# Runtime data
+data/

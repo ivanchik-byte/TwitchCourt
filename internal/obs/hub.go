@@ -66,7 +66,7 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
@@ -75,7 +75,7 @@ func (h *Hub) Run() {
 					delete(h.clients, client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 		}
 	}
 }
@@ -85,12 +85,15 @@ func (h *Hub) BroadcastEvent(eventType EventType, payload interface{}) error {
 		Type:    eventType,
 		Payload: payload,
 	}
-	bytes, err := json.Marshal(msg)
+	raw, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 
-	h.broadcast <- bytes
+	select {
+	case h.broadcast <- raw:
+	default:
+	}
 	return nil
 }
 
@@ -156,19 +159,7 @@ func (c *Client) writePump() {
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
-
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
-			}
-
-			if err := w.Close(); err != nil {
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
 

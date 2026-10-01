@@ -11,6 +11,12 @@ ai:
 
 tts:
   enabled: true
+  engine: "edge"
+  voice: "ru-RU-DmitryNeural"
+  rate: "+0%"
+  volume: "+0%"
+  pitch: "+0Hz"
+  auto_fallback: true
   piper_binary: ""
   model_path: "models/ru_dmitri.onnx"
   config_path: "models/ru_dmitri.onnx.json"
@@ -28,3 +34,9 @@ safety:
   filter_enabled: true
   custom_blacklist: []
   panic_hotkey: "F12"
+
+game:
+  minecraft_log: ""
+  streamer_name: "Стример"
+  memory_path: "data/memory.json"
+  donate_token: ""

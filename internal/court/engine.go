@@ -11,6 +11,7 @@ import (
 	"stream-tribunal/internal/ai"
 	"stream-tribunal/internal/audio"
 	"stream-tribunal/internal/config"
+	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/obs"
 	"stream-tribunal/internal/safety"
 )
@@ -36,25 +37,36 @@ type TrialCase struct {
 }
 
 type Engine struct {
-	cfg       *config.Config
-	hub       *obs.Hub
-	aiClient  *ai.Client
-	piper     *audio.PiperDaemon
-	filter    *safety.Filter
-	mu        sync.RWMutex
-	state     State
-	currCase  *TrialCase
-	cancelFn  context.CancelFunc
+	cfg      *config.Config
+	hub      *obs.Hub
+	aiClient *ai.Client
+	voice    audio.Synthesizer
+	filter   *safety.Filter
+	recall   *memory.Store
+	mu       sync.RWMutex
+	state    State
+	currCase *TrialCase
+	cancelFn context.CancelFunc
 }
 
-func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, piper *audio.PiperDaemon, filter *safety.Filter) *Engine {
+func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
 	return &Engine{
 		cfg:      cfg,
 		hub:      hub,
 		aiClient: aiClient,
-		piper:    piper,
+		voice:    voice,
 		filter:   filter,
+		recall:   memory.NewStore(""),
 		state:    StateIdle,
+	}
+}
+
+// AttachMemory swaps the in-memory recall store for a persistent one.
+func (e *Engine) AttachMemory(store *memory.Store) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if store != nil {
+		e.recall = store
 	}
 }
 
@@ -110,30 +122,62 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 }
 
 func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
-	prompt := ai.BuildIndictmentPrompt(c.Defendant, c.Crime, c.ChatContext)
+	smart := ""
+	if e.recall != nil {
+		smart = e.recall.SmartContext(c.Defendant)
+	}
+	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart)
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: ai.SystemProsecutorPrompt},
 		{Role: "user", Content: prompt},
 	}
 
+	type queued struct {
+		chunk ai.SentenceChunk
+		index int
+		last  bool
+	}
+	speechQueue := make(chan queued, 16)
+	speechDone := make(chan struct{})
+
+	go func() {
+		defer close(speechDone)
+		for item := range speechQueue {
+			if err := e.dispatchSpeechChunk(ctx, item.chunk, item.index, item.last); err != nil {
+				return
+			}
+		}
+	}()
+
 	chunker := ai.NewSentenceChunker()
 	chunkIndex := 0
 
 	err := e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
-		sentences := chunker.Feed(delta)
-		for _, s := range sentences {
-			if err := e.dispatchSpeechChunk(ctx, s, chunkIndex, false); err != nil {
-				return err
+		for _, s := range chunker.Feed(delta) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case speechQueue <- queued{chunk: s, index: chunkIndex}:
+				chunkIndex++
 			}
-			chunkIndex++
 		}
 		return nil
 	})
 
 	if err == nil {
 		if last := chunker.Flush(); last != nil {
-			_ = e.dispatchSpeechChunk(ctx, *last, chunkIndex, true)
+			select {
+			case <-ctx.Done():
+			case speechQueue <- queued{chunk: *last, index: chunkIndex, last: true}:
+			}
 		}
+	}
+	close(speechQueue)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-speechDone:
 	}
 
 	select {
@@ -143,6 +187,17 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	}
 
 	e.startVoting(ctx, c)
+	e.clearTrial()
+}
+
+// clearTrial releases the trial cancel func after a normal finish.
+func (e *Engine) clearTrial() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.state == StateIdle && e.cancelFn != nil {
+		e.cancelFn()
+		e.cancelFn = nil
+	}
 }
 
 func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, index int, isLast bool) error {
@@ -161,13 +216,22 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 		Text:    s.Text,
 	})
 
-	wavBytes, err := e.piper.Synthesize(s.Text)
+	if e.recall != nil {
+		e.recall.AddSpeechLine(s.Text)
+	}
+
+	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	rawBytes, err := e.voice.Synthesize(synthCtx, s.Text)
 	if err != nil {
 		log.Printf("tts synthesis error: %v", err)
 		return nil
 	}
+	if len(rawBytes) == 0 {
+		return nil
+	}
 
-	b64Audio := base64.StdEncoding.EncodeToString(wavBytes)
+	b64Audio := base64.StdEncoding.EncodeToString(rawBytes)
 	e.hub.BroadcastEvent(obs.EventAudioChunk, obs.AudioChunkPayload{
 		Index:       index,
 		AudioBase64: b64Audio,
@@ -234,19 +298,59 @@ func (e *Engine) CastVote(voter string, isGuilty bool) {
 	} else {
 		e.currCase.InnocentVotes++
 	}
+
+	if e.recall != nil {
+		e.recall.AddVote(voter)
+	}
+}
+
+// AddChatComment stores a chat line for the live trial transcript.
+func (e *Engine) AddChatComment(author, text string) {
+	if e.recall == nil {
+		return
+	}
+	cleanAuthor := e.filter.Sanitize(author)
+	cleanText := e.filter.Sanitize(text)
+	e.recall.AddComment(cleanAuthor, cleanText)
 }
 
 func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	e.mu.Lock()
 	e.state = StateVerdict
-	isGuilty := c.GuiltyVotes >= c.InnocentVotes
+	isGuilty := c.GuiltyVotes > c.InnocentVotes
 	verdictStr := "НЕВИНОВЕН"
 	if isGuilty {
 		verdictStr = "ВИНОВЕН"
 	}
 	totalVotes := c.GuiltyVotes + c.InnocentVotes
 	guiltyVotes := c.GuiltyVotes
+	innocentVotes := c.InnocentVotes
+	defendant := c.Defendant
+	crime := c.Crime
 	e.mu.Unlock()
+
+	if e.recall != nil {
+		summary := ""
+		if lines := e.recall.RecentComments(3); len(lines) > 0 {
+			last := lines[len(lines)-1].Text
+			if len([]rune(last)) > 140 {
+				last = string([]rune(last)[:140]) + "..."
+			}
+			summary = last
+		}
+		e.recall.AddTrial(memory.TrialRecord{
+			Defendant: defendant,
+			Crime:     crime,
+			Verdict:   verdictStr,
+			Guilty:    guiltyVotes,
+			Innocent:  innocentVotes,
+			Summary:   summary,
+		})
+		if e.recall.OffenderCount(defendant) == 3 {
+			e.recall.NoteForAI(defendant + " в третий раз на скамье, зал помнит все прошлые выходки")
+		}
+		e.recall.ClearTranscript()
+	}
 
 	e.hub.BroadcastEvent(obs.EventVerdict, obs.VerdictPayload{
 		Verdict:     verdictStr,

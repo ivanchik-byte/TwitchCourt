@@ -52,12 +52,10 @@ func NewClient(cfg config.AIConfig) *Client {
 	}
 
 	client := &Client{
-		cfg:      cfg,
-		endpoint: endpoint,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		isMock: cfg.APIKey == "" && cfg.Provider != "ollama",
+		cfg:        cfg,
+		endpoint:   endpoint,
+		httpClient: &http.Client{},
+		isMock:     cfg.APIKey == "" && cfg.Provider != "ollama",
 	}
 
 	return client

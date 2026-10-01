@@ -10,13 +10,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"stream-tribunal/internal/ai"
 	"stream-tribunal/internal/audio"
+	"stream-tribunal/internal/bot"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/court"
+	"stream-tribunal/internal/game"
+	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/obs"
 	"stream-tribunal/internal/safety"
 	"stream-tribunal/web"
@@ -34,15 +38,15 @@ func main() {
 
 	filter := safety.NewFilter(cfg.Safety.CustomBlacklist)
 
-	piper, err := audio.NewPiperDaemon(cfg.TTS)
-	if err != nil {
-		log.Fatalf("failed to initialize piper tts: %v", err)
-	}
-	defer piper.Close()
+	voice := buildSynthesizer(cfg)
+	defer voice.Close()
 
 	aiClient := ai.NewClient(cfg.AI)
+	recall := memory.NewStore(cfg.Game.MemoryPath)
 
 	var engine *court.Engine
+
+	limiter := newActionLimiter(500 * time.Millisecond)
 
 	hub := obs.NewHub(func(action string, payload []byte) {
 		if engine == nil {
@@ -54,13 +58,26 @@ func main() {
 				Defendant string `json:"defendant"`
 				Crime     string `json:"crime"`
 				Context   string `json:"context"`
+				Secret    string `json:"secret"`
 			}
 			if err := json.Unmarshal(payload, &req); err == nil {
+				if !checkSecret(cfg, req.Secret) {
+					return
+				}
 				if err := engine.StartTrial(req.Defendant, req.Crime, req.Context); err != nil {
 					log.Printf("start trial rejected: %v", err)
 				}
 			}
 		case "panic":
+			var req struct {
+				Secret string `json:"secret"`
+			}
+			if err := json.Unmarshal(payload, &req); err != nil {
+				return
+			}
+			if !checkSecret(cfg, req.Secret) {
+				return
+			}
 			engine.TriggerPanic()
 		case "vote":
 			var voteReq struct {
@@ -68,14 +85,40 @@ func main() {
 				IsGuilty bool   `json:"is_guilty"`
 			}
 			if err := json.Unmarshal(payload, &voteReq); err == nil {
+				if voteReq.Voter == "" || !limiter.allow("vote:"+voteReq.Voter) {
+					return
+				}
 				engine.CastVote(voteReq.Voter, voteReq.IsGuilty)
+			}
+		case "chat":
+			var chatReq struct {
+				Author string `json:"author"`
+				Text   string `json:"text"`
+			}
+			if err := json.Unmarshal(payload, &chatReq); err == nil {
+				if chatReq.Author == "" || !limiter.allow("chat:"+chatReq.Author) {
+					return
+				}
+				engine.AddChatComment(chatReq.Author, chatReq.Text)
+			}
+		case "sue":
+			var sueReq struct {
+				Author string `json:"author"`
+			}
+			if err := json.Unmarshal(payload, &sueReq); err == nil {
+				if sueReq.Author == "" || !limiter.allow("sue:"+sueReq.Author) {
+					return
+				}
+				recall.AddSueCall(sueReq.Author)
+				engine.AddChatComment(sueReq.Author, "!sue")
 			}
 		}
 	})
 
 	go hub.Run()
 
-	engine = court.NewEngine(cfg, hub, aiClient, piper, filter)
+	engine = court.NewEngine(cfg, hub, aiClient, voice, filter)
+	engine.AttachMemory(recall)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
@@ -106,6 +149,82 @@ func main() {
 		})
 	})
 
+	mux.HandleFunc("/api/trial", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Defendant string `json:"defendant"`
+			Crime     string `json:"crime"`
+			Context   string `json:"context"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.Defendant == "" {
+			req.Defendant = cfg.Game.StreamerName
+		}
+		if err := engine.StartTrial(req.Defendant, req.Crime, req.Context); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(recall.GetProfile())
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var p memory.StreamerProfile
+			if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			recall.SetProfile(p)
+			json.NewEncoder(w).Encode(recall.GetProfile())
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"trials": recall.RecentTrials(10),
+			"top":    recall.TopAccusers(5),
+		})
+	})
+
+	gameCtx, stopGame := context.WithCancel(context.Background())
+	defer stopGame()
+	if cfg.Game.MinecraftLog != "" {
+		watcher := game.NewWatcher(cfg.Game.MinecraftLog, func(d game.Death) {
+			_ = engine.StartTrial(cfg.Game.StreamerName, d.Crime, d.Context)
+		})
+		go watcher.Run(gameCtx)
+		log.Printf("minecraft watcher on %s", cfg.Game.MinecraftLog)
+	}
+
+	donateWatcher := bot.NewDonationsWatcher(cfg.Game.DonateToken, func(d bot.Donation) {
+		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Message: d.Message})
+		if d.Amount >= 500 && d.Donor != "" {
+			recall.NoteForAI("меценат " + d.Donor + " любит взятки и ждет снисхождения")
+		}
+	})
+	go donateWatcher.Run(gameCtx)
+
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{
 		Addr:         addr,
@@ -134,4 +253,66 @@ func main() {
 		log.Printf("server forced to shutdown: %v", err)
 	}
 	log.Println("server stopped cleanly")
+}
+
+func buildSynthesizer(cfg *config.Config) audio.Synthesizer {
+	fallback, _ := audio.NewPiperDaemon(cfg.TTS)
+
+	if !cfg.TTS.Enabled {
+		return fallback
+	}
+
+	switch cfg.TTS.Engine {
+	case "piper":
+		return fallback
+	case "mock":
+		return fallback
+	default:
+		primary := audio.NewEdgeSynthesizer(cfg.TTS.Voice, cfg.TTS.Rate, cfg.TTS.Volume, cfg.TTS.Pitch)
+		if cfg.TTS.AutoFallback {
+			return audio.NewAutoSynthesizer(primary, fallback)
+		}
+		return primary
+	}
+}
+
+func checkSecret(cfg *config.Config, got string) bool {
+	if cfg.Server.Secret == "" {
+		return true
+	}
+	return got != "" && got == cfg.Server.Secret
+}
+
+func checkHTTPAuth(cfg *config.Config, r *http.Request) bool {
+	if cfg.Server.Secret == "" {
+		return true
+	}
+	if r.Header.Get("X-Tribunal-Secret") == cfg.Server.Secret {
+		return true
+	}
+	return r.URL.Query().Get("secret") != "" && r.URL.Query().Get("secret") == cfg.Server.Secret
+}
+
+type actionLimiter struct {
+	mu       sync.Mutex
+	interval time.Duration
+	last     map[string]time.Time
+}
+
+func newActionLimiter(interval time.Duration) *actionLimiter {
+	return &actionLimiter{interval: interval, last: make(map[string]time.Time)}
+}
+
+func (l *actionLimiter) allow(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if t, ok := l.last[key]; ok && now.Sub(t) < l.interval {
+		return false
+	}
+	l.last[key] = now
+	if len(l.last) > 4096 {
+		l.last = make(map[string]time.Time, 4096)
+	}
+	return true
 }

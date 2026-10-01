@@ -15,6 +15,7 @@
   const innocentFill = document.getElementById("innocent-fill");
 
   let audioCtx = null;
+  let voiceChain = null;
   const audioQueue = [];
   let isPlayingAudio = false;
 
@@ -22,11 +23,71 @@
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       audioCtx = new AudioContextClass();
+      voiceChain = buildVoiceChain(audioCtx);
     }
     if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
     return audioCtx;
+  }
+
+  // Courtroom voice bus: highpass -> eq -> compressor -> dry + room.
+  // Runs in OBS CEF with zero cost on the game PC encoder path.
+  function buildVoiceChain(ctx) {
+    const input = ctx.createGain();
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = 80;
+
+    const boxCut = ctx.createBiquadFilter();
+    boxCut.type = "peaking";
+    boxCut.frequency.value = 450;
+    boxCut.Q.value = 1.1;
+    boxCut.gain.value = -6;
+
+    const presence = ctx.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 3500;
+    presence.Q.value = 0.9;
+    presence.gain.value = 4;
+
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.18;
+
+    const dry = ctx.createGain();
+    dry.gain.value = 0.88;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.12;
+    const verb = ctx.createConvolver();
+    verb.buffer = makeRoomImpulse(ctx);
+
+    input.connect(highpass);
+    highpass.connect(boxCut);
+    boxCut.connect(presence);
+    presence.connect(comp);
+    comp.connect(dry);
+    dry.connect(ctx.destination);
+    comp.connect(verb);
+    verb.connect(wet);
+    wet.connect(ctx.destination);
+    return input;
+  }
+
+  function makeRoomImpulse(ctx) {
+    const seconds = 1.1;
+    const rate = ctx.sampleRate;
+    const len = Math.floor(rate * seconds);
+    const impulse = ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-3.2 * i / len);
+      }
+    }
+    return impulse;
   }
 
   function playGavelHit(when) {
@@ -160,7 +221,7 @@
     const buffer = audioQueue.shift();
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.connect(ctx.destination);
+    source.connect(voiceChain || ctx.destination);
 
     source.onended = () => {
       processNextAudio();
@@ -272,7 +333,7 @@
 
   function handleVerdict(payload) {
     stampText.textContent = payload.verdict;
-    if (payload.verdict === "ОПРАВДАН") {
+    if (payload.verdict === "НЕВИНОВЕН") {
       stampText.classList.add("innocent");
     } else {
       stampText.classList.remove("innocent");

@@ -14,11 +14,13 @@ type Config struct {
 	TTS       TTSConfig       `yaml:"tts"`
 	Courtroom CourtroomConfig `yaml:"courtroom"`
 	Safety    SafetyConfig    `yaml:"safety"`
+	Game      GameConfig      `yaml:"game"`
 }
 
 type ServerConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host   string `yaml:"host"`
+	Port   int    `yaml:"port"`
+	Secret string `yaml:"secret"`
 }
 
 type AIConfig struct {
@@ -30,26 +32,39 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
-	Enabled     bool    `yaml:"enabled"`
-	PiperBinary string  `yaml:"piper_binary"`
-	ModelPath   string  `yaml:"model_path"`
-	ConfigPath  string  `yaml:"config_path"`
-	SpeakerID   int     `yaml:"speaker_id"`
-	Speed       float64 `yaml:"speed"`
+	Enabled      bool    `yaml:"enabled"`
+	Engine       string  `yaml:"engine"`
+	Voice        string  `yaml:"voice"`
+	Rate         string  `yaml:"rate"`
+	Volume       string  `yaml:"volume"`
+	Pitch        string  `yaml:"pitch"`
+	AutoFallback bool    `yaml:"auto_fallback"`
+	PiperBinary  string  `yaml:"piper_binary"`
+	ModelPath    string  `yaml:"model_path"`
+	ConfigPath   string  `yaml:"config_path"`
+	SpeakerID    int     `yaml:"speaker_id"`
+	Speed        float64 `yaml:"speed"`
 }
 
 type CourtroomConfig struct {
-	Theme              string `yaml:"theme"`
-	ProsecutorName     string `yaml:"prosecutor_name"`
-	Title              string `yaml:"title"`
-	SueThreshold       int    `yaml:"sue_threshold"`
-	VotingDurationSec  int    `yaml:"voting_duration_sec"`
+	Theme             string `yaml:"theme"`
+	ProsecutorName    string `yaml:"prosecutor_name"`
+	Title             string `yaml:"title"`
+	SueThreshold      int    `yaml:"sue_threshold"`
+	VotingDurationSec int    `yaml:"voting_duration_sec"`
 }
 
 type SafetyConfig struct {
 	FilterEnabled   bool     `yaml:"filter_enabled"`
 	CustomBlacklist []string `yaml:"custom_blacklist"`
 	PanicHotkey     string   `yaml:"panic_hotkey"`
+}
+
+type GameConfig struct {
+	MinecraftLog string `yaml:"minecraft_log"`
+	StreamerName string `yaml:"streamer_name"`
+	MemoryPath   string `yaml:"memory_path"`
+	DonateToken  string `yaml:"donate_token"`
 }
 
 func DefaultConfig() *Config {
@@ -71,12 +86,18 @@ func DefaultConfig() *Config {
 			Stream:      true,
 		},
 		TTS: TTSConfig{
-			Enabled:     true,
-			PiperBinary: binaryName,
-			ModelPath:   filepath.Join("models", "ru_dmitri.onnx"),
-			ConfigPath:  filepath.Join("models", "ru_dmitri.onnx.json"),
-			SpeakerID:   0,
-			Speed:       1.15,
+			Enabled:      true,
+			Engine:       "edge",
+			Voice:        "ru-RU-DmitryNeural",
+			Rate:         "+0%",
+			Volume:       "+0%",
+			Pitch:        "+0Hz",
+			AutoFallback: true,
+			PiperBinary:  binaryName,
+			ModelPath:    filepath.Join("models", "ru_dmitri.onnx"),
+			ConfigPath:   filepath.Join("models", "ru_dmitri.onnx.json"),
+			SpeakerID:    0,
+			Speed:        1.15,
 		},
 		Courtroom: CourtroomConfig{
 			Theme:             "ace_attorney",
@@ -89,6 +110,12 @@ func DefaultConfig() *Config {
 			FilterEnabled:   true,
 			CustomBlacklist: []string{},
 			PanicHotkey:     "F12",
+		},
+		Game: GameConfig{
+			MinecraftLog: "",
+			StreamerName: "Стример",
+			MemoryPath:   "data/memory.json",
+			DonateToken:  "",
 		},
 	}
 }
@@ -107,10 +134,27 @@ func LoadConfig(path string) (*Config, error) {
 
 	if key := os.Getenv("GROQ_API_KEY"); key != "" && cfg.AI.APIKey == "" {
 		cfg.AI.APIKey = key
+		cfg.AI.Provider = "groq"
 	}
 	if key := os.Getenv("CEREBRAS_API_KEY"); key != "" && cfg.AI.APIKey == "" {
 		cfg.AI.APIKey = key
 		cfg.AI.Provider = "cerebras"
+	}
+
+	if key := os.Getenv("DONATE_TOKEN"); key != "" && cfg.Game.DonateToken == "" {
+		cfg.Game.DonateToken = key
+	}
+	if secret := os.Getenv("TRIBUNAL_SECRET"); secret != "" && cfg.Server.Secret == "" {
+		cfg.Server.Secret = secret
+	}
+
+	switch cfg.TTS.Engine {
+	case "edge", "piper", "mock":
+	default:
+		cfg.TTS.Engine = "edge"
+	}
+	if cfg.TTS.Voice == "" {
+		cfg.TTS.Voice = "ru-RU-DmitryNeural"
 	}
 
 	return cfg, nil
