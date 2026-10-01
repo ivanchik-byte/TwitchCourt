@@ -16,6 +16,7 @@ type TrialRecord struct {
 	Verdict   string    `json:"verdict"`
 	Guilty    int       `json:"guilty"`
 	Innocent  int       `json:"innocent"`
+	Witnesses int       `json:"witnesses,omitempty"`
 	Summary   string    `json:"summary,omitempty"`
 }
 

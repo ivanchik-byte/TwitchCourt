@@ -163,6 +163,11 @@ func main() {
 		if d.Amount >= 500 && donor != "" {
 			recall.NoteForAI("меценат " + donor + " любит взятки и ждет снисхождения")
 		}
+		// Active trial: the donation joins as witness testimony instead
+		// of opening a competing case. Speech is never interrupted.
+		if engine.AddWitness(donor, d.Amount, d.Currency, d.Message) {
+			return
+		}
 		openDonationTrial(donor, event)
 	}
 
@@ -181,6 +186,9 @@ func main() {
 	}
 	dashboardHandler := http.FileServer(http.FS(dashboardSub))
 	mux.Handle("/admin/", http.StripPrefix("/admin/", dashboardHandler))
+	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/settings.html", http.StatusMovedPermanently)
+	})
 	mux.Handle("/", dashboardHandler)
 
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {

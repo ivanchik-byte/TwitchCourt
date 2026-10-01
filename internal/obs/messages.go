@@ -52,5 +52,6 @@ type VerdictPayload struct {
 	Verdict     string `json:"verdict"`
 	GuiltyVotes int    `json:"guilty_votes"`
 	TotalVotes  int    `json:"total_votes"`
+	Witnesses   int    `json:"witnesses,omitempty"`
 	Penalty     string `json:"penalty,omitempty"`
 }

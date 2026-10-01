@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +38,24 @@ type TrialCase struct {
 	GuiltyVotes   int
 	InnocentVotes int
 	Voters        map[string]bool
+	Witnesses     []Witness
 }
+
+// Witness is a donation attached to the running trial as testimony.
+// It never interrupts speech, it is read out between prosecutor lines.
+type Witness struct {
+	Donor    string
+	Amount   float64
+	Currency string
+	Message  string
+}
+
+// maxWitnessWeight caps how many guilty points testimony can add,
+// so a single whale cannot decide the verdict alone.
+const maxWitnessWeight = 3
+
+// maxWitnessMessageRunes caps a single testimony line for speech.
+const maxWitnessMessageRunes = 140
 
 type Engine struct {
 	cfg      *config.Config
@@ -191,6 +211,12 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	case <-speechDone:
 	}
 
+	// Witness interlude: testimony queued during the indictment is read
+	// out as a separate beat before voting, speech is never interrupted.
+	if interlude := e.drainWitnessInterlude(c); interlude != "" {
+		_ = e.dispatchSpeechChunk(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false)
+	}
+
 	select {
 	case <-ctx.Done():
 		return
@@ -325,10 +351,89 @@ func (e *Engine) AddChatComment(author, text string) {
 	e.recall.AddComment(cleanAuthor, cleanText)
 }
 
+// AddWitness attaches a donation to the running trial as testimony.
+// It returns false when no trial is in session, so the caller can
+// open a fresh trial instead. Testimony never interrupts speech,
+// it is read out between prosecutor lines and adds weight to guilty.
+func (e *Engine) AddWitness(donor string, amount float64, currency, message string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state == StateIdle || e.currCase == nil {
+		return false
+	}
+
+	cleanDonor := e.filter.Sanitize(donor)
+	if cleanDonor == "" {
+		cleanDonor = "Аноним"
+	}
+	w := Witness{
+		Donor:    cleanDonor,
+		Amount:   amount,
+		Currency: strings.TrimSpace(currency),
+		Message:  e.filter.Sanitize(message),
+	}
+	e.currCase.Witnesses = append(e.currCase.Witnesses, w)
+
+	if e.recall != nil {
+		e.recall.AddComment(cleanDonor, "свидетель: "+w.Message)
+	}
+	return true
+}
+
+// witnessWeight converts testimony into guilty points, capped.
+func witnessWeight(witnesses []Witness) int {
+	if len(witnesses) > maxWitnessWeight {
+		return maxWitnessWeight
+	}
+	return len(witnesses)
+}
+
+// buildWitnessInterlude renders queued testimony as one prosecutor line.
+// Pure function, safe to unit test without TTS or network.
+func buildWitnessInterlude(witnesses []Witness) string {
+	if len(witnesses) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Суд приобщает показания свидетелей. ")
+	for _, w := range witnesses {
+		amount := strconv.FormatFloat(w.Amount, 'f', -1, 64)
+		sb.WriteString("Свидетель " + w.Donor + " вносит " + amount)
+		if w.Currency != "" {
+			sb.WriteString(" " + w.Currency)
+		}
+		if strings.TrimSpace(html.UnescapeString(w.Message)) != "" {
+			sb.WriteString(" и заявляет: " + truncateRunes(html.UnescapeString(w.Message), maxWitnessMessageRunes))
+		}
+		sb.WriteString(". ")
+	}
+	sb.WriteString("Показания приобщены к делу!")
+	return sb.String()
+}
+
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "..."
+}
+
+// drainWitnessInterlude snapshots queued testimony for the interlude beat.
+func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return buildWitnessInterlude(c.Witnesses)
+}
+
 func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	e.mu.Lock()
 	e.state = StateVerdict
-	isGuilty := c.GuiltyVotes > c.InnocentVotes
+	weight := witnessWeight(c.Witnesses)
+	effectiveGuilty := c.GuiltyVotes + weight
+	isGuilty := effectiveGuilty > c.InnocentVotes
 	verdictStr := "НЕВИНОВЕН"
 	if isGuilty {
 		verdictStr = "ВИНОВЕН"
@@ -336,6 +441,7 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	totalVotes := c.GuiltyVotes + c.InnocentVotes
 	guiltyVotes := c.GuiltyVotes
 	innocentVotes := c.InnocentVotes
+	witnessCount := len(c.Witnesses)
 	defendant := c.Defendant
 	crime := c.Crime
 	penalty := ""
@@ -359,6 +465,7 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 			Verdict:   verdictStr,
 			Guilty:    guiltyVotes,
 			Innocent:  innocentVotes,
+			Witnesses: witnessCount,
 			Summary:   summary,
 		})
 		if e.recall.OffenderCount(defendant) == 3 {
@@ -371,6 +478,7 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		Verdict:     verdictStr,
 		GuiltyVotes: guiltyVotes,
 		TotalVotes:  totalVotes,
+		Witnesses:   witnessCount,
 		Penalty:     penalty,
 	})
 
