@@ -50,7 +50,8 @@ func main() {
 	limiter := newActionLimiter(500 * time.Millisecond)
 	sueTracker := bot.NewSueTracker(cfg.Courtroom.SueThreshold, time.Minute, 3*time.Minute)
 
-	hub := obs.NewHub(func(action string, payload []byte) {
+	var hub *obs.Hub
+	hub = obs.NewHub(func(action string, payload []byte) {
 		if engine == nil {
 			return
 		}
@@ -115,6 +116,13 @@ func main() {
 				}
 				recall.AddSueCall(sueReq.Author)
 				engine.AddChatComment(sueReq.Author, "!sue")
+			}
+		case "animation":
+			var animReq struct {
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(payload, &animReq); err == nil && animReq.Name != "" {
+				hub.BroadcastEvent(obs.EventAnimation, obs.AnimationPayload{Name: animReq.Name})
 			}
 		}
 	})

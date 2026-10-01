@@ -3,90 +3,207 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
-  <title>Stream Tribunal — Зал суда</title>
+  <title>Stream Tribunal Courtroom Overlay</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="court-viewport" class="court-viewport">
-    <div id="court-scaler" class="court-scaler">
-      <div id="court-stage" class="court-stage idle">
-        <div id="speed-lines" class="speed-lines hidden"></div>
+  <div id="court-stage" class="court-stage idle">
+    <div id="speed-lines" class="speed-lines hidden"></div>
 
-        <div class="docket-strip">
-          <span class="docket-no">ДЕЛО</span>
-          <span id="case-title" class="case-title">№404</span>
-          <span class="docket-sep">/</span>
-          <span class="docket-court">ТРИБУНАЛ СТРИМА</span>
-          <span class="docket-live">ЭФИР</span>
+    <div class="court-backdrop">
+      <div class="wall-columns">
+        <div class="column col-left"></div>
+        <div class="column col-mid"></div>
+        <div class="column col-right"></div>
+      </div>
+      <div class="justice-seal">
+        <svg viewBox="0 0 200 200" width="160" height="160">
+          <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(245, 158, 11, 0.25)" stroke-width="3"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(245, 158, 11, 0.4)" stroke-width="1.5" stroke-dasharray="6 4"/>
+          <line x1="100" y1="35" x2="100" y2="165" stroke="rgba(245, 158, 11, 0.5)" stroke-width="4"/>
+          <line x1="55" y1="65" x2="145" y2="65" stroke="rgba(245, 158, 11, 0.5)" stroke-width="4"/>
+          <path d="M 55 65 L 40 115 L 70 115 Z" fill="none" stroke="rgba(245, 158, 11, 0.45)" stroke-width="2"/>
+          <path d="M 145 65 L 130 115 L 160 115 Z" fill="none" stroke="rgba(245, 158, 11, 0.45)" stroke-width="2"/>
+        </svg>
+      </div>
+    </div>
+
+    <div id="character-container" class="character-container">
+      <div id="prosecutor-poses" class="prosecutor-poses">
+        <!-- Pose A: Confident Smug -->
+        <div id="pose-confident" class="prosecutor-pose active">
+          <svg viewBox="0 0 400 500" width="460" height="575">
+            <defs>
+              <linearGradient id="c-skin" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#fff1ee"/>
+                <stop offset="60%" stop-color="#fed7aa"/>
+                <stop offset="100%" stop-color="#fba677"/>
+              </linearGradient>
+              <linearGradient id="c-coat" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#991b1b"/>
+                <stop offset="50%" stop-color="#6e1010"/>
+                <stop offset="100%" stop-color="#3b0707"/>
+              </linearGradient>
+              <linearGradient id="c-lapel" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#4c0519"/>
+                <stop offset="100%" stop-color="#881337"/>
+              </linearGradient>
+              <linearGradient id="c-cravat" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="70%" stop-color="#f1f5f9"/>
+                <stop offset="100%" stop-color="#cbd5e1"/>
+              </linearGradient>
+              <linearGradient id="c-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#fef08a"/>
+                <stop offset="40%" stop-color="#f59e0b"/>
+                <stop offset="85%" stop-color="#b45309"/>
+                <stop offset="100%" stop-color="#78350f"/>
+              </linearGradient>
+              <linearGradient id="c-hair" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#475569"/>
+                <stop offset="35%" stop-color="#1e293b"/>
+                <stop offset="100%" stop-color="#090d16"/>
+              </linearGradient>
+            </defs>
+            <path d="M 90 340 C 70 360 40 430 30 500 L 370 500 C 360 430 330 360 310 340 C 280 320 250 315 200 315 C 150 315 120 320 90 340 Z" fill="url(#c-coat)"/>
+            <path d="M 65 350 Q 85 340 115 348 Q 95 365 65 350 Z" fill="url(#c-gold)" stroke="#78350f" stroke-width="1.5"/>
+            <path d="M 335 350 Q 315 340 285 348 Q 305 365 335 350 Z" fill="url(#c-gold)" stroke="#78350f" stroke-width="1.5"/>
+            <path d="M 125 330 L 165 420 L 180 500 L 140 500 L 95 360 Z" fill="url(#c-lapel)"/>
+            <path d="M 275 330 L 235 420 L 220 500 L 260 500 L 305 360 Z" fill="url(#c-lapel)"/>
+            <circle cx="175" cy="460" r="5" fill="url(#c-gold)" stroke="#78350f" stroke-width="1"/>
+            <circle cx="225" cy="460" r="5" fill="url(#c-gold)" stroke="#78350f" stroke-width="1"/>
+            <path d="M 170 290 Q 200 330 230 290 Q 215 360 200 375 Q 185 360 170 290 Z" fill="url(#c-cravat)" stroke="#cbd5e1" stroke-width="1"/>
+            <path d="M 175 285 Q 200 315 225 285 Q 215 340 200 350 Q 185 340 175 285 Z" fill="url(#c-cravat)" stroke="#cbd5e1" stroke-width="1.2"/>
+            <ellipse cx="200" cy="280" rx="10" ry="6" fill="url(#c-gold)" stroke="#78350f" stroke-width="1"/>
+            <circle cx="200" cy="280" r="3" fill="#dc2626"/>
+            <path d="M 175 220 L 175 270 Q 200 280 225 270 L 225 220 Z" fill="url(#c-skin)"/>
+            <path d="M 148 160 C 145 200 162 238 200 252 C 238 238 255 200 252 160 C 250 120 240 100 200 100 C 160 100 150 120 148 160 Z" fill="url(#c-skin)"/>
+            <path d="M 186 215 Q 198 221 216 211" stroke="#881337" stroke-width="3" stroke-linecap="round" fill="none"/>
+            <rect x="162" y="167" width="28" height="13" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+            <rect x="210" y="166" width="28" height="13" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+            <path d="M 190 171 Q 200 169 210 171" stroke="#f59e0b" stroke-width="1.8" fill="none"/>
+            <ellipse class="prosecutor-mouth mouth-a" cx="200" cy="225" rx="8" ry="2" fill="#7f1d1d"/>
+            <path d="M 140 165 C 130 110 160 70 200 70 C 245 70 275 110 265 165 C 275 195 260 230 255 240 C 248 215 250 180 248 165 C 240 115 160 115 152 165 C 150 180 152 215 145 240 C 140 230 135 195 140 165 Z" fill="url(#c-hair)"/>
+            <g transform="translate(240, 270)">
+              <path d="M 10 45 C 5 40 5 60 15 65 C 25 70 30 55 25 45 Z" fill="url(#c-skin)" stroke="#fba677" stroke-width="1.5"/>
+              <path d="M 12 45 L 14 12 Q 15 4 20 4 Q 25 4 24 12 L 22 45 Z" fill="url(#c-skin)" stroke="#fba677" stroke-width="1.5"/>
+            </g>
+          </svg>
         </div>
 
-        <div id="character-container" class="character-container">
-          <div class="character-shadow"></div>
-          <div id="character-sprite" class="character-sprite prosecutor-idle">
-            <svg class="prosecutor-svg" viewBox="0 0 200 300" width="340" height="510">
-              <defs>
-                <linearGradient id="suitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#23232b"/>
-                  <stop offset="100%" stop-color="#141318"/>
-                </linearGradient>
-                <linearGradient id="cravatGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="#fafafa"/>
-                  <stop offset="100%" stop-color="#a1a1a1"/>
-                </linearGradient>
-                <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#fed7aa"/>
-                  <stop offset="100%" stop-color="#fdba74"/>
-                </linearGradient>
-                <linearGradient id="hairGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="#3a3a40"/>
-                  <stop offset="100%" stop-color="#0a0a0c"/>
-                </linearGradient>
-              </defs>
-              <path d="M 40 180 Q 20 290 10 300 L 190 300 Q 180 290 160 180 Z" fill="url(#suitGrad)"/>
-              <path d="M 80 180 L 100 240 L 120 180 Z" fill="url(#cravatGrad)"/>
-              <path d="M 85 200 L 100 250 L 115 200 Z" fill="#8a8f98"/>
-              <circle cx="100" cy="120" r="50" fill="url(#skinGrad)"/>
-              <path d="M 50 110 Q 100 40 150 110 Q 170 60 140 40 Q 100 30 60 40 Q 30 60 50 110 Z" fill="url(#hairGrad)"/>
-              <ellipse cx="80" cy="115" rx="8" ry="4" fill="#141318"/>
-              <ellipse cx="120" cy="115" rx="8" ry="4" fill="#141318"/>
-              <rect x="70" y="105" width="20" height="3" fill="#0a0a0c" transform="rotate(-5 80 105)"/>
-              <rect x="110" y="105" width="20" height="3" fill="#0a0a0c" transform="rotate(5 120 105)"/>
-              <ellipse id="mouth" cx="100" cy="142" rx="10" ry="2" fill="#7f1d1d"/>
-              <path id="arm" class="arm-pointing" d="M 160 210 Q 195 190 220 170 Q 230 165 240 170 Q 230 180 205 210 Z" fill="url(#suitGrad)"/>
+        <!-- Pose B: Pointing Objection! -->
+        <div id="pose-objection" class="prosecutor-pose">
+          <svg viewBox="0 0 400 500" width="460" height="575">
+            <g opacity="0.35">
+              <polygon points="200,180 0,20 0,60" fill="#dc2626"/>
+              <polygon points="200,180 0,160 0,220" fill="#dc2626"/>
+              <polygon points="200,180 0,340 0,400" fill="#dc2626"/>
+              <polygon points="200,180 400,60 400,120" fill="#dc2626"/>
+              <polygon points="200,180 400,240 400,300" fill="#dc2626"/>
+            </g>
+            <path d="M 60 360 C 40 380 20 440 10 500 L 390 500 C 380 440 350 380 320 355 C 280 325 240 310 180 315 C 130 315 90 330 60 360 Z" fill="url(#c-coat)"/>
+            <path d="M 135 155 C 130 200 150 240 188 252 C 228 238 245 195 242 155 C 240 115 230 95 188 95 C 148 95 138 115 135 155 Z" fill="url(#c-skin)"/>
+            <path d="M 165 208 Q 188 202 212 210 Q 205 238 188 240 Q 172 238 165 208 Z" fill="#7f1d1d" stroke="#450a0a" stroke-width="2"/>
+            <path d="M 168 210 Q 188 206 209 212 L 206 216 Q 188 212 171 215 Z" fill="#ffffff"/>
+            <path d="M 175 232 Q 188 220 202 233 Q 188 242 175 232 Z" fill="#f87171"/>
+            <path d="M 150 162 L 175 166" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
+            <ellipse cx="163" cy="167" rx="5" ry="5" fill="#b91c1c"/>
+            <path d="M 198 166 L 224 162" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
+            <ellipse cx="211" cy="167" rx="5" ry="5" fill="#b91c1c"/>
+            <path d="M 135 125 L 165 115 L 160 138 L 180 110 L 185 140 L 210 112 L 205 142 L 235 118 L 225 145 L 255 130 L 240 155 Z" fill="url(#c-hair)"/>
+            <path d="M 230 330 Q 180 360 80 410 Q 50 425 20 440 L 0 500 L 160 500 Q 220 440 270 360 Z" fill="url(#c-coat)"/>
+            <g transform="translate(10, 360) scale(1.15)">
+              <path d="M 25 65 Q 40 50 70 55 Q 85 65 80 90 Q 65 115 35 110 Q 15 100 25 65 Z" fill="url(#c-skin)" stroke="#c2410c" stroke-width="2"/>
+              <path d="M 28 62 L 18 35 Q 22 25 35 25 L 45 55 Z" fill="url(#c-skin)" stroke="#c2410c" stroke-width="2.5"/>
+              <ellipse cx="26" cy="28" rx="14" ry="11" fill="url(#c-skin)" stroke="#c2410c" stroke-width="2.5"/>
+              <line x1="26" y1="12" x2="26" y2="-10" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Pose C: Desk Slam -->
+        <div id="pose-slam" class="prosecutor-pose">
+          <svg viewBox="0 0 400 500" width="460" height="575">
+            <ellipse cx="90" cy="445" rx="55" ry="16" fill="none" stroke="#f59e0b" stroke-width="3" stroke-dasharray="8 6" opacity="0.85"/>
+            <ellipse cx="310" cy="445" rx="55" ry="16" fill="none" stroke="#f59e0b" stroke-width="3" stroke-dasharray="8 6" opacity="0.85"/>
+            <path d="M 40 370 C 20 400 15 450 10 500 L 390 500 C 385 450 380 400 360 370 C 320 330 270 310 200 310 C 130 310 80 330 40 370 Z" fill="url(#c-coat)"/>
+            <path d="M 65 375 L 85 440 L 115 440 L 115 395 Z" fill="url(#c-coat)"/>
+            <path d="M 335 375 L 315 440 L 285 440 L 285 395 Z" fill="url(#c-coat)"/>
+            <path d="M 148 165 C 145 205 162 245 200 258 C 238 245 255 205 252 165 C 250 125 240 105 200 105 C 160 105 150 125 148 165 Z" fill="url(#c-skin)"/>
+            <path d="M 180 224 L 220 224 Q 215 235 200 236 Q 185 235 180 224 Z" fill="#ffffff" stroke="#450a0a" stroke-width="2"/>
+            <line x1="180" y1="228" x2="220" y2="228" stroke="#78350f" stroke-width="1.5"/>
+            <ellipse cx="176" cy="184" rx="4.5" ry="3.5" fill="#dc2626"/>
+            <ellipse cx="224" cy="184" rx="4.5" ry="3.5" fill="#dc2626"/>
+            <g transform="translate(60, 428)">
+              <ellipse cx="32" cy="18" rx="20" ry="10" fill="url(#c-skin)" stroke="#c2410c" stroke-width="2"/>
+            </g>
+            <g transform="translate(280, 428)">
+              <ellipse cx="28" cy="18" rx="20" ry="10" fill="url(#c-skin)" stroke="#c2410c" stroke-width="2"/>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Mahogany Bench Podium -->
+      <div class="mahogany-bench">
+        <div class="bench-brass-rail"></div>
+        <div class="bench-body">
+          <div class="bench-plate">
+            <svg viewBox="0 0 120 40" width="100" height="34">
+              <rect x="2" y="2" width="116" height="36" rx="4" fill="none" stroke="#f59e0b" stroke-width="2"/>
+              <text x="60" y="24" text-anchor="middle" fill="#fef08a" font-family="sans-serif" font-weight="900" font-size="12" letter-spacing="2">PROSECUTOR</text>
             </svg>
           </div>
-          <div class="court-bench"></div>
+          <div class="bench-microphone">
+            <div class="mic-head"></div>
+            <div class="mic-stem"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dramatic 24-Point Starburst Objection Banner -->
+    <div id="objection-banner" class="objection-banner hidden">
+      <div class="starburst-burst">
+        <div class="objection-text">ПРОТЕСТУЮ!</div>
+      </div>
+    </div>
+
+    <!-- Wax Seal Verdict Stamp -->
+    <div id="verdict-stamp" class="verdict-stamp hidden">
+      <div id="stamp-seal" class="stamp-seal guilty">
+        <span id="stamp-text" class="stamp-text">ВИНОВЕН</span>
+        <div class="stamp-sub">СУДЕБНЫЙ ТРИБУНАЛ</div>
+      </div>
+    </div>
+
+    <!-- Chamfered Dialogue Box -->
+    <div id="dialog-panel" class="dialog-panel">
+      <div class="dialog-badge-tab">
+        <span id="speaker-name" class="speaker-name">ПРОКУРОР КАРЛОВ</span>
+        <span id="case-badge" class="case-badge">ДЕЛО №404</span>
+      </div>
+
+      <div class="dialog-body">
+        <p id="dialog-text" class="dialog-text">Суд готовится к заседанию...</p>
+      </div>
+
+      <div class="dialog-footer">
+        <div id="voting-bar-container" class="voting-bar-container hidden">
+          <div class="voting-labels">
+            <span class="vote-guilty">ВИНОВЕН: <strong id="guilty-count">0</strong></span>
+            <span id="vote-timer" class="vote-timer">30с</span>
+            <span class="vote-innocent">ОПРАВДАН: <strong id="innocent-count">0</strong></span>
+          </div>
+          <div class="voting-track">
+            <div id="guilty-fill" class="guilty-fill" style="width: 50%;"></div>
+            <div class="voting-needle"></div>
+            <div id="innocent-fill" class="innocent-fill" style="width: 50%;"></div>
+          </div>
         </div>
 
-        <div id="objection-banner" class="objection-banner hidden">
-          <div class="objection-kicker">ПРОКУРОР ТРЕБУЕТ СЛОВА</div>
-          <div class="objection-text">Протестую</div>
-        </div>
-
-        <div id="verdict-stamp" class="verdict-stamp hidden">
-          <div class="stamp-kicker">ВЕРДИКТ ПРИСЯЖНЫХ</div>
-          <div id="stamp-text" class="stamp-text">ВИНОВЕН</div>
-        </div>
-
-        <div id="dialog-panel" class="dialog-panel">
-          <div class="dialog-header">
-            <span id="speaker-name" class="speaker-name">ПРОКУРОР КАРЛОВ</span>
-            <span class="dialog-rule" aria-hidden="true"></span>
-          </div>
-          <div class="dialog-body">
-            <p id="dialog-text" class="dialog-text">Суд готовится к заседанию...</p>
-          </div>
-          <div id="voting-bar-container" class="voting-bar-container hidden">
-            <div class="voting-labels">
-              <span class="vote-label-guilty">ВИНОВЕН · <strong id="guilty-count">0</strong></span>
-              <span id="vote-timer" class="vote-timer">30с</span>
-              <span class="vote-label-innocent">ОПРАВДАН · <strong id="innocent-count">0</strong></span>
-            </div>
-            <div class="voting-progress">
-              <div id="guilty-fill" class="guilty-fill" style="width: 50%;"></div>
-              <div id="innocent-fill" class="innocent-fill" style="width: 50%;"></div>
-            </div>
-          </div>
+        <div class="dialog-indicator">
+          <span class="chevron-bob">▼</span>
         </div>
       </div>
     </div>

@@ -3,153 +3,272 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal — Конторка суда</title>
+  <title>Stream Tribunal — Студийный пульт управления</title>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <span class="seal" aria-hidden="true">§</span>
-        <div class="brand-text">
-          <h1>Stream Tribunal</h1>
-          <p class="brand-sub">конторка дежурного судьи · реестр №404</p>
+  <div class="dashboard-shell">
+    <!-- Top Command Bar (Raycast / Linear style) -->
+    <header class="command-bar">
+      <div class="brand-badge">
+        <span class="brand-symbol">⚖</span>
+        <div class="brand-info">
+          <strong>STREAM TRIBUNAL</strong>
+          <span class="brand-sub">TACTICAL STUDIO DESK v1.2</span>
         </div>
       </div>
-      <div class="topbar-actions">
-        <div class="status-indicator">
-          <span id="ws-dot" class="dot disconnected"></span>
-          <span id="ws-label">Подключение...</span>
+
+      <div class="command-search">
+        <span class="search-icon">⚡</span>
+        <input type="text" id="quick-command-input" placeholder="Быстрая команда или поиск дела... (F9 запуск, F12 сброс)">
+        <kbd class="kbd-badge">F9</kbd>
+      </div>
+
+      <div class="status-pill-group">
+        <div class="status-pill stage-pill">
+          <span id="stage-dot" class="dot idle"></span>
+          <span id="stage-label" class="label-text">ОЖИДАНИЕ</span>
         </div>
-        <input type="password" id="secret-input" class="secret-input" placeholder="Секрет" autocomplete="off">
-        <button id="btn-panic" class="btn btn-panic">Сбросить суд</button>
+        <div class="status-pill ping-pill">
+          <span class="dot-online"></span>
+          <span id="ws-status-text">WS: 0ms</span>
+        </div>
+        <div class="status-pill tts-pill">
+          <span class="tts-icon">🎙</span>
+          <span id="tts-status-text">PIPER ONNX</span>
+        </div>
+        <button type="button" id="btn-copy-obs" class="btn-obs-pill">
+          <span>OBS ССЫЛКА</span>
+          <span class="copy-hint">копировать</span>
+        </button>
+        <button type="button" id="btn-panic" class="btn-panic">
+          <span class="panic-icon">⚠</span>
+          <span>PANIC (F12)</span>
+        </button>
       </div>
     </header>
 
-    <nav class="tab-bar" aria-label="Разделы">
-      <button type="button" class="tab-btn active" data-tab="trial">Заседание</button>
-      <button type="button" class="tab-btn" data-tab="memory">Память</button>
-      <button type="button" class="tab-btn" data-tab="portrait">Портрет</button>
-      <button type="button" class="tab-btn" data-tab="obs">OBS</button>
-    </nav>
-
-    <main class="grid-layout">
-      <section class="card desk-view" data-view="trial">
-        <div class="card-head">
-          <h2>Новое дело</h2>
-          <span id="current-state" class="state-badge">Ожидание</span>
+    <!-- 3-Column Tactical Command Grid -->
+    <main class="tactical-grid">
+      <!-- Col 1: Incident Dispatcher & Quick Presets -->
+      <section class="panel incident-panel">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-tag">QUEUE</span>
+            <h2>ДИСПЕТЧЕР ДЕЛ</h2>
+          </div>
+          <span class="badge-count">4 ПРЕСЕТА</span>
         </div>
-        <p id="active-case-title" class="case-line">Нет активного дела</p>
-        <form id="trial-form">
-          <div class="field">
-            <label for="defendant-input">Подсудимый</label>
-            <input type="text" id="defendant-input" value="Стример" required>
-          </div>
-          <div class="field">
-            <label for="crime-input">Статья обвинения</label>
-            <input type="text" id="crime-input" value="Купание в лаве с полным инвентарем" required>
-          </div>
-          <div class="field">
-            <label for="context-input">Контекст из чата или игры</label>
-            <textarea id="context-input" rows="3">Чат спамит: Стример опять слил все алмазы! Позор!</textarea>
-          </div>
-          <div class="presets-row">
-            <span>Быстрые статьи:</span>
-            <button type="button" class="btn-chip" data-crime="Купание в лаве с полным инвентарем">Лава</button>
-            <button type="button" class="btn-chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
-            <button type="button" class="btn-chip" data-crime="Падение в пустоту с алмазами">Шахта</button>
-            <button type="button" class="btn-chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание</button>
-          </div>
-          <div class="form-actions">
-            <button type="submit" id="btn-start-trial" class="btn btn-primary">Открыть заседание</button>
-          </div>
-        </form>
-        <div class="voting-tester">
-          <h3>Голоса присяжных</h3>
-          <div class="vote-counts">
-            <div class="vote-stat guilty">
-              <span>Виновен</span>
-              <strong id="stat-guilty">0</strong>
+
+        <div class="incident-presets">
+          <div class="incident-card critical" data-defendant="Стример" data-crime="Слив клатча 1v1 с ножом наперевес при счете 14:15" data-context="Чат: Какой позор! Кикните его! Зачем полез с ножом?!">
+            <div class="card-meta">
+              <span class="meta-tag tag-red">CS2 КЛАТЧ</span>
+              <span class="meta-time">ВЫСОКАЯ ВИНА</span>
             </div>
-            <div class="vote-stat innocent">
-              <span>Оправдан</span>
-              <strong id="stat-innocent">0</strong>
+            <div class="suspect-title">Слив клатча 1v1 с ножом</div>
+            <p class="incident-desc">Покупка AWP без брони, выход с ножом в решающем раунде и падение от P250.</p>
+            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
+          </div>
+
+          <div class="incident-card warning" data-defendant="Стример" data-crime="Бросок световой гранаты в спину всему скваду" data-context="Чат: Минус глаза! Ослепил всю свою команду! Гений баллистики!">
+            <div class="card-meta">
+              <span class="meta-tag tag-amber">ТИМ-ФЛЕШ</span>
+              <span class="meta-time">САБОТАЖ</span>
             </div>
+            <div class="suspect-title">Бросок гранаты в спину команды</div>
+            <p class="incident-desc">Стример ослепил четверых тиммейтов прямо перед выходом вражеского пуша.</p>
+            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
           </div>
-          <div class="vote-buttons">
-            <button type="button" id="btn-vote-guilty" class="btn btn-danger">+1 Виновен</button>
-            <button type="button" id="btn-vote-innocent" class="btn btn-success">+1 Оправдан</button>
+
+          <div class="incident-card notice" data-defendant="Стример" data-crime="Купание в лаве с 64 алмазами и незеритовой киркой" data-context="Чат: F алмазам! Ты куда копал под себя?! Все сгорело!">
+            <div class="card-meta">
+              <span class="meta-tag tag-blue">MINECRAFT</span>
+              <span class="meta-time">ХАЛАТНОСТЬ</span>
+            </div>
+            <div class="suspect-title">Падение в лаву с алмазами</div>
+            <p class="incident-desc">Копание вертикально вниз вопреки первому правилу игры, потеря всех ресурсов.</p>
+            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
+          </div>
+
+          <div class="incident-card notice" data-defendant="Стример" data-crime="АФК уход за чаем в момент ключевого файта" data-context="Чат: Стример ушел кушать пельмени, пока команду сносили на базе!">
+            <div class="card-meta">
+              <span class="meta-tag tag-slate">АФК ДЕЗЕРТИР</span>
+              <span class="meta-time">БРОСИЛ ПОСТ</span>
+            </div>
+            <div class="suspect-title">Самовольный уход за чаем</div>
+            <p class="incident-desc">Стример оставил персонажа в центре карты, пока вражеская команда ломала трон.</p>
+            <button type="button" class="btn-quick-dispatch">НАЗНАЧИТЬ ДЕЛО</button>
+          </div>
+        </div>
+
+        <!-- Custom Case Form -->
+        <div class="custom-case-box">
+          <div class="box-title">РУЧНОЙ ВВОД ОБВИНЕНИЯ</div>
+          <form id="custom-trial-form">
+            <div class="input-row">
+              <div class="field-group">
+                <label for="defendant-input">Подсудимый</label>
+                <input type="text" id="defendant-input" value="Стример" required>
+              </div>
+            </div>
+            <div class="field-group">
+              <label for="crime-input">Статья обвинения</label>
+              <input type="text" id="crime-input" value="Нарушение законов ньютоновской физики и стрельба по облакам" required>
+            </div>
+            <div class="field-group">
+              <label for="context-input">Логи чата / контекст</label>
+              <textarea id="context-input" rows="2">Чат негодует: Снова мимо! Руки дрожат! Суд, накажи его!</textarea>
+            </div>
+            <button type="submit" id="btn-start-trial" class="btn-dispatch-primary">
+              <span>СТАРТ ЗАСЕДАНИЯ</span>
+              <kbd>Enter</kbd>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Col 2: Tactile Hardware Deck & Live Audio Spectrum -->
+      <section class="panel deck-panel">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-tag">HARDWARE</span>
+            <h2>КОНСОЛЬ УПРАВЛЕНИЯ</h2>
+          </div>
+          <span class="badge-status">60 FPS SPECTRUM</span>
+        </div>
+
+        <!-- Real-Time Audio Visualizer Canvas -->
+        <div class="visualizer-container">
+          <div class="visualizer-header">
+            <span class="vis-label">СПЕКТР РЕЧИ ИИ-СУДЬИ (RMS & PEAK)</span>
+            <span id="audio-peak-readout" class="vis-peak">-3.2 dBFS [CLEAN]</span>
+          </div>
+          <canvas id="audio-visualizer-canvas" height="130"></canvas>
+          <div class="visualizer-footer">
+            <span>20 Hz</span>
+            <span>VOCAL CADENCE MONITOR</span>
+            <span>20 kHz</span>
+          </div>
+        </div>
+
+        <!-- Tactile 3D Stream Deck Keypad -->
+        <div class="hardware-keypad-section">
+          <div class="section-label">ТАКТИЛЬНЫЕ МАКРОСЫ СУДА (STREAM DECK)</div>
+          <div class="keypad-matrix">
+            <button type="button" id="key-objection" class="tactile-key key-objection">
+              <span class="key-glyph">⚡</span>
+              <strong class="key-label">ПРОТЕСТУЮ!</strong>
+              <span class="key-sub">[OBJECTION]</span>
+            </button>
+
+            <button type="button" id="key-slam" class="tactile-key key-slam">
+              <span class="key-glyph">🔨</span>
+              <strong class="key-label">УДАР МОЛОТКОМ</strong>
+              <span class="key-sub">[DESK SLAM]</span>
+            </button>
+
+            <button type="button" id="key-verdict" class="tactile-key key-verdict">
+              <span class="key-glyph">⚖</span>
+              <strong class="key-label">ВЕРДИКТ</strong>
+              <span class="key-sub">[FINAL RULING]</span>
+            </button>
+
+            <button type="button" id="key-reset" class="tactile-key key-reset">
+              <span class="key-glyph">↺</span>
+              <strong class="key-label">СБРОС В IDLE</strong>
+              <span class="key-sub">[RESET STAGE]</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulated Chat Voters -->
+        <div class="simulator-box">
+          <div class="sim-header">СИМУЛЯТОР ГОЛОСОВ ТВИТЧ-ЧАТА</div>
+          <div class="sim-buttons">
+            <button type="button" id="btn-vote-guilty" class="btn-sim sim-guilty">
+              <span>+1 ВИНОВЕН</span>
+              <kbd>!guilty</kbd>
+            </button>
+            <button type="button" id="btn-vote-innocent" class="btn-sim sim-innocent">
+              <span>+1 ОПРАВДАН</span>
+              <kbd>!innocent</kbd>
+            </button>
           </div>
         </div>
       </section>
 
-      <section class="card desk-view hidden" data-view="memory">
-        <div class="card-head">
-          <h2>Память суда</h2>
+      <!-- Col 3: Live Stenographer Transcript Feed -->
+      <section class="panel transcript-panel">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-tag">TELEMETRY</span>
+            <h2>СТЕНОГРАММА СУДА</h2>
+          </div>
+          <span class="badge-status blink">REC</span>
         </div>
-        <h3>Последние заседания</h3>
-        <ul id="history-trials" class="history-list">
-          <li class="history-empty">Пока пусто, проведите первый суд.</li>
-        </ul>
-        <h3>Заводилы чата</h3>
-        <ul id="history-top" class="history-list">
-          <li class="history-empty">Пока никто не отличился.</li>
-        </ul>
-      </section>
 
-      <section class="card desk-view hidden" data-view="portrait">
-        <div class="card-head">
-          <h2>Портрет стримера</h2>
+        <div class="case-meta-card">
+          <div class="meta-row">
+            <span class="row-label">ТЕКУЩЕЕ ДЕЛО:</span>
+            <strong id="active-case-name" class="row-value">Нет активного слушания</strong>
+          </div>
+          <div class="meta-row">
+            <span class="row-label">ФАЗА ПРОЦЕССА:</span>
+            <span id="active-phase-badge" class="phase-tag">IDLE</span>
+          </div>
         </div>
-        <p class="guide-desc">Суд помнит это между заседаниями. Списки через запятую.</p>
-        <form id="profile-form">
-          <div class="field">
-            <label for="profile-name">Имя</label>
-            <input type="text" id="profile-name" placeholder="Стример">
-          </div>
-          <div class="field">
-            <label for="profile-titles">Титулы</label>
-            <input type="text" id="profile-titles" placeholder="гроза криперов, король лавы">
-          </div>
-          <div class="field">
-            <label for="profile-traits">Черты</label>
-            <input type="text" id="profile-traits" placeholder="жадный до алмазов, паникует">
-          </div>
-          <div class="field">
-            <label for="profile-gags">Дежурные мемы</label>
-            <input type="text" id="profile-gags" placeholder="лава, крипер у порога">
-          </div>
-          <div class="field">
-            <label for="profile-mercy">Строгость суда</label>
-            <input type="text" id="profile-mercy" placeholder="мягкий, строгий, беспощадный">
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Сохранить портрет</button>
-          </div>
-          <p id="profile-status" class="profile-status"></p>
-        </form>
-      </section>
 
-      <section class="card desk-view hidden" data-view="obs">
-        <div class="card-head">
-          <h2>Вывод в OBS Studio</h2>
+        <div id="transcript-feed" class="transcript-feed">
+          <div class="feed-line system">
+            <span class="time-stamp">[00:00:00]</span>
+            <span class="speaker-tag sys">СИСТЕМА:</span>
+            <span class="line-text">Студийный пульт готов к работе. Нажмите F9 или пресет для открытия дела.</span>
+          </div>
         </div>
-        <p class="guide-desc">Источник типа «Браузер» с параметрами ниже:</p>
-        <div class="copy-box">
-          <input type="text" id="obs-url-input" readonly value="http://localhost:7890/overlay">
-          <button type="button" id="btn-copy-url" class="btn btn-secondary">Копировать</button>
-        </div>
-        <ul class="guide-bullets">
-          <li>Ширина <strong>1920</strong>, высота <strong>1080</strong></li>
-          <li>Включить «Управлять звуком через OBS»</li>
-          <li>Включить «Обновлять браузер, когда сцена активна»</li>
-        </ul>
-        <div class="test-preview-row">
-          <a href="/overlay" target="_blank" class="link-preview">Открыть оверлей в новой вкладке</a>
+
+        <div class="transcript-footer">
+          <button type="button" id="btn-clear-transcript" class="btn-clear-feed">Очистить лог</button>
+          <span class="auto-scroll-hint">АВТОСКРОЛЛ ВКЛ</span>
         </div>
       </section>
     </main>
+
+    <!-- Persistent Bottom Dock: Jury Gauge / Verdict Meter -->
+    <footer class="verdict-dock">
+      <div class="verdict-meta-bar">
+        <div class="verdict-col guilty-side">
+          <span class="v-label">ТРЕБОВАНИЕ ОБВИНЕНИЯ:</span>
+          <div class="v-number">
+            <strong id="gauge-guilty-pct">50%</strong>
+            <span id="gauge-guilty-votes">(0 голосов)</span>
+          </div>
+        </div>
+
+        <div class="verdict-col center-timer">
+          <span class="timer-sub">ГОЛОСОВАНИЕ ПРИСЯЖНЫХ ЧАТА</span>
+          <div id="gauge-timer" class="timer-value">00:30</div>
+        </div>
+
+        <div class="verdict-col innocent-side">
+          <span class="v-label">СТОРОНА ЗАЩИТЫ:</span>
+          <div class="v-number">
+            <span id="gauge-innocent-votes">(0 голосов)</span>
+            <strong id="gauge-innocent-pct">50%</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="gauge-track">
+        <div id="gauge-fill-guilty" class="gauge-fill-guilty" style="width: 50%;"></div>
+        <div class="gauge-needle"></div>
+        <div id="gauge-fill-innocent" class="gauge-fill-innocent" style="width: 50%;"></div>
+      </div>
+    </footer>
   </div>
+
+  <!-- Hidden input for clipboard copy -->
+  <input type="text" id="obs-hidden-url" value="http://localhost:7890/overlay" style="position: absolute; left: -9999px;">
 
   <script src="app.js"></script>
 </body>
