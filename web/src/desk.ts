@@ -25,6 +25,7 @@ namespace Desk {
     verdict: string;
     guilty_votes: number;
     total_votes: number;
+    witnesses?: number;
     penalty?: string;
   }
 
@@ -144,6 +145,9 @@ namespace Desk {
   function renderState(state: string, title: string): void {
     Desk.say(currentState, state.toUpperCase());
     currentState.classList.toggle("active", state !== "idle");
+    if (state !== "verdict") {
+      currentState.classList.remove("guilty", "innocent");
+    }
     Desk.say(activeCaseTitle, title);
   }
 
@@ -205,9 +209,18 @@ namespace Desk {
           break;
         }
         case "verdict": {
-          let title = "Вердикт: " + String(msg.payload.verdict || "");
-          if (msg.payload.penalty) title += ". Наказание: " + String(msg.payload.penalty);
-          renderState("verdict", title);
+          const guilty = String(msg.payload.verdict || "") === "ВИНОВЕН";
+          const parts = ["Вердикт: " + String(msg.payload.verdict || "")];
+          const witnessCount = Number(msg.payload.witnesses || 0);
+          if (witnessCount > 0) {
+            parts.push("свидетели +" + witnessCount);
+          }
+          if (msg.payload.penalty) {
+            parts.push("наказание: " + String(msg.payload.penalty));
+          }
+          renderState("verdict", parts.join(" · "));
+          currentState.classList.toggle("guilty", guilty);
+          currentState.classList.toggle("innocent", !guilty);
           break;
         }
         case "panic":
@@ -325,5 +338,9 @@ namespace Desk {
       });
   });
 
+  const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
+  if (backdrop) Backdrop.mount(backdrop);
+  const gooey = document.getElementById("gooey-nav");
+  if (gooey) GooeyNav.mount(gooey);
   connect();
 })();
