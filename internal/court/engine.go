@@ -43,10 +43,12 @@ type Engine struct {
 	voice    audio.Synthesizer
 	filter   *safety.Filter
 	recall   *memory.Store
-	mu       sync.RWMutex
-	state    State
-	currCase *TrialCase
-	cancelFn context.CancelFunc
+	// VerdictHook runs after the verdict broadcast, used for chat announces.
+	VerdictHook func(verdict string, guilty, innocent int)
+	mu          sync.RWMutex
+	state       State
+	currCase    *TrialCase
+	cancelFn    context.CancelFunc
 }
 
 func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
@@ -358,6 +360,10 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		TotalVotes:  totalVotes,
 		Penalty:     "Штрафной ч/б фильтр вины в OBS",
 	})
+
+	if e.VerdictHook != nil {
+		e.VerdictHook(verdictStr, guiltyVotes, innocentVotes)
+	}
 
 	select {
 	case <-ctx.Done():

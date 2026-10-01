@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -224,6 +225,39 @@ func main() {
 		}
 	})
 	go donateWatcher.Run(gameCtx)
+
+	sueTracker := bot.NewSueTracker(cfg.Courtroom.SueThreshold, time.Minute, 3*time.Minute)
+	var chat *bot.TwitchIRC
+	chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, func(cmd bot.ChatCommand) {
+		switch cmd.Kind {
+		case bot.CommandSue:
+			recall.AddSueCall(cmd.Author)
+			engine.AddChatComment(cmd.Author, "!sue")
+			if sueTracker.Hit(time.Now()) {
+				if err := engine.StartTrial(cfg.Game.StreamerName, "Массовое требование чата", "Чат собрал "+strconv.Itoa(cfg.Courtroom.SueThreshold)+" !sue"); err == nil {
+					chat.SendMessage("Суд открыт по требованию чата. Присяжные, готовьтесь.")
+				}
+			}
+		case bot.CommandGuilty:
+			engine.CastVote("twitch:"+cmd.Author, true)
+		case bot.CommandInnocent:
+			engine.CastVote("twitch:"+cmd.Author, false)
+		case bot.CommandCrime:
+			if cmd.Argument != "" {
+				engine.AddChatComment(cmd.Author, "!crime "+cmd.Argument)
+			}
+		default:
+			engine.AddChatComment(cmd.Author, cmd.Argument)
+		}
+	})
+	go chat.Run(gameCtx)
+	if cfg.Twitch.Token != "" && cfg.Twitch.Channel != "" {
+		log.Printf("twitch chat on #%s as %s", cfg.Twitch.Channel, cfg.Twitch.Nick)
+	}
+
+	engine.VerdictHook = func(verdict string, guilty, innocent int) {
+		chat.SendMessage("Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")")
+	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{

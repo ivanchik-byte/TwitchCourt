@@ -15,6 +15,7 @@ type Config struct {
 	Courtroom CourtroomConfig `yaml:"courtroom"`
 	Safety    SafetyConfig    `yaml:"safety"`
 	Game      GameConfig      `yaml:"game"`
+	Twitch    TwitchConfig    `yaml:"twitch"`
 }
 
 type ServerConfig struct {
@@ -67,6 +68,12 @@ type GameConfig struct {
 	DonateToken  string `yaml:"donate_token"`
 }
 
+type TwitchConfig struct {
+	Channel string `yaml:"channel"`
+	Nick    string `yaml:"nick"`
+	Token   string `yaml:"token"`
+}
+
 func DefaultConfig() *Config {
 	binaryName := "bin/piper"
 	if runtime.GOOS == "windows" {
@@ -117,6 +124,11 @@ func DefaultConfig() *Config {
 			MemoryPath:   "data/memory.json",
 			DonateToken:  "",
 		},
+		Twitch: TwitchConfig{
+			Channel: "",
+			Nick:    "tribunal_bot",
+			Token:   "",
+		},
 	}
 }
 
@@ -143,6 +155,9 @@ func LoadConfig(path string) (*Config, error) {
 
 	if key := os.Getenv("DONATE_TOKEN"); key != "" && cfg.Game.DonateToken == "" {
 		cfg.Game.DonateToken = key
+	}
+	if token := os.Getenv("TWITCH_TOKEN"); token != "" && cfg.Twitch.Token == "" {
+		cfg.Twitch.Token = token
 	}
 	if secret := os.Getenv("TRIBUNAL_SECRET"); secret != "" && cfg.Server.Secret == "" {
 		cfg.Server.Secret = secret

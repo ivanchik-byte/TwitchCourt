@@ -1,0 +1,187 @@
+package bot
+
+import (
+	"bufio"
+	"context"
+	"crypto/tls"
+	"fmt"
+	"log"
+	"net"
+	"strings"
+	"time"
+)
+
+// ChatCommand is a parsed chat trigger relevant to the court.
+type ChatCommand struct {
+	Author   string
+	Kind     string
+	Argument string
+}
+
+const (
+	CommandChat     = "chat"
+	CommandSue      = "sue"
+	CommandGuilty   = "guilty"
+	CommandInnocent = "innocent"
+	CommandCrime    = "crime"
+)
+
+// ParseChatLine extracts a court command from a chat message.
+// Plain text becomes a chat comment, !-prefixed triggers map to actions.
+func ParseChatLine(author, text string) ChatCommand {
+	trimmed := strings.TrimSpace(text)
+	lower := strings.ToLower(trimmed)
+	switch {
+	case lower == "!sue":
+		return ChatCommand{Author: author, Kind: CommandSue}
+	case lower == "!guilty":
+		return ChatCommand{Author: author, Kind: CommandGuilty}
+	case lower == "!innocent":
+		return ChatCommand{Author: author, Kind: CommandInnocent}
+	case strings.HasPrefix(lower, "!crime"):
+		return ChatCommand{Author: author, Kind: CommandCrime, Argument: strings.TrimSpace(trimmed[len("!crime"):])}
+	default:
+		return ChatCommand{Author: author, Kind: CommandChat, Argument: trimmed}
+	}
+}
+
+// parsePrivMsg parses a raw IRC line into author and message.
+// Handles both plain and tag-prefixed Twitch lines.
+func parsePrivMsg(line string) (author, message string, ok bool) {
+	rest := line
+	if strings.HasPrefix(rest, "@") {
+		idx := strings.Index(rest, " ")
+		if idx < 0 {
+			return "", "", false
+		}
+		rest = rest[idx+1:]
+	}
+	if !strings.HasPrefix(rest, ":") {
+		return "", "", false
+	}
+	rest = rest[1:]
+	bang := strings.Index(rest, "!")
+	if bang < 0 {
+		return "", "", false
+	}
+	author = rest[:bang]
+	privIdx := strings.Index(rest, "PRIVMSG")
+	if privIdx < 0 {
+		return "", "", false
+	}
+	msgIdx := strings.Index(rest[privIdx:], " :")
+	if msgIdx < 0 {
+		return "", "", false
+	}
+	message = rest[privIdx+msgIdx+2:]
+	return author, message, true
+}
+
+// TwitchIRC reads Twitch chat over TLS IRC and emits parsed commands.
+type TwitchIRC struct {
+	channel string
+	nick    string
+	token   string
+	emit    func(ChatCommand)
+	sendCh  chan string
+}
+
+// NewTwitchIRC builds a chat listener. Empty token means disabled.
+func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIRC {
+	return &TwitchIRC{
+		channel: strings.ToLower(strings.TrimPrefix(channel, "#")),
+		nick:    nick,
+		token:   token,
+		emit:    emit,
+		sendCh:  make(chan string, 16),
+	}
+}
+
+// SendMessage queues a bot line for the channel.
+func (t *TwitchIRC) SendMessage(text string) {
+	select {
+	case t.sendCh <- text:
+	default:
+	}
+}
+
+// Run connects and stays connected until ctx ends. Idle without credentials.
+func (t *TwitchIRC) Run(ctx context.Context) {
+	if t.token == "" || t.channel == "" {
+		return
+	}
+	backoff := time.Second
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if err := t.listen(ctx); err != nil {
+			log.Printf("twitch irc disconnected: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > 30*time.Second {
+			backoff = 30 * time.Second
+		}
+	}
+}
+
+func (t *TwitchIRC) listen(ctx context.Context) error {
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	raw, err := dialer.DialContext(ctx, "tcp", "irc.chat.twitch.tv:6697")
+	if err != nil {
+		return err
+	}
+	conn := tls.Client(raw, &tls.Config{ServerName: "irc.chat.twitch.tv"})
+	if err := conn.HandshakeContext(ctx); err != nil {
+		raw.Close()
+		return err
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "PASS %s\r\nNICK %s\r\nJOIN #%s\r\n", t.token, t.nick, t.channel)
+
+	go t.sendLoop(ctx, conn)
+
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 64*1024), 512*1024)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+		line := scanner.Text()
+		if strings.HasPrefix(line, "PING") {
+			fmt.Fprintf(conn, "PONG%s\r\n", line[4:])
+			continue
+		}
+		author, message, ok := parsePrivMsg(line)
+		if !ok {
+			continue
+		}
+		t.emit(ParseChatLine(author, message))
+	}
+	return scanner.Err()
+}
+
+func (t *TwitchIRC) sendLoop(ctx context.Context, conn net.Conn) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case text, ok := <-t.sendCh:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(conn, "PRIVMSG #%s :%s\r\n", t.channel, text)
+			time.Sleep(1200 * time.Millisecond)
+		}
+	}
+}

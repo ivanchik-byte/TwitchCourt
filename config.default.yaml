@@ -40,3 +40,8 @@ game:
   streamer_name: "Стример"
   memory_path: "data/memory.json"
   donate_token: ""
+
+twitch:
+  channel: ""
+  nick: "tribunal_bot"
+  token: ""
