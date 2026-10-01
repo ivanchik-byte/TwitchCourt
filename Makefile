@@ -20,8 +20,8 @@ build-win:
 
 package-win: build-win
 	cp config.default.yaml $(DIST)/config.yaml
-	powershell -NoProfile -Command "Compress-Archive -Force '$(DIST)/$(BINARY).exe','$(DIST)/config.yaml','README.md' '$(DIST)/$(BINARY)-windows-amd64.zip'" 2>/dev/null || \
-		zip -j $(DIST)/$(BINARY)-windows-amd64.zip $(DIST)/$(BINARY).exe $(DIST)/config.yaml README.md
+	powershell -NoProfile -Command "Compress-Archive -Force '$(DIST)/$(BINARY).exe','$(DIST)/config.yaml','README.md','LICENSE' '$(DIST)/$(BINARY)-windows-amd64.zip'" 2>/dev/null || \
+		zip -j $(DIST)/$(BINARY)-windows-amd64.zip $(DIST)/$(BINARY).exe $(DIST)/config.yaml README.md LICENSE
 
 clean:
 	rm -rf $(DIST)

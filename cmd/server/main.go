@@ -48,6 +48,7 @@ func main() {
 	var engine *court.Engine
 
 	limiter := newActionLimiter(500 * time.Millisecond)
+	sueTracker := bot.NewSueTracker(cfg.Courtroom.SueThreshold, time.Minute, 3*time.Minute)
 
 	hub := obs.NewHub(func(action string, payload []byte) {
 		if engine == nil {
@@ -67,6 +68,8 @@ func main() {
 				}
 				if err := engine.StartTrial(req.Defendant, req.Crime, req.Context); err != nil {
 					log.Printf("start trial rejected: %v", err)
+				} else {
+					sueTracker.MarkTrial(time.Now())
 				}
 			}
 		case "panic":
@@ -175,6 +178,7 @@ func main() {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		sueTracker.MarkTrial(time.Now())
 		w.WriteHeader(http.StatusAccepted)
 	})
 
@@ -212,7 +216,9 @@ func main() {
 	defer stopGame()
 	if cfg.Game.MinecraftLog != "" {
 		watcher := game.NewWatcher(cfg.Game.MinecraftLog, func(d game.Death) {
-			_ = engine.StartTrial(cfg.Game.StreamerName, d.Crime, d.Context)
+			if err := engine.StartTrial(cfg.Game.StreamerName, d.Crime, d.Context); err == nil {
+				sueTracker.MarkTrial(time.Now())
+			}
 		})
 		go watcher.Run(gameCtx)
 		log.Printf("minecraft watcher on %s", cfg.Game.MinecraftLog)
@@ -226,7 +232,6 @@ func main() {
 	})
 	go donateWatcher.Run(gameCtx)
 
-	sueTracker := bot.NewSueTracker(cfg.Courtroom.SueThreshold, time.Minute, 3*time.Minute)
 	var chat *bot.TwitchIRC
 	chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, func(cmd bot.ChatCommand) {
 		switch cmd.Kind {

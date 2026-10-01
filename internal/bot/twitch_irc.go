@@ -147,7 +147,9 @@ func (t *TwitchIRC) listen(ctx context.Context) error {
 
 	fmt.Fprintf(conn, "PASS %s\r\nNICK %s\r\nJOIN #%s\r\n", t.token, t.nick, t.channel)
 
-	go t.sendLoop(ctx, conn)
+	done := make(chan struct{})
+	defer close(done)
+	go t.sendLoop(ctx, done, conn)
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 64*1024), 512*1024)
@@ -171,10 +173,12 @@ func (t *TwitchIRC) listen(ctx context.Context) error {
 	return scanner.Err()
 }
 
-func (t *TwitchIRC) sendLoop(ctx context.Context, conn net.Conn) {
+func (t *TwitchIRC) sendLoop(ctx context.Context, done <-chan struct{}, conn net.Conn) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-done:
 			return
 		case text, ok := <-t.sendCh:
 			if !ok {

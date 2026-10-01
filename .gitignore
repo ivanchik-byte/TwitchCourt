@@ -4,8 +4,10 @@ draft.md
 
 # Binaries
 *.exe
+StreamTribunal
 stream-tribunal-server
 bin/
+dist/
 
 # Local configs and models
 config.yaml

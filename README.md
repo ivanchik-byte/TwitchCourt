@@ -56,12 +56,13 @@ DonationAlerts подключается токеном (`game.donate_token` ил
 | `server.port` | — | Порт панели и оверлея, дефолт 7890 |
 | `server.secret` | `TRIBUNAL_SECRET` | Секрет на запуск суда и смену профиля, без него локально открыто |
 | `ai.provider` | — | `groq`, `cerebras` или `ollama` |
-| `ai.api_key` | `GROQ_API_KEY` / `CEREBRAS_API_KEY` | Без ключа включается mock-режим для проверки тракта |
+| `ai.api_key` | `GROQ_API_KEY` / `CEREBRAS_API_KEY` | Без ключа включается mock-режим для проверки тракта (кроме ollama) |
+| `twitch.token` | `TWITCH_TOKEN` | Токен чата, без него модуль чата выключен |
 | `tts.engine` | — | `edge` по дефолту, `piper` оффлайн, автофолбэк флагом |
 | `game.minecraft_log` | — | Путь к `latest.log`, пусто значит выключено |
 | `game.memory_path` | — | Куда писать память судов, дефолт `data/memory.json` |
 
-История судов и профиль: `GET /api/history`, `GET/PUT /api/profile`.
+История судов и профиль: `GET /api/history`, `GET/PUT /api/profile`. Ручной запуск: `POST /api/trial`, статус: `GET /api/status`.
 
 ## Ограничения
 
