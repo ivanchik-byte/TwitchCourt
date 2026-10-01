@@ -153,6 +153,7 @@ namespace Tribunal {
   const minRub = el("min-rub") as HTMLInputElement;
   const minUsd = el("min-usd") as HTMLInputElement;
   const minEur = el("min-eur") as HTMLInputElement;
+  const minBits = el("min-bits") as HTMLInputElement;
   const minDefault = el("min-default") as HTMLInputElement;
   const punishmentsInput = el("punishments-input") as HTMLTextAreaElement;
   const settingsForm = el("court-settings-form") as HTMLFormElement;
@@ -302,6 +303,7 @@ namespace Tribunal {
         minRub.value = String(mins["RUB"] ?? settings.default_min ?? "");
         minUsd.value = String(mins["USD"] ?? settings.default_min ?? "");
         minEur.value = String(mins["EUR"] ?? settings.default_min ?? "");
+        minBits.value = String(mins["BITS"] ?? settings.default_min ?? "");
         minDefault.value = String(settings.default_min ?? "");
         punishmentsInput.value = (settings.punishments || []).join("\n");
       })
@@ -456,9 +458,11 @@ namespace Tribunal {
     const rub = num(minRub);
     const usd = num(minUsd);
     const eur = num(minEur);
+    const bits = num(minBits);
     if (rub !== null) mins["RUB"] = rub;
     if (usd !== null) mins["USD"] = usd;
     if (eur !== null) mins["EUR"] = eur;
+    if (bits !== null) mins["BITS"] = bits;
     const fallback = num(minDefault);
     const body: Record<string, unknown> = {
       min_amounts: mins,

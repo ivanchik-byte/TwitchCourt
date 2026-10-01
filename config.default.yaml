@@ -41,6 +41,15 @@ donations:
     RUB: 100
     USD: 2
     EUR: 2
+    BITS: 200
+  donationalerts:
+    enabled: true
+    token: ""
+  donatepay:
+    enabled: true
+    api_key: ""
+  twitch_bits:
+    enabled: true
 
 safety:
   filter_enabled: true

@@ -93,3 +93,54 @@ func TestScanDonation(t *testing.T) {
 		t.Fatal("must not match noise")
 	}
 }
+
+func TestDonatePayMessage(t *testing.T) {
+	raw := []byte(`{"result":{"channel":"notifications#123","data":{"notification":{"type":"donation","vars":{"name":"Зритель_777","sum":250,"comment":"Он прыгнул в лаву!"}},"transaction":{"currency":"RUB"}}}}`)
+	var got *Donation
+	w := NewDonatePayWatcher("key", func(d Donation) { got = &d })
+	w.handleMessage(raw)
+	if got == nil {
+		t.Fatal("must emit donation")
+	}
+	if got.Donor != "Зритель_777" || got.Amount != 250 || got.Currency != "RUB" || got.Message != "Он прыгнул в лаву!" {
+		t.Fatalf("bad fields: %+v", got)
+	}
+
+	strVars := []byte(`{"result":{"data":{"notification":{"type":"donation","vars":"{\"name\":\"Анон\",\"sum\":\"99.5\",\"comment\":\"hi\"}"},"transaction":{}}}}`)
+	got = nil
+	w.handleMessage(strVars)
+	if got == nil || got.Donor != "Анон" || got.Amount != 99.5 || got.Currency != "RUB" {
+		t.Fatalf("string vars must parse with RUB default: %+v", got)
+	}
+
+	got = nil
+	w.handleMessage([]byte(`{"result":{"data":{"notification":{"type":"media"},"transaction":{}}}}`))
+	if got != nil {
+		t.Fatal("non-donation must not emit")
+	}
+}
+
+func TestParseSessionWelcome(t *testing.T) {
+	raw := []byte(`{"metadata":{"message_id":"m1","message_type":"session_welcome"},"payload":{"session":{"id":"sess42","status":"connected"}}}`)
+	id, err := parseSessionWelcome(raw)
+	if err != nil || id != "sess42" {
+		t.Fatalf("want sess42, got %q %v", id, err)
+	}
+	if _, err := parseSessionWelcome([]byte(`{"metadata":{"message_type":"notification"}}`)); err == nil {
+		t.Fatal("must reject non-welcome")
+	}
+}
+
+func TestParseCheerEvent(t *testing.T) {
+	raw := []byte(`{"subscription":{"type":"channel.cheer"},"event":{"user_name":"ivan","bits":300,"message":"Суди его!"}}`)
+	event, ok := parseCheerEvent(raw)
+	if !ok {
+		t.Fatal("must parse cheer")
+	}
+	if event.Donor != "ivan" || event.Amount != 300 || event.Currency != "BITS" || event.Message != "Суди его!" {
+		t.Fatalf("bad fields: %+v", event)
+	}
+	if _, ok := parseCheerEvent([]byte(`{"subscription":{"type":"channel.follow"},"event":{}}`)); ok {
+		t.Fatal("must ignore other types")
+	}
+}

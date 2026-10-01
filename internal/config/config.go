@@ -58,9 +58,29 @@ type CourtroomConfig struct {
 }
 
 type DonationsConfig struct {
-	Token      string             `yaml:"token"`
-	DefaultMin float64            `yaml:"default_min"`
-	MinAmounts map[string]float64 `yaml:"min_amounts"`
+	Token          string             `yaml:"token"`
+	DefaultMin     float64            `yaml:"default_min"`
+	MinAmounts     map[string]float64 `yaml:"min_amounts"`
+	DonationAlerts WidgetSource       `yaml:"donationalerts"`
+	DonatePay      KeySource          `yaml:"donatepay"`
+	TwitchBits     ToggleSource       `yaml:"twitch_bits"`
+}
+
+// WidgetSource is a DonationAlerts widget token connection.
+type WidgetSource struct {
+	Enabled bool   `yaml:"enabled"`
+	Token   string `yaml:"token"`
+}
+
+// KeySource is an API-key connection like DonatePay.
+type KeySource struct {
+	Enabled bool   `yaml:"enabled"`
+	APIKey  string `yaml:"api_key"`
+}
+
+// ToggleSource is a feature flag without credentials.
+type ToggleSource struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 type SafetyConfig struct {
@@ -77,9 +97,11 @@ type GameConfig struct {
 }
 
 type TwitchConfig struct {
-	Channel string `yaml:"channel"`
-	Nick    string `yaml:"nick"`
-	Token   string `yaml:"token"`
+	Channel       string `yaml:"channel"`
+	Nick          string `yaml:"nick"`
+	Token         string `yaml:"token"`
+	ClientID      string `yaml:"client_id"`
+	BroadcasterID string `yaml:"broadcaster_id"`
 }
 
 func DefaultConfig() *Config {
@@ -145,7 +167,18 @@ func DefaultConfig() *Config {
 		Donations: DonationsConfig{
 			Token:      "",
 			DefaultMin: 100,
-			MinAmounts: map[string]float64{"RUB": 100, "USD": 2, "EUR": 2},
+			MinAmounts: map[string]float64{"RUB": 100, "USD": 2, "EUR": 2, "BITS": 200},
+			DonationAlerts: WidgetSource{
+				Enabled: true,
+				Token:   "",
+			},
+			DonatePay: KeySource{
+				Enabled: true,
+				APIKey:  "",
+			},
+			TwitchBits: ToggleSource{
+				Enabled: true,
+			},
 		},
 	}
 }
@@ -173,6 +206,13 @@ func LoadConfig(path string) (*Config, error) {
 
 	if key := os.Getenv("DONATE_TOKEN"); key != "" {
 		cfg.Donations.Token = key
+		cfg.Donations.DonationAlerts.Token = key
+	}
+	if cfg.Donations.DonationAlerts.Token == "" {
+		cfg.Donations.DonationAlerts.Token = cfg.Donations.Token
+	}
+	if key := os.Getenv("DONATEPAY_API_KEY"); key != "" {
+		cfg.Donations.DonatePay.APIKey = key
 	}
 	if cfg.Donations.Token == "" && cfg.Game.DonateToken != "" {
 		cfg.Donations.Token = cfg.Game.DonateToken

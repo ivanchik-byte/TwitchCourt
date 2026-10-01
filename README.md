@@ -45,7 +45,11 @@ twitch:
 
 ## Донаты
 
-DonationAlerts подключается токеном виджета (`donations.token` или env `DONATE_TOKEN`, берется из `?token=` любой ссылки виджета алертов). Сокет виджета пока бета: каждое событие пишется в лог, гарантированно работают вебхук `POST /api/donate` и кнопка симуляции в панели.
+DonationAlerts подключается токеном виджета (`donations.donationalerts.token` или env `DONATE_TOKEN`, берется из `?token=` любой ссылки виджета алертов). Сокет виджета пока бета: каждое событие пишется в лог, гарантированно работают вебхук и симуляция ниже.
+
+- **DonatePay**: API-ключ с `donatepay.ru/page/api` (`donations.donatepay.api_key` или env `DONATEPAY_API_KEY`). Официальный Centrifugo-сокет, белый IP не нужен.
+- **Twitch Bits**: EventSub WebSocket, нужен токен со скопом `bits:read` плюс `twitch.client_id` и `twitch.broadcaster_id`. Порог по валюте `BITS` (дефолт 200).
+- **Любая другая платежка**: `POST /api/donate` с JSON `{"donor","amount","currency","message"}`. Сюда цепляются StreamElements, Streamlabs и что угодно с вебхуками.
 
 Порог на суд задается отдельно для каждой валюты (`donations.min_amounts`, остальные через `donations.default_min`). Донат ниже порога просто попадает в память суда, выше порога открывает дело (стример всегда подсудимый). Если суд уже идет, донат встает в очередь и сработает после вердикта.
 

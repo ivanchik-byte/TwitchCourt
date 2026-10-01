@@ -333,8 +333,28 @@ func main() {
 		log.Printf("minecraft watcher on %s", cfg.Game.MinecraftLog)
 	}
 
-	donateWatcher := bot.NewDonationsWatcher(cfg.Donations.Token, handleDonation)
-	go donateWatcher.Run(gameCtx)
+	if cfg.Donations.DonationAlerts.Enabled && cfg.Donations.DonationAlerts.Token != "" {
+		daWatcher := bot.NewDonationsWatcher(cfg.Donations.DonationAlerts.Token, handleDonation)
+		go daWatcher.Run(gameCtx)
+		log.Println("donationalerts watcher started")
+	}
+	if cfg.Donations.DonatePay.Enabled && cfg.Donations.DonatePay.APIKey != "" {
+		dpWatcher := bot.NewDonatePayWatcher(cfg.Donations.DonatePay.APIKey, handleDonation)
+		go dpWatcher.Run(gameCtx)
+		log.Println("donatepay watcher started")
+	}
+	if cfg.Donations.TwitchBits.Enabled {
+		bitsWatcher := bot.NewEventSubWatcher(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, func(event bot.DonationEvent) {
+			handleDonation(bot.Donation{
+				Donor:    event.Donor,
+				Amount:   event.Amount,
+				Currency: event.Currency,
+				Message:  event.Message,
+			})
+		})
+		go bitsWatcher.Run(gameCtx)
+		log.Println("twitch bits watcher started")
+	}
 
 	var chat *bot.TwitchIRC
 	chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, func(cmd bot.ChatCommand) {

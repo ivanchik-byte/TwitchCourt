@@ -75,6 +75,7 @@ var Tribunal;
     const minRub = el("min-rub");
     const minUsd = el("min-usd");
     const minEur = el("min-eur");
+    const minBits = el("min-bits");
     const minDefault = el("min-default");
     const punishmentsInput = el("punishments-input");
     const settingsForm = el("court-settings-form");
@@ -214,6 +215,7 @@ var Tribunal;
             minRub.value = String(mins["RUB"] ?? settings.default_min ?? "");
             minUsd.value = String(mins["USD"] ?? settings.default_min ?? "");
             minEur.value = String(mins["EUR"] ?? settings.default_min ?? "");
+            minBits.value = String(mins["BITS"] ?? settings.default_min ?? "");
             minDefault.value = String(settings.default_min ?? "");
             punishmentsInput.value = (settings.punishments || []).join("\n");
         })
@@ -360,12 +362,15 @@ var Tribunal;
         const rub = num(minRub);
         const usd = num(minUsd);
         const eur = num(minEur);
+        const bits = num(minBits);
         if (rub !== null)
             mins["RUB"] = rub;
         if (usd !== null)
             mins["USD"] = usd;
         if (eur !== null)
             mins["EUR"] = eur;
+        if (bits !== null)
+            mins["BITS"] = bits;
         const fallback = num(minDefault);
         const body = {
             min_amounts: mins,
