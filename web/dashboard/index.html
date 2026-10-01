@@ -3,16 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal — Панель управления</title>
+  <title>Stream Tribunal — Конторка суда</title>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <span class="gavel-icon">⚖</span>
-        <h1>Stream Tribunal</h1>
-        <span class="badge">MVP Core</span>
+        <span class="seal" aria-hidden="true">§</span>
+        <div class="brand-text">
+          <h1>Stream Tribunal</h1>
+          <p class="brand-sub">конторка дежурного судьи · реестр №404</p>
+        </div>
       </div>
       <div class="topbar-actions">
         <div class="status-indicator">
@@ -20,58 +22,50 @@
           <span id="ws-label">Подключение...</span>
         </div>
         <input type="password" id="secret-input" class="secret-input" placeholder="Секрет" autocomplete="off">
-        <button id="btn-panic" class="btn btn-panic">PANIC BUTTON (F12)</button>
+        <button id="btn-panic" class="btn btn-panic">Сбросить суд</button>
       </div>
     </header>
 
+    <nav class="tab-bar" aria-label="Разделы">
+      <button type="button" class="tab-btn active" data-tab="trial">Заседание</button>
+      <button type="button" class="tab-btn" data-tab="memory">Память</button>
+      <button type="button" class="tab-btn" data-tab="portrait">Портрет</button>
+      <button type="button" class="tab-btn" data-tab="obs">OBS</button>
+    </nav>
+
     <main class="grid-layout">
-      <section class="card trial-control">
-        <h2>Запуск судебного заседания</h2>
+      <section class="card desk-view" data-view="trial">
+        <div class="card-head">
+          <h2>Новое дело</h2>
+          <span id="current-state" class="state-badge">Ожидание</span>
+        </div>
+        <p id="active-case-title" class="case-line">Нет активного дела</p>
         <form id="trial-form">
           <div class="field">
             <label for="defendant-input">Подсудимый</label>
             <input type="text" id="defendant-input" value="Стример" required>
           </div>
-
           <div class="field">
-            <label for="crime-input">Обвинение</label>
-            <input type="text" id="crime-input" value="Покупка AWP при нулевом балансе команды и стрельба по воробьям" required>
+            <label for="crime-input">Статья обвинения</label>
+            <input type="text" id="crime-input" value="Купание в лаве с полным инвентарем" required>
           </div>
-
           <div class="field">
             <label for="context-input">Контекст из чата или игры</label>
-            <textarea id="context-input" rows="3">Чат спамит: Стример опять слил раунд! Позор! Кикните его!</textarea>
+            <textarea id="context-input" rows="3">Чат спамит: Стример опять слил все алмазы! Позор!</textarea>
           </div>
-
           <div class="presets-row">
-            <span>Быстрые пресеты:</span>
-            <button type="button" class="btn-chip" data-crime="Купание в лаве с полным инвентарем">Лава в Minecraft</button>
+            <span>Быстрые статьи:</span>
+            <button type="button" class="btn-chip" data-crime="Купание в лаве с полным инвентарем">Лава</button>
             <button type="button" class="btn-chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
-            <button type="button" class="btn-chip" data-crime="Падение в пустоту с алмазами">Падение в шахту</button>
-            <button type="button" class="btn-chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание (Just Chatting)</button>
+            <button type="button" class="btn-chip" data-crime="Падение в пустоту с алмазами">Шахта</button>
+            <button type="button" class="btn-chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание</button>
           </div>
-
           <div class="form-actions">
-            <button type="submit" id="btn-start-trial" class="btn btn-primary">Начать процесс</button>
+            <button type="submit" id="btn-start-trial" class="btn btn-primary">Открыть заседание</button>
           </div>
         </form>
-      </section>
-
-      <section class="card live-status">
-        <h2>Текущий статус заседания</h2>
-        <div class="court-status-box">
-          <div class="status-row">
-            <span class="label">Состояние суда:</span>
-            <span id="current-state" class="state-badge">Ожидание</span>
-          </div>
-          <div class="status-row">
-            <span class="label">Текущее дело:</span>
-            <span id="active-case-title">Нет активного дела</span>
-          </div>
-        </div>
-
         <div class="voting-tester">
-          <h3>Симулятор голосования чата</h3>
+          <h3>Голоса присяжных</h3>
           <div class="vote-counts">
             <div class="vote-stat guilty">
               <span>Виновен</span>
@@ -83,14 +77,30 @@
             </div>
           </div>
           <div class="vote-buttons">
-            <button type="button" id="btn-vote-guilty" class="btn btn-danger">+1 Виновен (!guilty)</button>
-            <button type="button" id="btn-vote-innocent" class="btn btn-success">+1 Оправдан (!innocent)</button>
+            <button type="button" id="btn-vote-guilty" class="btn btn-danger">+1 Виновен</button>
+            <button type="button" id="btn-vote-innocent" class="btn btn-success">+1 Оправдан</button>
           </div>
         </div>
       </section>
 
-      <section class="card profile-card">
-        <h2>Портрет стримера</h2>
+      <section class="card desk-view hidden" data-view="memory">
+        <div class="card-head">
+          <h2>Память суда</h2>
+        </div>
+        <h3>Последние заседания</h3>
+        <ul id="history-trials" class="history-list">
+          <li class="history-empty">Пока пусто, проведите первый суд.</li>
+        </ul>
+        <h3>Заводилы чата</h3>
+        <ul id="history-top" class="history-list">
+          <li class="history-empty">Пока никто не отличился.</li>
+        </ul>
+      </section>
+
+      <section class="card desk-view hidden" data-view="portrait">
+        <div class="card-head">
+          <h2>Портрет стримера</h2>
+        </div>
         <p class="guide-desc">Суд помнит это между заседаниями. Списки через запятую.</p>
         <form id="profile-form">
           <div class="field">
@@ -120,31 +130,22 @@
         </form>
       </section>
 
-      <section class="card history-card">
-        <h2>Память суда</h2>
-        <h3>Последние заседания</h3>
-        <ul id="history-trials" class="history-list">
-          <li class="history-empty">Пока пусто, проведите первый суд.</li>
-        </ul>
-        <h3>Заводилы чата</h3>
-        <ul id="history-top" class="history-list">
-          <li class="history-empty">Пока никто не отличился.</li>
-        </ul>
-      </section>
-
-      <section class="card obs-guide">
-        <h2>Подключение к OBS Studio</h2>        <p class="guide-desc">Добавьте в OBS источник типа <strong>«Браузер»</strong> с параметрами ниже:</p>
+      <section class="card desk-view hidden" data-view="obs">
+        <div class="card-head">
+          <h2>Вывод в OBS Studio</h2>
+        </div>
+        <p class="guide-desc">Источник типа «Браузер» с параметрами ниже:</p>
         <div class="copy-box">
           <input type="text" id="obs-url-input" readonly value="http://localhost:7890/overlay">
           <button type="button" id="btn-copy-url" class="btn btn-secondary">Копировать</button>
         </div>
         <ul class="guide-bullets">
-          <li>Ширина: <strong>1920</strong>, Высота: <strong>1080</strong></li>
-          <li>Обязательно включите: <strong>«Управлять звуком через OBS»</strong></li>
-          <li>Включите: <strong>«Обновлять браузер, когда сцена становится активной»</strong></li>
+          <li>Ширина <strong>1920</strong>, высота <strong>1080</strong></li>
+          <li>Включить «Управлять звуком через OBS»</li>
+          <li>Включить «Обновлять браузер, когда сцена активна»</li>
         </ul>
         <div class="test-preview-row">
-          <a href="/overlay" target="_blank" class="link-preview">Открыть оверлей в новой вкладке ↗</a>
+          <a href="/overlay" target="_blank" class="link-preview">Открыть оверлей в новой вкладке</a>
         </div>
       </section>
     </main>

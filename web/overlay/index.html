@@ -3,76 +3,90 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
-  <title>Stream Tribunal Overlay</title>
+  <title>Stream Tribunal — Зал суда</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="court-stage" class="court-stage idle">
-    <div id="speed-lines" class="speed-lines hidden"></div>
+  <div id="court-viewport" class="court-viewport">
+    <div id="court-scaler" class="court-scaler">
+      <div id="court-stage" class="court-stage idle">
+        <div class="stage-frame" aria-hidden="true"></div>
+        <div id="speed-lines" class="speed-lines hidden"></div>
 
-    <div id="character-container" class="character-container">
-      <div class="character-shadow"></div>
-      <div id="character-sprite" class="character-sprite prosecutor-idle">
-        <svg class="prosecutor-svg" viewBox="0 0 200 300" width="340" height="510">
-          <defs>
-            <linearGradient id="suitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#1e293b"/>
-              <stop offset="100%" stop-color="#0f172a"/>
-            </linearGradient>
-            <linearGradient id="cravatGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#f8fafc"/>
-              <stop offset="100%" stop-color="#cbd5e1"/>
-            </linearGradient>
-            <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#fed7aa"/>
-              <stop offset="100%" stop-color="#fdba74"/>
-            </linearGradient>
-            <linearGradient id="hairGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#831843"/>
-              <stop offset="100%" stop-color="#4c0519"/>
-            </linearGradient>
-          </defs>
-          <path d="M 40 180 Q 20 290 10 300 L 190 300 Q 180 290 160 180 Z" fill="url(#suitGrad)"/>
-          <path d="M 80 180 L 100 240 L 120 180 Z" fill="url(#cravatGrad)"/>
-          <path d="M 85 200 L 100 250 L 115 200 Z" fill="#94a3b8"/>
-          <circle cx="100" cy="120" r="50" fill="url(#skinGrad)"/>
-          <path d="M 50 110 Q 100 40 150 110 Q 170 60 140 40 Q 100 30 60 40 Q 30 60 50 110 Z" fill="url(#hairGrad)"/>
-          <ellipse cx="80" cy="115" rx="8" ry="4" fill="#0f172a"/>
-          <ellipse cx="120" cy="115" rx="8" ry="4" fill="#0f172a"/>
-          <rect x="70" y="105" width="20" height="3" fill="#4c0519" transform="rotate(-5 80 105)"/>
-          <rect x="110" y="105" width="20" height="3" fill="#4c0519" transform="rotate(5 120 105)"/>
-          <ellipse id="mouth" cx="100" cy="142" rx="10" ry="2" fill="#7f1d1d"/>
-          <path id="arm" class="arm-pointing" d="M 160 210 Q 195 190 220 170 Q 230 165 240 170 Q 230 180 205 210 Z" fill="url(#suitGrad)"/>
-        </svg>
-      </div>
-      <div class="court-bench"></div>
-    </div>
-
-    <div id="objection-banner" class="objection-banner hidden">
-      <div class="objection-text">ПРОТЕСТУЮ!</div>
-    </div>
-
-    <div id="verdict-stamp" class="verdict-stamp hidden">
-      <div id="stamp-text" class="stamp-text">ВИНОВЕН</div>
-    </div>
-
-    <div id="dialog-panel" class="dialog-panel">
-      <div class="dialog-header">
-        <span id="speaker-name" class="speaker-name">ПРОКУРОР КАРЛОВ</span>
-        <span id="case-title" class="case-title">ДЕЛО №404</span>
-      </div>
-      <div class="dialog-body">
-        <p id="dialog-text" class="dialog-text">Суд готовится к заседанию...</p>
-      </div>
-      <div id="voting-bar-container" class="voting-bar-container hidden">
-        <div class="voting-labels">
-          <span class="vote-label-guilty">ВИНОВЕН: <strong id="guilty-count">0</strong></span>
-          <span id="vote-timer" class="vote-timer">30с</span>
-          <span class="vote-label-innocent">ОПРАВДАН: <strong id="innocent-count">0</strong></span>
+        <div class="docket-strip">
+          <span class="docket-no">ДЕЛО</span>
+          <span id="case-title" class="case-title">№404</span>
+          <span class="docket-sep">·</span>
+          <span class="docket-court">ТРИБУНАЛ СТРИМА · ЗАСЕДАНИЕ ОТКРЫТО</span>
         </div>
-        <div class="voting-progress">
-          <div id="guilty-fill" class="guilty-fill" style="width: 50%;"></div>
-          <div id="innocent-fill" class="innocent-fill" style="width: 50%;"></div>
+
+        <div id="character-container" class="character-container">
+          <div class="character-shadow"></div>
+          <div id="character-sprite" class="character-sprite prosecutor-idle">
+            <svg class="prosecutor-svg" viewBox="0 0 200 300" width="340" height="510">
+              <defs>
+                <linearGradient id="suitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#23232b"/>
+                  <stop offset="100%" stop-color="#141318"/>
+                </linearGradient>
+                <linearGradient id="cravatGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#f2ead8"/>
+                  <stop offset="100%" stop-color="#c9bfa8"/>
+                </linearGradient>
+                <linearGradient id="skinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#fed7aa"/>
+                  <stop offset="100%" stop-color="#fdba74"/>
+                </linearGradient>
+                <linearGradient id="hairGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#6d1a2d"/>
+                  <stop offset="100%" stop-color="#3a0a14"/>
+                </linearGradient>
+              </defs>
+              <path d="M 40 180 Q 20 290 10 300 L 190 300 Q 180 290 160 180 Z" fill="url(#suitGrad)"/>
+              <path d="M 80 180 L 100 240 L 120 180 Z" fill="url(#cravatGrad)"/>
+              <path d="M 85 200 L 100 250 L 115 200 Z" fill="#8a8f98"/>
+              <circle cx="100" cy="120" r="50" fill="url(#skinGrad)"/>
+              <path d="M 50 110 Q 100 40 150 110 Q 170 60 140 40 Q 100 30 60 40 Q 30 60 50 110 Z" fill="url(#hairGrad)"/>
+              <ellipse cx="80" cy="115" rx="8" ry="4" fill="#141318"/>
+              <ellipse cx="120" cy="115" rx="8" ry="4" fill="#141318"/>
+              <rect x="70" y="105" width="20" height="3" fill="#3a0a14" transform="rotate(-5 80 105)"/>
+              <rect x="110" y="105" width="20" height="3" fill="#3a0a14" transform="rotate(5 120 105)"/>
+              <ellipse id="mouth" cx="100" cy="142" rx="10" ry="2" fill="#7f1d1d"/>
+              <path id="arm" class="arm-pointing" d="M 160 210 Q 195 190 220 170 Q 230 165 240 170 Q 230 180 205 210 Z" fill="url(#suitGrad)"/>
+            </svg>
+          </div>
+          <div class="court-bench"></div>
+        </div>
+
+        <div id="objection-banner" class="objection-banner hidden">
+          <div class="objection-kicker">ПРОКУРОР ТРЕБУЕТ СЛОВА</div>
+          <div class="objection-text">Протестую!</div>
+        </div>
+
+        <div id="verdict-stamp" class="verdict-stamp hidden">
+          <div class="stamp-kicker">ВЕРДИКТ ПРИСЯЖНЫХ</div>
+          <div id="stamp-text" class="stamp-text">ВИНОВЕН</div>
+        </div>
+
+        <div id="dialog-panel" class="dialog-panel">
+          <div class="dialog-header">
+            <span id="speaker-name" class="speaker-name">ПРОКУРОР КАРЛОВ</span>
+            <span class="dialog-rule" aria-hidden="true"></span>
+          </div>
+          <div class="dialog-body">
+            <p id="dialog-text" class="dialog-text">Суд готовится к заседанию...</p>
+          </div>
+          <div id="voting-bar-container" class="voting-bar-container hidden">
+            <div class="voting-labels">
+              <span class="vote-label-guilty">ВИНОВЕН · <strong id="guilty-count">0</strong></span>
+              <span id="vote-timer" class="vote-timer">30с</span>
+              <span class="vote-label-innocent">ОПРАВДАН · <strong id="innocent-count">0</strong></span>
+            </div>
+            <div class="voting-progress">
+              <div id="guilty-fill" class="guilty-fill" style="width: 50%;"></div>
+              <div id="innocent-fill" class="innocent-fill" style="width: 50%;"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

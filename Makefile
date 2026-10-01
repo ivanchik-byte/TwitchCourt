@@ -1,7 +1,10 @@
 BINARY := StreamTribunal
 DIST := dist
 
-.PHONY: run test vet build build-win package-win clean
+.PHONY: run test vet build build-win package-win frontend clean
+
+frontend:
+	cd web && sh build.sh
 
 run:
 	go run ./cmd/server
