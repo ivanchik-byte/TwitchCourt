@@ -41,6 +41,8 @@ type TrialCase struct {
 	Voters        map[string]bool
 	Witnesses     []Witness
 	Archetype     ai.Archetype
+	// forceVerdict ends voting early with the streamer's own ruling.
+	forceVerdict *bool
 }
 
 // Witness is a donation attached to the running trial as testimony.
@@ -310,15 +312,27 @@ func (e *Engine) startVoting(ctx context.Context, c *TrialCase) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+voting:
 	for remaining := duration; remaining >= 0; remaining-- {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			e.mu.RLock()
+			e.mu.Lock()
+			if c.forceVerdict != nil {
+				if *c.forceVerdict {
+					c.GuiltyVotes = 1
+					c.InnocentVotes = 0
+				} else {
+					c.GuiltyVotes = 0
+					c.InnocentVotes = 1
+				}
+				e.mu.Unlock()
+				break voting
+			}
 			guilty := c.GuiltyVotes
 			innocent := c.InnocentVotes
-			e.mu.RUnlock()
+			e.mu.Unlock()
 
 			e.hub.BroadcastEvent(obs.EventVotingUpdate, obs.VotingUpdatePayload{
 				GuiltyCount:   guilty,
@@ -353,6 +367,33 @@ func (e *Engine) CastVote(voter string, isGuilty bool) {
 	if e.recall != nil {
 		e.recall.AddVote(voter)
 	}
+}
+
+// ForceVerdict ends voting early with the streamer's own ruling.
+// Returns false when no voting is in progress.
+func (e *Engine) ForceVerdict(guilty bool) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state != StateVoting || e.currCase == nil {
+		return false
+	}
+	e.currCase.forceVerdict = &guilty
+	return true
+}
+
+// Say speaks an arbitrary line through TTS right away, even with no
+// trial running. Used for the gavel button and manual interjections.
+func (e *Engine) Say(text string) {
+	clean := e.filter.Sanitize(text)
+	if clean == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		_ = e.dispatchSpeechChunk(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true)
+	}()
 }
 
 // AddChatComment stores a chat line for the live trial transcript.
@@ -448,8 +489,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	weight := witnessWeight(c.Witnesses)
 	effectiveGuilty := c.GuiltyVotes + weight
 	isGuilty := effectiveGuilty > c.InnocentVotes
+	if c.forceVerdict != nil {
+		isGuilty = *c.forceVerdict
+	}
 	twist := ""
-	if isGuilty && c.GuiltyVotes+c.InnocentVotes >= 5 &&
+	if isGuilty && c.forceVerdict == nil && c.GuiltyVotes+c.InnocentVotes >= 5 &&
 		float64(c.GuiltyVotes)/float64(c.GuiltyVotes+c.InnocentVotes) >= 0.9 &&
 		rand.Intn(100) < 15 {
 		isGuilty = false

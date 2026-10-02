@@ -212,11 +212,14 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
 
-	overlayGone := func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "overlay dismantled, back after settings are done", http.StatusGone)
+	overlaySub, err := fs.Sub(web.StaticFS, "overlay")
+	if err != nil {
+		log.Fatalf("failed embedding overlay fs: %v", err)
 	}
-	mux.Handle("/overlay/", http.HandlerFunc(overlayGone))
-	mux.HandleFunc("/overlay", overlayGone)
+	mux.Handle("/overlay/", http.StripPrefix("/overlay/", http.FileServer(http.FS(overlaySub))))
+	mux.HandleFunc("/overlay", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/overlay/", http.StatusMovedPermanently)
+	})
 
 	dashboardSub, err := fs.Sub(web.StaticFS, "dashboard")
 	if err != nil {
@@ -269,6 +272,49 @@ func main() {
 		}
 		pacing.MarkTrial(time.Now())
 		sueTracker.MarkTrial(time.Now())
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	mux.HandleFunc("/api/verdict", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Guilty bool `json:"guilty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if !engine.ForceVerdict(req.Guilty) {
+			http.Error(w, "no voting in progress", http.StatusConflict)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	mux.HandleFunc("/api/say", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Text == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		engine.Say(req.Text)
 		w.WriteHeader(http.StatusAccepted)
 	})
 

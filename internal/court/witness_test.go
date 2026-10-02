@@ -95,3 +95,19 @@ func TestWitnessWeight(t *testing.T) {
 		}
 	}
 }
+
+func TestForceVerdict(t *testing.T) {
+	e := newWitnessEngine()
+	if e.ForceVerdict(true) {
+		t.Fatal("idle court must reject forced verdict")
+	}
+
+	e.state = StateVoting
+	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	if !e.ForceVerdict(false) {
+		t.Fatal("voting court must accept forced verdict")
+	}
+	if e.currCase.forceVerdict == nil || *e.currCase.forceVerdict {
+		t.Fatal("forced verdict must stick as innocent")
+	}
+}
