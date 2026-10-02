@@ -50,6 +50,11 @@ func main() {
 
 	limiter := newActionLimiter(500 * time.Millisecond)
 	sueTracker := bot.NewSueTracker(cfg.Courtroom.SueThreshold, time.Minute, 3*time.Minute)
+	donateGate := bot.NewGate(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
+	pacing := court.NewPacing(time.Duration(cfg.Courtroom.CooldownMin) * time.Minute)
+
+	var requestTrial func(defendant, crime, context string, force bool)
+	var chargeTrial func(points int, defendant, crime, context string) bool
 
 	var hub *obs.Hub
 	hub = obs.NewHub(func(action string, payload []byte) {
@@ -68,11 +73,7 @@ func main() {
 				if !checkSecret(cfg, req.Secret) {
 					return
 				}
-				if err := engine.StartTrial(req.Defendant, req.Crime, req.Context); err != nil {
-					log.Printf("start trial rejected: %v", err)
-				} else {
-					sueTracker.MarkTrial(time.Now())
-				}
+				requestTrial(req.Defendant, req.Crime, req.Context, true)
 			}
 		case "panic":
 			var req struct {
@@ -134,8 +135,36 @@ func main() {
 	engine.AttachMemory(recall)
 	engine.SetPunishments(cfg.Courtroom.Punishments)
 
-	donateGate := bot.NewGate(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
-	var pending bot.Pending
+	// requestTrial opens a trial right away. Force bypasses the pacing
+	// gate and is reserved for streamer intent and platinum donations.
+	requestTrial = func(defendant, crime, context string, force bool) {
+		if !force && !pacing.Ready(time.Now()) {
+			log.Printf("trial suppressed by cooldown")
+			return
+		}
+		if err := engine.StartTrial(defendant, crime, context); err != nil {
+			log.Printf("start trial rejected: %v", err)
+			return
+		}
+		pacing.MarkTrial(time.Now())
+		sueTracker.MarkTrial(time.Now())
+	}
+
+	// chargeTrial banks suspicion points and opens the trial at 100%.
+	// Milestones go to the overlay as a forming-case tease.
+	// It reports whether a trial opened.
+	chargeTrial = func(points int, defendant, crime, context string) bool {
+		idle := engine.GetState() == court.StateIdle
+		fired, meter, milestone := pacing.Add(points, time.Now(), idle)
+		if milestone > 0 {
+			hub.BroadcastEvent(obs.EventSuspicion, obs.SuspicionPayload{Meter: meter, Milestone: milestone})
+		}
+		if fired {
+			requestTrial(defendant, crime, context, false)
+			return true
+		}
+		return false
+	}
 
 	openDonationTrial := func(donor string, d bot.DonationEvent) {
 		crime := "Донат с требованием суда"
@@ -143,17 +172,26 @@ func main() {
 			crime = "Донат: " + strings.TrimSpace(d.Message)
 		}
 		context := "Донат " + strconv.FormatFloat(d.Amount, 'f', -1, 64) + " " + d.Currency + " от " + donor
-		if err := engine.StartTrial(cfg.Game.StreamerName, crime, context); err != nil {
-			pending.Push(d)
-		} else {
-			sueTracker.MarkTrial(time.Now())
+		if d.Amount >= cfg.Donations.PlatinumMin && cfg.Donations.PlatinumMin > 0 {
+			pacing.Force(time.Now())
+			requestTrial(cfg.Game.StreamerName, crime, context, true)
+			return
 		}
+		chargeTrial(court.PointsDonation, cfg.Game.StreamerName, crime, context)
 	}
 
 	handleDonation := func(d bot.Donation) {
 		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message})
 		event := bot.DonationEvent{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message}
-		if !donateGate.Pass(event) {
+		passed := donateGate.Pass(event)
+		hub.BroadcastEvent(obs.EventDonation, obs.DonationPayload{
+			Donor:      d.Donor,
+			Amount:     d.Amount,
+			Currency:   d.Currency,
+			Message:    d.Message,
+			OpensTrial: passed,
+		})
+		if !passed {
 			return
 		}
 		donor := d.Donor
@@ -189,6 +227,9 @@ func main() {
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings.html", http.StatusMovedPermanently)
 	})
+	mux.HandleFunc("/modes", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/modes.html", http.StatusMovedPermanently)
+	})
 	mux.Handle("/", dashboardHandler)
 
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +237,7 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "online",
 			"state":  engine.GetState(),
+			"meter":  pacing.Meter(),
 			"port":   cfg.Server.Port,
 		})
 	})
@@ -225,6 +267,7 @@ func main() {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		pacing.MarkTrial(time.Now())
 		sueTracker.MarkTrial(time.Now())
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -282,14 +325,129 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
+	gameCtx, stopGame := context.WithCancel(context.Background())
+	defer stopGame()
+
+	var (
+		mcWatcherMu sync.Mutex
+		mcWatcher   *game.Watcher
+	)
+	startMinecraftWatcher := func(logPath string, nicks []string) {
+		mcWatcherMu.Lock()
+		defer mcWatcherMu.Unlock()
+		if mcWatcher != nil {
+			mcWatcher.SetLogPath(logPath)
+			mcWatcher.SetNicks(nicks)
+			return
+		}
+		if logPath == "" {
+			return
+		}
+		mcWatcher = game.NewWatcherWithNicks(logPath, nicks, func(d game.Death) {
+			points := court.PointsDeath
+			if strings.Contains(strings.ToLower(d.Crime), "лав") {
+				points = court.PointsEpicFail
+			}
+			chargeTrial(points, cfg.Game.StreamerName, d.Crime, d.Context)
+		})
+		go mcWatcher.Run(gameCtx)
+		log.Printf("minecraft watcher on %s", logPath)
+	}
+
+	if cfg.Game.MinecraftLog != "" {
+		startMinecraftWatcher(cfg.Game.MinecraftLog, cfg.Game.MinecraftNicks)
+	}
+
+	mux.HandleFunc("/api/game/minecraft/detect", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		targetPath := cfg.Game.MinecraftLog
+		var candidates []string
+		if targetPath == "" {
+			targetPath, candidates = game.FindDefaultMinecraftLog()
+		} else {
+			_, candidates = game.FindDefaultMinecraftLog()
+		}
+		found := false
+		if targetPath != "" {
+			if fi, err := os.Stat(targetPath); err == nil && !fi.IsDir() {
+				found = true
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"found":      found,
+			"path":       targetPath,
+			"candidates": candidates,
+		})
+	})
+
+	const cs2GSIConfig = `"Stream Tribunal GSI"
+{
+    "uri" "http://127.0.0.1:7890/api/game/cs2/gsi"
+    "timeout" "5.0"
+    "buffer"  "0.1"
+    "throttle" "0.1"
+    "heartbeat" "15.0"
+    "data"
+    {
+        "provider"            "1"
+        "map"                 "1"
+        "round"               "1"
+        "player_id"           "1"
+        "player_state"        "1"
+        "player_weapons"      "1"
+        "player_match_stats"  "1"
+    }
+}
+`
+	mux.HandleFunc("/api/game/cs2/cfg", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"gamestate_integration_tribunal.cfg\"")
+		w.Write([]byte(cs2GSIConfig))
+	})
+
+	mux.HandleFunc("/api/game/cs2/gsi", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			Player struct {
+				Name    string `json:"name"`
+				SteamID string `json:"steamid"`
+				State   struct {
+					Health int `json:"health"`
+				} `json:"state"`
+			} `json:"player"`
+			Round struct {
+				Phase string `json:"phase"`
+			} `json:"round"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if payload.Player.State.Health == 0 && payload.Player.Name != "" {
+				defendant := payload.Player.Name
+				if cfg.Game.StreamerName != "" {
+					defendant = cfg.Game.StreamerName
+				}
+				chargeTrial(court.PointsDeath, defendant, "Гибель в раунде CS2", "Valve GSI telemetry")
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {
 		case http.MethodGet:
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts": cfg.Donations.MinAmounts,
-				"default_min": cfg.Donations.DefaultMin,
-				"punishments": cfg.Courtroom.Punishments,
+				"min_amounts":     cfg.Donations.MinAmounts,
+				"default_min":     cfg.Donations.DefaultMin,
+				"punishments":     cfg.Courtroom.Punishments,
+				"minecraft_log":   cfg.Game.MinecraftLog,
+				"minecraft_nicks": cfg.Game.MinecraftNicks,
 			})
 		case http.MethodPut:
 			if !checkHTTPAuth(cfg, r) {
@@ -297,9 +455,11 @@ func main() {
 				return
 			}
 			var req struct {
-				MinAmounts  map[string]float64 `json:"min_amounts"`
-				DefaultMin  *float64           `json:"default_min"`
-				Punishments []string           `json:"punishments"`
+				MinAmounts     map[string]float64 `json:"min_amounts"`
+				DefaultMin     *float64           `json:"default_min"`
+				Punishments    []string           `json:"punishments"`
+				MinecraftLog   *string            `json:"minecraft_log"`
+				MinecraftNicks []string           `json:"minecraft_nicks"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -315,28 +475,25 @@ func main() {
 				cfg.Courtroom.Punishments = req.Punishments
 				engine.SetPunishments(req.Punishments)
 			}
+			if req.MinecraftLog != nil {
+				cfg.Game.MinecraftLog = *req.MinecraftLog
+			}
+			if req.MinecraftNicks != nil {
+				cfg.Game.MinecraftNicks = req.MinecraftNicks
+			}
+			startMinecraftWatcher(cfg.Game.MinecraftLog, cfg.Game.MinecraftNicks)
 			donateGate.SetMinimums(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts": cfg.Donations.MinAmounts,
-				"default_min": cfg.Donations.DefaultMin,
-				"punishments": cfg.Courtroom.Punishments,
+				"min_amounts":     cfg.Donations.MinAmounts,
+				"default_min":     cfg.Donations.DefaultMin,
+				"punishments":     cfg.Courtroom.Punishments,
+				"minecraft_log":   cfg.Game.MinecraftLog,
+				"minecraft_nicks": cfg.Game.MinecraftNicks,
 			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-
-	gameCtx, stopGame := context.WithCancel(context.Background())
-	defer stopGame()
-	if cfg.Game.MinecraftLog != "" {
-		watcher := game.NewWatcher(cfg.Game.MinecraftLog, func(d game.Death) {
-			if err := engine.StartTrial(cfg.Game.StreamerName, d.Crime, d.Context); err == nil {
-				sueTracker.MarkTrial(time.Now())
-			}
-		})
-		go watcher.Run(gameCtx)
-		log.Printf("minecraft watcher on %s", cfg.Game.MinecraftLog)
-	}
 
 	if cfg.Donations.DonationAlerts.Enabled && cfg.Donations.DonationAlerts.Token != "" {
 		daWatcher := bot.NewDonationsWatcher(cfg.Donations.DonationAlerts.Token, handleDonation)
@@ -368,7 +525,7 @@ func main() {
 			recall.AddSueCall(cmd.Author)
 			engine.AddChatComment(cmd.Author, "!sue")
 			if sueTracker.Hit(time.Now()) {
-				if err := engine.StartTrial(cfg.Game.StreamerName, "Массовое требование чата", "Чат собрал "+strconv.Itoa(cfg.Courtroom.SueThreshold)+" !sue"); err == nil {
+				if chargeTrial(court.PointsSueSpam, cfg.Game.StreamerName, "Массовое требование чата", "Чат собрал "+strconv.Itoa(cfg.Courtroom.SueThreshold)+" !sue") {
 					chat.SendMessage("Суд открыт по требованию чата. Присяжные, готовьтесь.")
 				}
 			}
@@ -389,37 +546,18 @@ func main() {
 		log.Printf("twitch chat on #%s as %s", cfg.Twitch.Channel, cfg.Twitch.Nick)
 	}
 
-	engine.VerdictHook = func(verdict, penalty string, guilty, innocent int) {
+	engine.VerdictHook = func(verdict, penalty string, guilty, innocent int, twist string) {
 		text := "Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")"
 		if penalty != "" {
 			text += ". Наказание: " + penalty
+		}
+		if twist != "" {
+			text += " " + twist
 		}
 		chat.SendMessage(text)
 	}
 
 	engine.SetPunishments(cfg.Courtroom.Punishments)
-
-	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-gameCtx.Done():
-				return
-			case <-ticker.C:
-				if engine.GetState() != court.StateIdle {
-					continue
-				}
-				if event, ok := pending.Pop(); ok {
-					donor := event.Donor
-					if donor == "" {
-						donor = "Аноним"
-					}
-					openDonationTrial(donor, event)
-				}
-			}
-		}
-	}()
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{

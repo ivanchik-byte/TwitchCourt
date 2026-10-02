@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +40,7 @@ type TrialCase struct {
 	InnocentVotes int
 	Voters        map[string]bool
 	Witnesses     []Witness
+	Archetype     ai.Archetype
 }
 
 // Witness is a donation attached to the running trial as testimony.
@@ -66,7 +68,7 @@ type Engine struct {
 	recall   *memory.Store
 	deck     *bot.Deck
 	// VerdictHook runs after the verdict broadcast, used for chat announces.
-	VerdictHook func(verdict, penalty string, guilty, innocent int)
+	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
 	mu          sync.RWMutex
 	state       State
 	currCase    *TrialCase
@@ -82,6 +84,15 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 		filter:   filter,
 		recall:   memory.NewStore(""),
 		state:    StateIdle,
+	}
+}
+
+// applyVoiceProfile switches the TTS voice to the trial archetype.
+// Engines without voice profiles (piper, mock) ignore it silently.
+func (e *Engine) applyVoiceProfile(archetype ai.Archetype) {
+	type profiler interface{ SetVoiceProfile(string, string) }
+	if p, ok := e.voice.(profiler); ok {
+		p.SetVoiceProfile(archetype.Voice, archetype.Rate)
 	}
 }
 
@@ -132,14 +143,17 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancelFn = cancel
 	e.state = StateIndictment
+	archetype := ai.DrawArchetype()
 	e.currCase = &TrialCase{
 		Defendant:   e.filter.Sanitize(defendant),
 		Crime:       e.filter.Sanitize(crime),
 		ChatContext: e.filter.Sanitize(chatContext),
 		Voters:      make(map[string]bool),
+		Archetype:   archetype,
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
+	e.applyVoiceProfile(archetype)
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
 		State:     string(StateIndictment),
@@ -159,7 +173,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	}
 	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart)
 	messages := []ai.ChatMessage{
-		{Role: "system", Content: ai.SystemProsecutorPrompt},
+		{Role: "system", Content: c.Archetype.System},
 		{Role: "user", Content: prompt},
 	}
 
@@ -434,6 +448,13 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	weight := witnessWeight(c.Witnesses)
 	effectiveGuilty := c.GuiltyVotes + weight
 	isGuilty := effectiveGuilty > c.InnocentVotes
+	twist := ""
+	if isGuilty && c.GuiltyVotes+c.InnocentVotes >= 5 &&
+		float64(c.GuiltyVotes)/float64(c.GuiltyVotes+c.InnocentVotes) >= 0.9 &&
+		rand.Intn(100) < 15 {
+		isGuilty = false
+		twist = "Суд усмотрел сговор присяжных и оправдал подсудимого назло чату!"
+	}
 	verdictStr := "НЕВИНОВЕН"
 	if isGuilty {
 		verdictStr = "ВИНОВЕН"
@@ -480,10 +501,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		TotalVotes:  totalVotes,
 		Witnesses:   witnessCount,
 		Penalty:     penalty,
+		Twist:       twist,
 	})
 
 	if e.VerdictHook != nil {
-		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes)
+		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes, twist)
 	}
 
 	select {

@@ -10,6 +10,8 @@ const (
 	EventVotingUpdate EventType = "voting_update"
 	EventVerdict      EventType = "verdict"
 	EventPanic        EventType = "panic"
+	EventDonation     EventType = "donation"
+	EventSuspicion    EventType = "suspicion"
 )
 
 type EventMessage struct {
@@ -48,10 +50,24 @@ type VotingUpdatePayload struct {
 	TimeLeftSec   int `json:"time_left_sec"`
 }
 
+type DonationPayload struct {
+	Donor      string  `json:"donor"`
+	Amount     float64 `json:"amount"`
+	Currency   string  `json:"currency"`
+	Message    string  `json:"message,omitempty"`
+	OpensTrial bool    `json:"opens_trial"`
+}
+
+type SuspicionPayload struct {
+	Meter     int `json:"meter"`
+	Milestone int `json:"milestone"`
+}
+
 type VerdictPayload struct {
 	Verdict     string `json:"verdict"`
 	GuiltyVotes int    `json:"guilty_votes"`
 	TotalVotes  int    `json:"total_votes"`
 	Witnesses   int    `json:"witnesses,omitempty"`
 	Penalty     string `json:"penalty,omitempty"`
+	Twist       string `json:"twist,omitempty"`
 }

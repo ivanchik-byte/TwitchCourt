@@ -54,12 +54,14 @@ type CourtroomConfig struct {
 	Title             string   `yaml:"title"`
 	SueThreshold      int      `yaml:"sue_threshold"`
 	VotingDurationSec int      `yaml:"voting_duration_sec"`
+	CooldownMin       int      `yaml:"cooldown_min"`
 	Punishments       []string `yaml:"punishments"`
 }
 
 type DonationsConfig struct {
 	Token          string             `yaml:"token"`
 	DefaultMin     float64            `yaml:"default_min"`
+	PlatinumMin    float64            `yaml:"platinum_min"`
 	MinAmounts     map[string]float64 `yaml:"min_amounts"`
 	DonationAlerts WidgetSource       `yaml:"donationalerts"`
 	DonatePay      KeySource          `yaml:"donatepay"`
@@ -90,10 +92,11 @@ type SafetyConfig struct {
 }
 
 type GameConfig struct {
-	MinecraftLog string `yaml:"minecraft_log"`
-	StreamerName string `yaml:"streamer_name"`
-	MemoryPath   string `yaml:"memory_path"`
-	DonateToken  string `yaml:"donate_token"`
+	MinecraftLog   string   `yaml:"minecraft_log"`
+	MinecraftNicks []string `yaml:"minecraft_nicks"`
+	StreamerName   string   `yaml:"streamer_name"`
+	MemoryPath     string   `yaml:"memory_path"`
+	DonateToken    string   `yaml:"donate_token"`
 }
 
 type TwitchConfig struct {
@@ -141,7 +144,8 @@ func DefaultConfig() *Config {
 			ProsecutorName:    "Прокурор Карлов",
 			Title:             "Инквизитор Твича",
 			SueThreshold:      5,
-			VotingDurationSec: 45,
+			VotingDurationSec: 25,
+			CooldownMin:       10,
 			Punishments: []string{
 				"10 приседаний в прямом эфире",
 				"Минута молчания с рукой на сердце",
@@ -165,9 +169,10 @@ func DefaultConfig() *Config {
 			Token:   "",
 		},
 		Donations: DonationsConfig{
-			Token:      "",
-			DefaultMin: 100,
-			MinAmounts: map[string]float64{"RUB": 100, "USD": 2, "EUR": 2, "BITS": 200},
+			Token:       "",
+			DefaultMin:  100,
+			PlatinumMin: 500,
+			MinAmounts:  map[string]float64{"RUB": 100, "USD": 2, "EUR": 2, "BITS": 200},
 			DonationAlerts: WidgetSource{
 				Enabled: true,
 				Token:   "",

@@ -32,6 +32,14 @@ func (s *AutoSynthesizer) Synthesize(ctx context.Context, text string) ([]byte, 
 	return nil, context.DeadlineExceeded
 }
 
+// SetVoiceProfile forwards to the primary engine when supported.
+func (s *AutoSynthesizer) SetVoiceProfile(voice, rate string) {
+	type profiler interface{ SetVoiceProfile(string, string) }
+	if p, ok := s.primary.(profiler); ok {
+		p.SetVoiceProfile(voice, rate)
+	}
+}
+
 func (s *AutoSynthesizer) Close() error {
 	if s.primary != nil {
 		s.primary.Close()

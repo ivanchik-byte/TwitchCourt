@@ -21,3 +21,28 @@ func TestMatchDeath(t *testing.T) {
 		}
 	}
 }
+
+func TestNickMatches(t *testing.T) {
+	nicks := []string{"Steve", "Alex", "Streamer123"}
+
+	if !NickMatches("Steve was blown up by Creeper", nicks) {
+		t.Fatal("expected match for Steve")
+	}
+	if !NickMatches("[12:00:00] [CHAT] <alex> died in lava", nicks) {
+		t.Fatal("expected case-insensitive match for alex")
+	}
+	if NickMatches("RandomPlayer fell from a high place", nicks) {
+		t.Fatal("expected no match for RandomPlayer")
+	}
+	if !NickMatches("RandomPlayer fell", nil) {
+		t.Fatal("expected match when nicks list is empty (tracks all)")
+	}
+}
+
+func TestFindDefaultMinecraftLog(t *testing.T) {
+	path, candidates := FindDefaultMinecraftLog()
+	if len(candidates) == 0 {
+		t.Fatal("expected non-empty candidates list")
+	}
+	t.Logf("default log path: %q, candidates count: %d", path, len(candidates))
+}
