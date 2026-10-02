@@ -27,8 +27,23 @@ const (
 // breakTagRe matches our own pause tags, user input stays escaped
 var breakTagRe = regexp.MustCompile(`&lt;break time=&#34;(\d{1,4})ms&#34;/&gt;`)
 
+// rawBreakRe catches every pause spelling before escaping,
+// so model variants like <break time="300ms" /> or bare <break> survive
+var rawBreakRe = regexp.MustCompile(`(?i)<break(\s+time="(\d{1,4})ms")?\s*/?>`)
+
+var rawBreakMs = regexp.MustCompile(`(\d{1,4})ms`)
+
 func ssmlBody(text, voice, rate, volume, pitch string) string {
-	escaped := html.EscapeString(strings.TrimSpace(text))
+	// stress pluses are a Silero accent trick: Edge would read them aloud
+	cleaned := strings.ReplaceAll(strings.TrimSpace(text), "+", "")
+	cleaned = rawBreakRe.ReplaceAllStringFunc(cleaned, func(tag string) string {
+		ms := "300"
+		if m := rawBreakMs.FindStringSubmatch(tag); len(m) == 2 {
+			ms = m[1]
+		}
+		return `<break time="` + ms + `ms"/>`
+	})
+	escaped := html.EscapeString(cleaned)
 	escaped = breakTagRe.ReplaceAllString(escaped, `<break time="${1}ms" />`)
 	liveRate, livePitch := lively(escaped, rate, pitch)
 	rate, pitch = liveRate, livePitch
@@ -111,7 +126,7 @@ func directSynthesize(ctx context.Context, text, voice, rate, volume, pitch stri
 			"Path:speech.config\r\n\r\n"+
 			`{"context":{"synthesis":{"audio":{"metadataoptions":{`+
 			`"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},`+
-			`"outputFormat":"audio-24khz-48kbitrate-mono-mp3"`+
+			`"outputFormat":"audio-24khz-160kbitrate-mono-mp3"`+
 			"}}}}",
 		edgeTimestamp())
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(configMsg)); err != nil {

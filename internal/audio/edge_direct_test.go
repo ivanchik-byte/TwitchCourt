@@ -53,3 +53,29 @@ func TestShiftHelpers(t *testing.T) {
 		t.Fatalf("pitch: %s", got)
 	}
 }
+
+func TestSsmlBodyBreakVariants(t *testing.T) {
+	for _, in := range []string{
+		`Так-так... <break time="300ms"/> слушаем`,
+		`Так-так... <break time="300ms" /> слушаем`,
+		`Так-так... <break> слушаем`,
+	} {
+		out := ssmlBody(in, "ru-RU-DmitryNeural", "+0%", "+0%", "+0Hz")
+		if !strings.Contains(out, `<break time="300ms" />`) {
+			t.Fatalf("break variant lost for %q: %s", in, out)
+		}
+		if strings.Contains(out, "&lt;break") {
+			t.Fatalf("break leaked escaped for %q: %s", in, out)
+		}
+	}
+}
+
+func TestSsmlBodyStripsStressPluses(t *testing.T) {
+	out := ssmlBody(`Суд признал вин+овен, в+аша честь`, "ru-RU-DmitryNeural", "+0%", "+0%", "+0Hz")
+	if strings.Contains(out, "+овен") || strings.Contains(out, "+аша") {
+		t.Fatalf("stress plus leaked into SSML: %s", out)
+	}
+	if !strings.Contains(out, "виновен") {
+		t.Fatalf("word damaged by plus stripping: %s", out)
+	}
+}
