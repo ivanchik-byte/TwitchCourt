@@ -93,6 +93,8 @@ namespace Overlay {
 
   let teaserTimer = 0;
   let objectionTimer = 0;
+  let briefCourtTimer = 0;
+  let currentStageState = "idle";
 
   let audioCtx: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
@@ -255,7 +257,22 @@ namespace Overlay {
     verdict.classList.remove("drop");
   }
 
+  function revealCourtBriefly(durationMs = 4500): void {
+    if (currentStageState === "idle") {
+      court.classList.remove("hidden");
+      window.clearTimeout(briefCourtTimer);
+      briefCourtTimer = window.setTimeout(() => {
+        if (currentStageState === "idle") {
+          court.classList.add("hidden");
+          subtitles.textContent = "";
+        }
+      }, durationMs);
+    }
+  }
+
   function resetStage(): void {
+    currentStageState = "idle";
+    window.clearTimeout(briefCourtTimer);
     stopAudio();
     court.classList.add("hidden");
     gauge.classList.add("hidden");
@@ -285,9 +302,11 @@ namespace Overlay {
     switch (msg.type) {
       case "state_change": {
         const state = String(msg.payload.state || "idle");
+        currentStageState = state;
         if (state === "idle") {
           resetStage();
         } else {
+          window.clearTimeout(briefCourtTimer);
           court.classList.remove("hidden");
           hideVerdict();
           if (msg.payload.case_title) caseNo.textContent = msg.payload.case_title;
@@ -298,15 +317,21 @@ namespace Overlay {
         break;
       }
       case "subtitles":
+        revealCourtBriefly();
         if (msg.payload.text) subtitles.textContent = msg.payload.text;
         break;
       case "audio_chunk":
+        revealCourtBriefly();
         if (msg.payload.audio_base64) enqueueAudio(msg.payload.audio_base64);
         if (msg.payload.text) subtitles.textContent = msg.payload.text;
         break;
       case "animation":
-        if (msg.payload.name === "slam" || msg.payload.name === "desk_slam") deskSlam();
-        else if (msg.payload.name === "objection") showObjection();
+        if (msg.payload.name === "slam" || msg.payload.name === "desk_slam") {
+          revealCourtBriefly();
+          deskSlam();
+        } else if (msg.payload.name === "objection") {
+          showObjection();
+        }
         break;
       case "voting_update": {
         const total = msg.payload.guilty_count + msg.payload.innocent_count;
