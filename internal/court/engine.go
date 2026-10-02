@@ -7,6 +7,7 @@ import (
 	"html"
 	"log"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,6 +73,7 @@ type Engine struct {
 	// VerdictHook runs after the verdict broadcast, used for chat announces.
 	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
 	mu          sync.RWMutex
+	speakMu     sync.Mutex
 	state       State
 	currCase    *TrialCase
 	cancelFn    context.CancelFunc
@@ -91,11 +93,29 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 
 // applyVoiceProfile switches the TTS voice to the trial archetype.
 // Engines without voice profiles (piper, mock) ignore it silently.
-func (e *Engine) applyVoiceProfile(archetype ai.Archetype) {
+func (e *Engine) applyVoiceProfile(voice, rate string) {
 	type profiler interface{ SetVoiceProfile(string, string) }
 	if p, ok := e.voice.(profiler); ok {
-		p.SetVoiceProfile(archetype.Voice, archetype.Rate)
+		p.SetVoiceProfile(voice, rate)
 	}
+}
+
+// speak serializes voice switch and synthesis so a manual Say can never
+// cut into trial speech with the wrong voice.
+func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker, voice, rate string) error {
+	e.speakMu.Lock()
+	defer e.speakMu.Unlock()
+	e.applyVoiceProfile(voice, rate)
+	return e.dispatchSpeechChunk(ctx, s, index, isLast, speaker)
+}
+
+// juryVoice draws a random voice for jury lines from the cast pool.
+func (e *Engine) juryVoice() string {
+	pool := e.cfg.TTS.JuryVoices
+	if len(pool) == 0 {
+		return e.cfg.TTS.Voice
+	}
+	return pool[rand.Intn(len(pool))]
 }
 
 // AttachMemory swaps the in-memory recall store for a persistent one.
@@ -155,7 +175,6 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
-	e.applyVoiceProfile(archetype)
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
 		State:     string(StateIndictment),
@@ -190,7 +209,8 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	go func() {
 		defer close(speechDone)
 		for item := range speechQueue {
-			if err := e.dispatchSpeechChunk(ctx, item.chunk, item.index, item.last); err != nil {
+			if err := e.speak(ctx, item.chunk, item.index, item.last,
+				e.cfg.Courtroom.ProsecutorName, c.Archetype.Voice, c.Archetype.Rate); err != nil {
 				return
 			}
 		}
@@ -229,8 +249,10 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 
 	// Witness interlude: testimony queued during the indictment is read
 	// out as a separate beat before voting, speech is never interrupted.
+	// A random juror voice reads it, not the prosecutor.
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
-		_ = e.dispatchSpeechChunk(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false)
+		_ = e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
+			"Присяжные", e.juryVoice(), "+0%")
 	}
 
 	select {
@@ -253,20 +275,27 @@ func (e *Engine) clearTrial() {
 	}
 }
 
-func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, index int, isLast bool) error {
+var ssmlDisplayRe = regexp.MustCompile(`<break[^>]*/?>`)
+
+func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker string) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
+	if speaker == "" {
+		speaker = e.cfg.Courtroom.ProsecutorName
+	}
+
 	if s.Animation != "" {
 		e.hub.BroadcastEvent(obs.EventAnimation, obs.AnimationPayload{Name: s.Animation})
 	}
 
+	// SSML pause tags stay in the TTS text but never reach the screen.
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
-		Speaker: e.cfg.Courtroom.ProsecutorName,
-		Text:    s.Text,
+		Speaker: speaker,
+		Text:    strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(s.Text, "")),
 	})
 
 	if e.recall != nil {
@@ -384,6 +413,7 @@ func (e *Engine) ForceVerdict(guilty bool) bool {
 
 // Say speaks an arbitrary line through TTS right away, even with no
 // trial running. Used for the gavel button and manual interjections.
+// The gavel belongs to the judge, so it uses the judge voice.
 func (e *Engine) Say(text string) {
 	clean := e.filter.Sanitize(text)
 	if clean == "" {
@@ -392,7 +422,8 @@ func (e *Engine) Say(text string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		_ = e.dispatchSpeechChunk(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true)
+		_ = e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true,
+			e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate)
 	}()
 }
 
@@ -483,6 +514,38 @@ func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	return buildWitnessInterlude(c.Witnesses)
 }
 
+// speakVerdict voices the final ruling with the judge voice.
+// The verdict stamp appears instantly, the voice catches up right after.
+func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innocent int, penalty, twist string) {
+	prompt := ai.BuildVerdictSpeechPrompt(verdict, guilty, innocent)
+	if penalty != "" {
+		prompt += "\nНаказание суда: " + penalty + "."
+	}
+	if twist != "" {
+		prompt += "\nОбстоятельство: " + twist
+	}
+	messages := []ai.ChatMessage{
+		{Role: "system", Content: ai.JudgeSystemPrompt},
+		{Role: "user", Content: prompt},
+	}
+	chunker := ai.NewSentenceChunker()
+	index := 0
+	_ = e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
+		for _, s := range chunker.Feed(delta) {
+			if err := e.speak(ctx, s, index, false,
+				e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate); err != nil {
+				return err
+			}
+			index++
+		}
+		return nil
+	})
+	if last := chunker.Flush(); last != nil {
+		_ = e.speak(ctx, *last, index, true,
+			e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate)
+	}
+}
+
 func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	e.mu.Lock()
 	e.state = StateVerdict
@@ -538,6 +601,8 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		}
 		e.recall.ClearTranscript()
 	}
+
+	e.speakVerdict(ctx, verdictStr, guiltyVotes, innocentVotes, penalty, twist)
 
 	e.hub.BroadcastEvent(obs.EventVerdict, obs.VerdictPayload{
 		Verdict:     verdictStr,

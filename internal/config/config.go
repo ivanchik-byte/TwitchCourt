@@ -34,23 +34,27 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
-	Enabled      bool    `yaml:"enabled"`
-	Engine       string  `yaml:"engine"`
-	Voice        string  `yaml:"voice"`
-	Rate         string  `yaml:"rate"`
-	Volume       string  `yaml:"volume"`
-	Pitch        string  `yaml:"pitch"`
-	AutoFallback bool    `yaml:"auto_fallback"`
-	PiperBinary  string  `yaml:"piper_binary"`
-	ModelPath    string  `yaml:"model_path"`
-	ConfigPath   string  `yaml:"config_path"`
-	SpeakerID    int     `yaml:"speaker_id"`
-	Speed        float64 `yaml:"speed"`
+	Enabled      bool     `yaml:"enabled"`
+	Engine       string   `yaml:"engine"`
+	Voice        string   `yaml:"voice"`
+	Rate         string   `yaml:"rate"`
+	Volume       string   `yaml:"volume"`
+	Pitch        string   `yaml:"pitch"`
+	AutoFallback bool     `yaml:"auto_fallback"`
+	JudgeVoice   string   `yaml:"judge_voice"`
+	JudgeRate    string   `yaml:"judge_rate"`
+	JuryVoices   []string `yaml:"jury_voices"`
+	PiperBinary  string   `yaml:"piper_binary"`
+	ModelPath    string   `yaml:"model_path"`
+	ConfigPath   string   `yaml:"config_path"`
+	SpeakerID    int      `yaml:"speaker_id"`
+	Speed        float64  `yaml:"speed"`
 }
 
 type CourtroomConfig struct {
 	Theme             string   `yaml:"theme"`
 	ProsecutorName    string   `yaml:"prosecutor_name"`
+	JudgeName         string   `yaml:"judge_name"`
 	Title             string   `yaml:"title"`
 	SueThreshold      int      `yaml:"sue_threshold"`
 	VotingDurationSec int      `yaml:"voting_duration_sec"`
@@ -133,6 +137,9 @@ func DefaultConfig() *Config {
 			Volume:       "+0%",
 			Pitch:        "+0Hz",
 			AutoFallback: true,
+			JudgeVoice:   "ru-RU-DmitryNeural",
+			JudgeRate:    "-10%",
+			JuryVoices:   []string{"ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"},
 			PiperBinary:  binaryName,
 			ModelPath:    filepath.Join("models", "ru_dmitri.onnx"),
 			ConfigPath:   filepath.Join("models", "ru_dmitri.onnx.json"),
@@ -142,6 +149,7 @@ func DefaultConfig() *Config {
 		Courtroom: CourtroomConfig{
 			Theme:             "ace_attorney",
 			ProsecutorName:    "Прокурор Карлов",
+			JudgeName:         "Судья",
 			Title:             "Инквизитор Твича",
 			SueThreshold:      5,
 			VotingDurationSec: 25,
@@ -236,6 +244,18 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.TTS.Voice == "" {
 		cfg.TTS.Voice = "ru-RU-DmitryNeural"
+	}
+	if cfg.TTS.JudgeVoice == "" {
+		cfg.TTS.JudgeVoice = "ru-RU-DmitryNeural"
+	}
+	if cfg.TTS.JudgeRate == "" {
+		cfg.TTS.JudgeRate = "-10%"
+	}
+	if len(cfg.TTS.JuryVoices) == 0 {
+		cfg.TTS.JuryVoices = []string{"ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"}
+	}
+	if cfg.Courtroom.JudgeName == "" {
+		cfg.Courtroom.JudgeName = "Судья"
 	}
 
 	return cfg, nil

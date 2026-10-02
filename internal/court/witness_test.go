@@ -111,3 +111,10 @@ func TestForceVerdict(t *testing.T) {
 		t.Fatal("forced verdict must stick as innocent")
 	}
 }
+
+func TestSsmlBreakStrippedForDisplay(t *testing.T) {
+	got := ssmlDisplayRe.ReplaceAllString(`Протестую. <break time="300ms" /> Слушаем.`, "")
+	if strings.Contains(got, "<break") {
+		t.Fatalf("break tag leaked to subtitles: %q", got)
+	}
+}

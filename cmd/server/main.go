@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -348,6 +350,30 @@ func main() {
 		})
 	})
 
+	mux.HandleFunc("/api/judge/photo", func(w http.ResponseWriter, r *http.Request) {
+		state := r.URL.Query().Get("state")
+		if !validJudgeState(state) {
+			http.Error(w, "unknown state, want normal|angry|gavel", http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			serveJudgePhoto(w, r, state)
+		case http.MethodPost:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if err := saveJudgePhoto(r, state); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/donate", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -661,6 +687,78 @@ func checkSecret(cfg *config.Config, got string) bool {
 		return true
 	}
 	return got != "" && got == cfg.Server.Secret
+}
+
+var judgePhotoExts = map[string]bool{
+	".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
+}
+
+func validJudgeState(state string) bool {
+	return state == "normal" || state == "angry" || state == "gavel"
+}
+
+func judgePhotoPath(state string) string {
+	return filepath.Join("data", "judge", state+".jpg")
+}
+
+// serveJudgePhoto serves an uploaded judge portrait, falling back to the
+// embedded default (angry/gavel fall back to normal until uploaded).
+func serveJudgePhoto(w http.ResponseWriter, r *http.Request, state string) {
+	if raw, err := os.ReadFile(judgePhotoPath(state)); err == nil {
+		w.Header().Set("Content-Type", http.DetectContentType(raw))
+		w.Write(raw)
+		return
+	}
+	name := state
+	if state != "normal" {
+		name = "normal"
+	}
+	raw, err := web.StaticFS.ReadFile("overlay/assets/judge-" + name + ".jpg")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Write(raw)
+}
+
+// saveJudgePhoto stores an uploaded judge portrait, max 5 MB, images only.
+func saveJudgePhoto(r *http.Request, state string) error {
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		return fmt.Errorf("need multipart photo: %w", err)
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if !judgePhotoExts[ext] {
+		return fmt.Errorf("want jpg, png or webp")
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, 5*1024*1024+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > 5*1024*1024 {
+		return fmt.Errorf("photo over 5 MB")
+	}
+	if kind := http.DetectContentType(raw); !strings.HasPrefix(kind, "image/") {
+		return fmt.Errorf("not an image")
+	}
+	if err := os.MkdirAll(filepath.Join("data", "judge"), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Join("data", "judge"), "upload-*.jpg")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), judgePhotoPath(state))
 }
 
 func checkHTTPAuth(cfg *config.Config, r *http.Request) bool {

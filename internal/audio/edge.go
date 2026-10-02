@@ -51,6 +51,9 @@ func (s *EdgeSynthesizer) Synthesize(ctx context.Context, text string) ([]byte, 
 	s.mu.RLock()
 	voice, rate, volume, pitch := s.voice, s.rate, s.volume, s.pitch
 	s.mu.RUnlock()
+	if raw, err := directSynthesize(ctx, text, voice, rate, volume, pitch); err == nil {
+		return raw, nil
+	}
 	comm, err := edge.NewCommunicate(text, voice, rate, volume, pitch, "", 10, 60)
 	if err != nil {
 		return nil, err

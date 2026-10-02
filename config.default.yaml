@@ -17,6 +17,9 @@ tts:
   volume: "+0%"
   pitch: "+0Hz"
   auto_fallback: true
+  judge_voice: "ru-RU-DmitryNeural"
+  judge_rate: "-10%"
+  jury_voices: ["ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"]
   piper_binary: ""
   model_path: "models/ru_dmitri.onnx"
   config_path: "models/ru_dmitri.onnx.json"
