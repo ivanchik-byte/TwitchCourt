@@ -365,6 +365,65 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/api/ai", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		aiStatus := func() map[string]any {
+			return map[string]any{
+				"provider":    cfg.AI.Provider,
+				"model":       cfg.AI.Model,
+				"temperature": cfg.AI.Temperature,
+				"stream":      cfg.AI.Stream,
+				"has_key":     cfg.AI.APIKey != "",
+				"live":        cfg.AI.APIKey != "" || cfg.AI.Provider == "ollama",
+			}
+		}
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(aiStatus())
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				Provider    *string  `json:"provider"`
+				APIKey      *string  `json:"api_key"`
+				Model       *string  `json:"model"`
+				Temperature *float64 `json:"temperature"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if req.Provider != nil {
+				switch *req.Provider {
+				case "groq", "cerebras", "ollama":
+					cfg.AI.Provider = *req.Provider
+				default:
+					http.Error(w, "want provider groq, cerebras or ollama", http.StatusBadRequest)
+					return
+				}
+			}
+			if req.APIKey != nil {
+				cfg.AI.APIKey = *req.APIKey
+			}
+			if req.Model != nil && *req.Model != "" {
+				cfg.AI.Model = *req.Model
+			}
+			if req.Temperature != nil {
+				cfg.AI.Temperature = *req.Temperature
+			}
+			if err := cfg.Save("config.yaml"); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			engine.SetAI(ai.NewClient(cfg.AI))
+			json.NewEncoder(w).Encode(aiStatus())
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{

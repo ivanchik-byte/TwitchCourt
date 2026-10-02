@@ -43,6 +43,16 @@ namespace Settings {
 
   const srvDot = el("srv-dot");
   const srvLabel = el("srv-label");
+  const secretInput = el("secret-input") as HTMLInputElement;
+
+  function secret(): string {
+    return secretInput.value.trim();
+  }
+
+  function authHeaders(): Record<string, string> {
+    const value = secret();
+    return value ? { "X-Tribunal-Secret": value } : {};
+  }
 
   const settingsForm = el("settings-form") as HTMLFormElement;
   const minRub = el("min-rub") as HTMLInputElement;
@@ -135,7 +145,7 @@ namespace Settings {
     if (fallback !== null) body["default_min"] = fallback;
     fetch("/api/settings", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify(body),
     })
       .then((res) => {
@@ -150,7 +160,7 @@ namespace Settings {
     event.preventDefault();
     fetch("/api/profile", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         name: profileName.value.trim(),
         titles: Settings.splitList(profileTitles.value),
@@ -182,6 +192,7 @@ namespace Settings {
     data.append("photo", judgeFile.files[0]);
     fetch("/api/judge/photo?state=" + encodeURIComponent(judgeState.value), {
       method: "POST",
+      headers: { ...authHeaders() },
       body: data,
     })
       .then((res) => {
@@ -367,7 +378,7 @@ namespace Settings {
     const targetDefendant = mcNicks.length > 0 ? mcNicks[0] : (profileName.value.trim() || "Стример");
     fetch("/api/trial", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         defendant: targetDefendant,
         crime: "Купание в лаве с полным инвентарем",
@@ -434,7 +445,7 @@ namespace Settings {
 
     fetch("/api/settings", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         minecraft_log: path,
         minecraft_nicks: mcNicks,
@@ -485,7 +496,8 @@ namespace Settings {
 
   function viewFromHash(): string | null {
     const match = window.location.hash.match(/^#\/(court|games|donates|overlay)(\/.*)?$/);
-    return match ? "view-" + match[1] : null;
+    if (match) return "view-" + match[1];
+    return "view-court";
   }
 
   function shouldOpenMinecraftModal(): boolean {
@@ -502,14 +514,8 @@ namespace Settings {
   document.querySelectorAll<HTMLButtonElement>(".seg-card").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = btn.getAttribute("data-view");
-      if (!target) return;
-      const isOpen = btn.classList.contains("active");
-      if (isOpen) {
-        closeMinecraftModal(false);
-        openView(null);
-      } else {
-        openView(target);
-      }
+      if (!target || btn.classList.contains("active")) return;
+      openView(target);
     });
   });
 
@@ -531,6 +537,69 @@ namespace Settings {
   } else {
     openView(initialView, false);
   }
+
+  const aiForm = el("ai-form") as HTMLFormElement;
+  const aiProvider = el("ai-provider") as HTMLSelectElement;
+  const aiModel = el("ai-model") as HTMLInputElement;
+  const aiKey = el("ai-key") as HTMLInputElement;
+  const aiTemp = el("ai-temp") as HTMLInputElement;
+  const aiStatus = el("ai-status");
+
+  interface AIStatus {
+    provider?: string;
+    model?: string;
+    temperature?: number;
+    has_key?: boolean;
+    live?: boolean;
+  }
+
+  function renderAI(data: AIStatus): void {
+    if (data.provider) aiProvider.value = data.provider;
+    if (data.model) aiModel.value = data.model;
+    if (typeof data.temperature === "number") aiTemp.value = String(data.temperature);
+    if (typeof data.live === "boolean") {
+      say(aiStatus, data.live ? "Мозг подключён, прокурор в эфире." : "Ключа нет — суд говорит заготовками (mock).");
+    }
+  }
+
+  fetch("/api/ai")
+    .then((res) => res.json())
+    .then((data: AIStatus) => renderAI(data))
+    .catch(() => undefined);
+
+  aiForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const tempRaw = aiTemp.value.trim();
+    const temp = tempRaw === "" ? null : Number(tempRaw);
+    const body: Record<string, unknown> = {
+      provider: aiProvider.value,
+      model: aiModel.value.trim(),
+      temperature: temp,
+    };
+    if (aiKey.value.trim() !== "") body["api_key"] = aiKey.value;
+    if (typeof temp !== "number" || !Number.isFinite(temp)) delete body["temperature"];
+    fetch("/api/ai", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          say(aiStatus, "Ошибка: проверьте секретный ключ и провайдера.");
+          return null;
+        }
+        return res.json() as Promise<AIStatus>;
+      })
+      .then((data) => {
+        if (data) {
+          renderAI(data);
+          aiKey.value = "";
+        }
+      })
+      .catch(() => {
+        say(aiStatus, "Нет связи с сервером.");
+      });
+  });
 
   const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
   if (backdrop && typeof Backdrop !== "undefined") Backdrop.mount(backdrop);

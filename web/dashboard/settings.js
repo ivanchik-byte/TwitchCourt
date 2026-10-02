@@ -423,6 +423,14 @@ var Settings;
     }
     const srvDot = el("srv-dot");
     const srvLabel = el("srv-label");
+    const secretInput = el("secret-input");
+    function secret() {
+        return secretInput.value.trim();
+    }
+    function authHeaders() {
+        const value = secret();
+        return value ? { "X-Tribunal-Secret": value } : {};
+    }
     const settingsForm = el("settings-form");
     const minRub = el("min-rub");
     const minUsd = el("min-usd");
@@ -514,7 +522,7 @@ var Settings;
             body["default_min"] = fallback;
         fetch("/api/settings", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders() },
             body: JSON.stringify(body),
         })
             .then((res) => {
@@ -528,7 +536,7 @@ var Settings;
         event.preventDefault();
         fetch("/api/profile", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders() },
             body: JSON.stringify({
                 name: profileName.value.trim(),
                 titles: Settings.splitList(profileTitles.value),
@@ -558,6 +566,7 @@ var Settings;
         data.append("photo", judgeFile.files[0]);
         fetch("/api/judge/photo?state=" + encodeURIComponent(judgeState.value), {
             method: "POST",
+            headers: { ...authHeaders() },
             body: data,
         })
             .then((res) => {
@@ -736,7 +745,7 @@ var Settings;
         const targetDefendant = mcNicks.length > 0 ? mcNicks[0] : (profileName.value.trim() || "Стример");
         fetch("/api/trial", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders() },
             body: JSON.stringify({
                 defendant: targetDefendant,
                 crime: "Купание в лаве с полным инвентарем",
@@ -800,7 +809,7 @@ var Settings;
         catch { }
         fetch("/api/settings", {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders() },
             body: JSON.stringify({
                 minecraft_log: path,
                 minecraft_nicks: mcNicks,
@@ -849,7 +858,9 @@ var Settings;
     }
     function viewFromHash() {
         const match = window.location.hash.match(/^#\/(court|games|donates|overlay)(\/.*)?$/);
-        return match ? "view-" + match[1] : null;
+        if (match)
+            return "view-" + match[1];
+        return "view-court";
     }
     function shouldOpenMinecraftModal() {
         if (window.location.hash === "#/games/minecraft")
@@ -866,16 +877,9 @@ var Settings;
     document.querySelectorAll(".seg-card").forEach((btn) => {
         btn.addEventListener("click", () => {
             const target = btn.getAttribute("data-view");
-            if (!target)
+            if (!target || btn.classList.contains("active"))
                 return;
-            const isOpen = btn.classList.contains("active");
-            if (isOpen) {
-                closeMinecraftModal(false);
-                openView(null);
-            }
-            else {
-                openView(target);
-            }
+            openView(target);
         });
     });
     window.addEventListener("hashchange", () => {
@@ -897,6 +901,62 @@ var Settings;
     else {
         openView(initialView, false);
     }
+    const aiForm = el("ai-form");
+    const aiProvider = el("ai-provider");
+    const aiModel = el("ai-model");
+    const aiKey = el("ai-key");
+    const aiTemp = el("ai-temp");
+    const aiStatus = el("ai-status");
+    function renderAI(data) {
+        if (data.provider)
+            aiProvider.value = data.provider;
+        if (data.model)
+            aiModel.value = data.model;
+        if (typeof data.temperature === "number")
+            aiTemp.value = String(data.temperature);
+        if (typeof data.live === "boolean") {
+            say(aiStatus, data.live ? "Мозг подключён, прокурор в эфире." : "Ключа нет — суд говорит заготовками (mock).");
+        }
+    }
+    fetch("/api/ai")
+        .then((res) => res.json())
+        .then((data) => renderAI(data))
+        .catch(() => undefined);
+    aiForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const tempRaw = aiTemp.value.trim();
+        const temp = tempRaw === "" ? null : Number(tempRaw);
+        const body = {
+            provider: aiProvider.value,
+            model: aiModel.value.trim(),
+            temperature: temp,
+        };
+        if (aiKey.value.trim() !== "")
+            body["api_key"] = aiKey.value;
+        if (typeof temp !== "number" || !Number.isFinite(temp))
+            delete body["temperature"];
+        fetch("/api/ai", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(body),
+        })
+            .then((res) => {
+            if (!res.ok) {
+                say(aiStatus, "Ошибка: проверьте секретный ключ и провайдера.");
+                return null;
+            }
+            return res.json();
+        })
+            .then((data) => {
+            if (data) {
+                renderAI(data);
+                aiKey.value = "";
+            }
+        })
+            .catch(() => {
+            say(aiStatus, "Нет связи с сервером.");
+        });
+    });
     const backdrop = document.getElementById("bg-canvas");
     if (backdrop && typeof Backdrop !== "undefined")
         Backdrop.mount(backdrop);

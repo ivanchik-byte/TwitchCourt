@@ -281,3 +281,16 @@ func LoadConfig(path string) (*Config, error) {
 
 	return cfg, nil
 }
+
+// Save writes the whole config back to disk, secrets included, mode 0600
+func (c *Config) Save(path string) error {
+	raw, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}

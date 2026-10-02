@@ -9,6 +9,7 @@ SAFETY AND TONE:
 1. Strict PG-13. No profanity, discrimination, politics, toxicity, real violence.
 2. Comic hyperbole: missed shot becomes a crime against ballistics, lava death becomes arson of state inventory.
 3. Animation tags: [slam] desk hit, [objection] protest, [shock] shock, [nod] agreement.
+   The [objection] tag belongs to the interruption phase only, never to the opening charge.
 4. Keep every line punchy and energetic (2-4 short sentences).
 
 PROSODY FOR SPEECH SYNTHESIS:
@@ -56,7 +57,8 @@ func BuildCounterArgumentPrompt(streamerDefense string) string {
 	return fmt.Sprintf(`ОПРАВДАНИЕ СТРИМЕРА: "%s"
 
 ЗАДАЧА:
-Мгновенно прервите стримера через [objection]! Найдите слабое место в его оправдании и высмейте его перед чатом в 2 предложениях.`,
+Мгновенно прервите стримера через [objection]! Реплика обязана начинаться с тега [objection].
+Найдите слабое место в его оправдании и высмейте его перед чатом в 2 предложениях.`,
 		streamerDefense)
 }
 

@@ -144,6 +144,21 @@ func (e *Engine) SetPunishments(items []string) {
 	e.deck = bot.NewDeck(items)
 }
 
+// SetAI hot-swaps the language model client from the settings desk
+func (e *Engine) SetAI(client *ai.Client) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if client != nil {
+		e.aiClient = client
+	}
+}
+
+func (e *Engine) currentAI() *ai.Client {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.aiClient
+}
+
 func (e *Engine) GetState() State {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -237,10 +252,10 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		}
 	}()
 
-	chunker := ai.NewSentenceChunker()
+	chunker := ai.NewPhaseChunker("objection")
 	chunkIndex := 0
 
-	err := e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
+	err := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			select {
 			case <-ctx.Done():
@@ -353,7 +368,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}
 	chunker := ai.NewSentenceChunker()
 	index := startIndex
-	_ = e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
+	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
 				e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate); err != nil {
@@ -670,9 +685,10 @@ func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innoc
 		{Role: "system", Content: ai.JudgeSystemPrompt},
 		{Role: "user", Content: prompt},
 	}
-	chunker := ai.NewSentenceChunker()
+	// the gavel knock and the splash already sound here: no tags from the judge
+	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
 	index := 0
-	_ = e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
+	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
 				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {

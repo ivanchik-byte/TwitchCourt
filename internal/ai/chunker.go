@@ -17,10 +17,24 @@ type SentenceChunk struct {
 type SentenceChunker struct {
 	buffer        strings.Builder
 	lastAnimation string
+	banned        map[string]bool
 }
 
 func NewSentenceChunker() *SentenceChunker {
 	return &SentenceChunker{}
+}
+
+// NewPhaseChunker drops tags that don't belong to the current trial phase,
+// so the model cannot fire the objection splash in the middle of the charge.
+func NewPhaseChunker(banned ...string) *SentenceChunker {
+	c := &SentenceChunker{}
+	if len(banned) > 0 {
+		c.banned = make(map[string]bool, len(banned))
+		for _, tag := range banned {
+			c.banned[tag] = true
+		}
+	}
+	return c
 }
 
 func (c *SentenceChunker) Feed(delta string) []SentenceChunk {
@@ -29,7 +43,11 @@ func (c *SentenceChunker) Feed(delta string) []SentenceChunk {
 
 	matches := tagRegex.FindAllStringSubmatch(current, -1)
 	if len(matches) > 0 {
-		c.lastAnimation = matches[len(matches)-1][1]
+		for _, m := range matches {
+			if !c.banned[m[1]] {
+				c.lastAnimation = m[1]
+			}
+		}
 		current = tagRegex.ReplaceAllString(current, "")
 		c.buffer.Reset()
 		c.buffer.WriteString(current)

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -48,5 +49,25 @@ func TestSentenceChunker(t *testing.T) {
 	}
 	if last.Text != "И вообще" {
 		t.Errorf("expected 'И вообще', got '%s'", last.Text)
+	}
+}
+
+func TestPhaseChunkerBansObjection(t *testing.T) {
+	chunker := NewPhaseChunker("objection")
+
+	chunks := chunker.Feed("[objection] Ты виновен! ")
+	if len(chunks) != 1 {
+		t.Fatalf("expected 1 chunk, got %d", len(chunks))
+	}
+	if chunks[0].Animation == "objection" {
+		t.Errorf("banned tag leaked into animation: %q", chunks[0].Animation)
+	}
+	if strings.Contains(chunks[0].Text, "[objection]") {
+		t.Errorf("banned tag leaked into text: %q", chunks[0].Text)
+	}
+
+	chunks = chunker.Feed("[slam] Слушай сюда! ")
+	if len(chunks) != 1 || chunks[0].Animation != "slam" {
+		t.Fatalf("allowed tag must pass, got %+v", chunks)
 	}
 }

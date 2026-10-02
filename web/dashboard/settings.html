@@ -26,20 +26,21 @@
       <div class="masthead-status">
         <p class="docket-line">Сервер: <span id="srv-label">Проверка...</span> <span id="srv-dot" class="dot" aria-hidden="true"></span></p>
         <div class="masthead-keys">
+          <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
           <a class="btn btn-ghost" href="/">В пульт</a>
         </div>
       </div>
     </header>
 
     <nav class="seg-nav" aria-label="Разделы настроек">
-      <button type="button" class="seg-card" data-view="view-court"><span class="seg-num">01</span><span class="seg-name">Суд</span><small>Пороги, наказания, портрет</small></button>
+      <button type="button" class="seg-card active" data-view="view-court"><span class="seg-num">01</span><span class="seg-name">Суд</span><small>Пороги, наказания, портрет</small></button>
       <button type="button" class="seg-card" data-view="view-games"><span class="seg-num">02</span><span class="seg-name">Игры</span><small>Minecraft</small></button>
       <button type="button" class="seg-card" data-view="view-donates"><span class="seg-num">03</span><span class="seg-name">Донаты</span><small>Источники и ключи</small></button>
       <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">04</span><span class="seg-name">Оверлей</span><small>Статус</small></button>
     </nav>
 
     <main class="folio">
-      <div class="settings-view hidden" id="view-court">
+      <div class="settings-view" id="view-court">
         <section class="article" aria-labelledby="donate-heading">
           <p class="overline">Суд · пороги</p>
           <h2 id="donate-heading">Донаты и пороги</h2>
@@ -60,6 +61,28 @@
             <button type="submit" class="btn btn-verdict">Сохранить</button>
           </form>
           <p id="settings-status" class="footnote" aria-live="polite"></p>
+        </section>
+
+        <section class="article" aria-labelledby="brain-heading">
+          <p class="overline">Суд · мозг</p>
+          <h2 id="brain-heading">Нейронка</h2>
+          <p class="guide">Без ключа суд говорит заготовками из mock-режима. Вставь ключ — и прокурор оживёт.</p>
+          <form id="ai-form">
+            <div class="row">
+              <label class="field"><span>Провайдер</span>
+                <select id="ai-provider">
+                  <option value="groq">Groq</option>
+                  <option value="cerebras">Cerebras</option>
+                  <option value="ollama">Ollama (локально)</option>
+                </select>
+              </label>
+              <label class="field"><span>Модель</span><input type="text" id="ai-model" placeholder="llama-3.3-70b-versatile"></label>
+            </div>
+            <label class="field"><span>API-ключ</span><input type="password" id="ai-key" placeholder="gsk_... (пусто = mock)" autocomplete="off"></label>
+            <label class="field"><span>Температура</span><input type="number" id="ai-temp" min="0" max="2" step="0.05"></label>
+            <button type="submit" class="btn btn-verdict">Подключить мозг</button>
+          </form>
+          <p id="ai-status" class="footnote" aria-live="polite"></p>
         </section>
 
         <section class="article" aria-labelledby="portrait-heading">
