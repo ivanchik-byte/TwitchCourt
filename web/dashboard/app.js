@@ -397,7 +397,8 @@ var GooeyNav;
     GooeyNav.mount = mount;
 })(GooeyNav || (GooeyNav = {}));
 "use strict";
-// Канцелярия суда: новое дело + настройки. Один бандл без зависимостей.
+// Тактический пульт стримера: шкала терпения, быстрые плитки,
+// активный суд с ручным вердиктом, лента событий с метками.
 var Desk;
 (function (Desk) {
     function socketUrl(path) {
@@ -414,24 +415,6 @@ var Desk;
         }
     }
     Desk.parseEvent = parseEvent;
-    function splitLines(value) {
-        return value
-            .split("\n")
-            .map((part) => part.trim())
-            .filter((part) => part.length > 0);
-    }
-    Desk.splitLines = splitLines;
-    function splitList(value) {
-        return value
-            .split(",")
-            .map((part) => part.trim())
-            .filter((part) => part.length > 0);
-    }
-    Desk.splitList = splitList;
-    function joinList(items) {
-        return Array.isArray(items) ? items.join(", ") : "";
-    }
-    Desk.joinList = joinList;
     function say(node, text) {
         node.textContent = text;
     }
@@ -446,25 +429,23 @@ var Desk;
     }
     const wsDot = el("ws-dot");
     const wsLabel = el("ws-label");
-    const currentState = el("current-state");
-    const activeCaseTitle = el("active-case-title");
+    const meterFill = el("meter-fill");
+    const meterNum = el("meter-num");
     const secretInput = el("secret-input");
     const btnPanic = el("btn-panic");
-    const settingsForm = el("settings-form");
-    const minRub = el("min-rub");
-    const minUsd = el("min-usd");
-    const minEur = el("min-eur");
-    const minBits = el("min-bits");
-    const minDefault = el("min-default");
-    const punishmentsInput = el("punishments-input");
-    const settingsStatus = el("settings-status");
-    const profileForm = el("profile-form");
-    const profileName = el("profile-name");
-    const profileTitles = el("profile-titles");
-    const profileTraits = el("profile-traits");
-    const profileGags = el("profile-gags");
-    const profileMercy = el("profile-mercy");
-    const profileStatus = el("profile-status");
+    const btnGavel = el("btn-gavel");
+    const deckStatus = el("deck-status");
+    const trialBox = el("trial-box");
+    const activeCaseTitle = el("active-case-title");
+    const voteTimer = el("vote-timer");
+    const voteGuiltyN = el("vote-guilty-n");
+    const voteInnocentN = el("vote-innocent-n");
+    const voteGuiltyBar = el("vote-guilty-bar");
+    const voteInnocentBar = el("vote-innocent-bar");
+    const btnForceGuilty = el("btn-force-guilty");
+    const btnForceInnocent = el("btn-force-innocent");
+    const trialStatus = el("trial-status");
+    const eventFeed = el("event-feed");
     let ws = null;
     function secret() {
         return secretInput.value.trim();
@@ -472,6 +453,15 @@ var Desk;
     function authHeaders() {
         const value = secret();
         return value ? { "X-Tribunal-Secret": value } : {};
+    }
+    function post(path, body) {
+        return fetch(path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(body),
+        })
+            .then((res) => res.ok)
+            .catch(() => false);
     }
     function sendAction(action, payload) {
         if (!ws || ws.readyState !== WebSocket.OPEN)
@@ -482,20 +472,12 @@ var Desk;
         }
         ws.send(JSON.stringify({ action, payload: body }));
     }
-    function renderState(state, title) {
-        Desk.say(currentState, state.toUpperCase());
-        currentState.classList.toggle("active", state !== "idle");
-        if (state !== "verdict") {
-            currentState.classList.remove("guilty", "innocent");
-        }
-        Desk.say(activeCaseTitle, title);
-    }
-    const eventFeed = el("event-feed");
-    function feed(text) {
+    function feed(text, tag) {
         const empty = eventFeed.querySelector(".feed-empty");
         if (empty)
             empty.remove();
         const item = document.createElement("li");
+        item.className = "feed-tag-" + tag;
         const now = new Date();
         const pad = (n) => String(n).padStart(2, "0");
         const stamp = document.createElement("span");
@@ -512,40 +494,34 @@ var Desk;
                 break;
         }
     }
-    function loadSettings() {
-        fetch("/api/settings")
+    function renderMeter(meter) {
+        const clamped = Math.max(0, Math.min(100, meter));
+        meterFill.style.width = clamped + "%";
+        meterNum.textContent = clamped + "%";
+        meterFill.classList.toggle("hot", clamped >= 60);
+    }
+    function pollStatus() {
+        fetch("/api/status")
             .then((res) => res.json())
-            .then((settings) => {
-            const mins = settings.min_amounts || {};
-            const fallback = settings.default_min;
-            minRub.value = String(mins["RUB"] ?? fallback ?? "");
-            minUsd.value = String(mins["USD"] ?? fallback ?? "");
-            minEur.value = String(mins["EUR"] ?? fallback ?? "");
-            minBits.value = String(mins["BITS"] ?? fallback ?? "");
-            minDefault.value = String(fallback ?? "");
-            punishmentsInput.value = (settings.punishments || []).join("\n");
+            .then((status) => {
+            if (typeof status.meter === "number")
+                renderMeter(status.meter);
         })
             .catch(() => undefined);
     }
-    function loadProfile() {
-        fetch("/api/profile")
-            .then((res) => res.json())
-            .then((profile) => {
-            profileName.value = profile.name || "";
-            profileTitles.value = Desk.joinList(profile.titles);
-            profileTraits.value = Desk.joinList(profile.traits);
-            profileGags.value = Desk.joinList(profile.running_gags);
-            profileMercy.value = profile.mercy || "";
-        })
-            .catch(() => undefined);
+    function showTrial(title) {
+        Desk.say(activeCaseTitle, title);
+        trialBox.classList.remove("hidden");
+    }
+    function hideTrial() {
+        trialBox.classList.add("hidden");
     }
     function connect() {
         ws = new WebSocket(Desk.socketUrl("/ws"));
         ws.onopen = () => {
             wsDot.className = "dot connected";
             Desk.say(wsLabel, "На связи");
-            loadSettings();
-            loadProfile();
+            pollStatus();
         };
         ws.onclose = () => {
             wsDot.className = "dot disconnected";
@@ -560,19 +536,17 @@ var Desk;
                 case "state_change": {
                     const state = String(msg.payload.state || "idle");
                     if (state === "idle") {
-                        renderState(state, "Нет активного дела");
+                        hideTrial();
                     }
                     else if (state === "voting") {
-                        const caseTitle = String(msg.payload.case_title || "");
-                        renderState(state, caseTitle ? caseTitle + ": голосование" : "Идет голосование");
-                        feed("Голосование запущено" + (caseTitle ? ": " + caseTitle : ""));
+                        showTrial(String(msg.payload.case_title || "Идет голосование"));
                     }
                     else {
                         const caseTitle = String(msg.payload.case_title || "");
                         const defendant = String(msg.payload.defendant || "");
-                        renderState(state, caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
+                        showTrial(caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
                         if (caseTitle)
-                            feed("Открыто дело: " + caseTitle);
+                            feed("Открыто дело: " + caseTitle, "trial");
                     }
                     break;
                 }
@@ -581,35 +555,66 @@ var Desk;
                     const amount = Number(msg.payload.amount || 0);
                     const currency = String(msg.payload.currency || "");
                     const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
-                    feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — записан в память");
+                    feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в память", "donation");
+                    break;
+                }
+                case "suspicion": {
+                    const meter = Number(msg.payload.meter || 0);
+                    renderMeter(meter);
+                    feed("Папка дела №404: " + meter + "%", "trial");
+                    break;
+                }
+                case "voting_update": {
+                    const guilty = Number(msg.payload.guilty_count || 0);
+                    const innocent = Number(msg.payload.innocent_count || 0);
+                    Desk.say(voteTimer, String(msg.payload.time_left_sec));
+                    Desk.say(voteGuiltyN, String(guilty));
+                    Desk.say(voteInnocentN, String(innocent));
+                    const total = guilty + innocent;
+                    const share = total > 0 ? Math.round((guilty / total) * 100) : 50;
+                    voteGuiltyBar.style.width = share + "%";
+                    voteInnocentBar.style.width = 100 - share + "%";
                     break;
                 }
                 case "verdict": {
-                    const guilty = String(msg.payload.verdict || "") === "ВИНОВЕН";
                     const parts = ["Вердикт: " + String(msg.payload.verdict || "")];
                     const witnessCount = Number(msg.payload.witnesses || 0);
-                    if (witnessCount > 0) {
+                    if (witnessCount > 0)
                         parts.push("свидетели +" + witnessCount);
-                    }
-                    if (msg.payload.penalty) {
+                    if (msg.payload.penalty)
                         parts.push("наказание: " + String(msg.payload.penalty));
-                    }
-                    renderState("verdict", parts.join(" · "));
-                    currentState.classList.toggle("guilty", guilty);
-                    currentState.classList.toggle("innocent", !guilty);
-                    feed(parts.join(" · "));
-                    loadProfile();
+                    if (msg.payload.twist)
+                        parts.push(String(msg.payload.twist));
+                    feed(parts.join(" · "), "verdict");
                     break;
                 }
                 case "panic":
-                    renderState("idle", "Сброшено");
-                    feed("Суд сброшен вручную");
+                    hideTrial();
+                    feed("Суд сброшен вручную", "trial");
                     break;
                 default:
                     break;
             }
         };
     }
+    document.querySelectorAll(".tile").forEach((tile) => {
+        tile.addEventListener("click", () => {
+            post("/api/trial", {
+                defendant: tile.getAttribute("data-defendant") || "Стример",
+                crime: tile.getAttribute("data-crime") || "",
+                context: tile.getAttribute("data-context") || "",
+            }).then((ok) => {
+                Desk.say(deckStatus, ok ? "Дело открыто." : "Суд занят или нет связи.");
+            });
+        });
+    });
+    btnGavel.addEventListener("click", () => {
+        sendAction("animation", { name: "slam" });
+        post("/api/say", { text: "Суд слушает!" }).then((ok) => {
+            if (!ok)
+                Desk.say(deckStatus, "Молоток не долетел: проверьте секрет.");
+        });
+    });
     btnPanic.addEventListener("click", () => sendAction("panic", {}));
     window.addEventListener("keydown", (event) => {
         if (event.key === "F12") {
@@ -617,67 +622,13 @@ var Desk;
             sendAction("panic", {});
         }
     });
-    settingsForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const num = (input) => {
-            const raw = input.value.trim();
-            if (raw === "")
-                return null;
-            const parsed = Number(raw);
-            return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-        };
-        const mins = {};
-        const rub = num(minRub);
-        const usd = num(minUsd);
-        const eur = num(minEur);
-        const bits = num(minBits);
-        if (rub !== null)
-            mins["RUB"] = rub;
-        if (usd !== null)
-            mins["USD"] = usd;
-        if (eur !== null)
-            mins["EUR"] = eur;
-        if (bits !== null)
-            mins["BITS"] = bits;
-        const fallback = num(minDefault);
-        const body = {
-            min_amounts: mins,
-            punishments: Desk.splitLines(punishmentsInput.value),
-        };
-        if (fallback !== null)
-            body["default_min"] = fallback;
-        fetch("/api/settings", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", ...authHeaders() },
-            body: JSON.stringify(body),
-        })
-            .then((res) => {
-            Desk.say(settingsStatus, res.ok ? "Записано в реестр." : "Не записано: проверьте секрет.");
-        })
-            .catch(() => {
-            Desk.say(settingsStatus, "Нет связи с сервером.");
+    function forceVerdict(guilty) {
+        post("/api/verdict", { guilty }).then((ok) => {
+            Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет голосования или нет связи.");
         });
-    });
-    profileForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        fetch("/api/profile", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", ...authHeaders() },
-            body: JSON.stringify({
-                name: profileName.value.trim(),
-                titles: Desk.splitList(profileTitles.value),
-                traits: Desk.splitList(profileTraits.value),
-                running_gags: Desk.splitList(profileGags.value),
-                mercy: profileMercy.value.trim(),
-            }),
-        })
-            .then((res) => {
-            Desk.say(profileStatus, res.ok ? "Портрет обновлен." : "Не сохранено: проверьте секрет.");
-        })
-            .catch(() => {
-            Desk.say(profileStatus, "Нет связи с сервером.");
-        });
-    });
+    }
+    btnForceGuilty.addEventListener("click", () => forceVerdict(true));
+    btnForceInnocent.addEventListener("click", () => forceVerdict(false));
     const backdrop = document.getElementById("bg-canvas");
     if (backdrop)
         Backdrop.mount(backdrop);
@@ -685,4 +636,5 @@ var Desk;
     if (gooey)
         GooeyNav.mount(gooey);
     connect();
+    window.setInterval(pollStatus, 2000);
 })();

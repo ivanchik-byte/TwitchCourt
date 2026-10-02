@@ -1,10 +1,12 @@
-// Канцелярия суда: новое дело + настройки. Один бандл без зависимостей.
+// Тактический пульт стримера: шкала терпения, быстрые плитки,
+// активный суд с ручным вердиктом, лента событий с метками.
 namespace Desk {
   export type ServerEvent =
     | { type: "state_change"; payload: StateChange }
     | { type: "voting_update"; payload: VotingUpdate }
     | { type: "verdict"; payload: Verdict }
     | { type: "donation"; payload: Donation }
+    | { type: "suspicion"; payload: Suspicion }
     | { type: "panic"; payload: Record<string, unknown> }
     | { type: string; payload: Record<string, unknown> };
 
@@ -14,6 +16,11 @@ namespace Desk {
     currency: string;
     message?: string;
     opens_trial: boolean;
+  }
+
+  export interface Suspicion {
+    meter: number;
+    milestone: number;
   }
 
   export interface StateChange {
@@ -36,20 +43,7 @@ namespace Desk {
     total_votes: number;
     witnesses?: number;
     penalty?: string;
-  }
-
-  export interface CourtSettings {
-    min_amounts: Record<string, number>;
-    default_min: number;
-    punishments: string[];
-  }
-
-  export interface StreamerProfile {
-    name: string;
-    titles?: string[];
-    traits?: string[];
-    running_gags?: string[];
-    mercy?: string;
+    twist?: string;
   }
 
   export function socketUrl(path: string): string {
@@ -63,24 +57,6 @@ namespace Desk {
     } catch {
       return null;
     }
-  }
-
-  export function splitLines(value: string): string[] {
-    return value
-      .split("\n")
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
-  }
-
-  export function splitList(value: string): string[] {
-    return value
-      .split(",")
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
-  }
-
-  export function joinList(items: string[] | undefined): string {
-    return Array.isArray(items) ? items.join(", ") : "";
   }
 
   export function say(node: HTMLElement, text: string): void {
@@ -97,27 +73,23 @@ namespace Desk {
 
   const wsDot = el("ws-dot");
   const wsLabel = el("ws-label");
-  const currentState = el("current-state");
-  const activeCaseTitle = el("active-case-title");
+  const meterFill = el("meter-fill");
+  const meterNum = el("meter-num");
   const secretInput = el("secret-input") as HTMLInputElement;
   const btnPanic = el("btn-panic");
-
-  const settingsForm = el("settings-form") as HTMLFormElement;
-  const minRub = el("min-rub") as HTMLInputElement;
-  const minUsd = el("min-usd") as HTMLInputElement;
-  const minEur = el("min-eur") as HTMLInputElement;
-  const minBits = el("min-bits") as HTMLInputElement;
-  const minDefault = el("min-default") as HTMLInputElement;
-  const punishmentsInput = el("punishments-input") as HTMLTextAreaElement;
-  const settingsStatus = el("settings-status");
-
-  const profileForm = el("profile-form") as HTMLFormElement;
-  const profileName = el("profile-name") as HTMLInputElement;
-  const profileTitles = el("profile-titles") as HTMLInputElement;
-  const profileTraits = el("profile-traits") as HTMLInputElement;
-  const profileGags = el("profile-gags") as HTMLInputElement;
-  const profileMercy = el("profile-mercy") as HTMLInputElement;
-  const profileStatus = el("profile-status");
+  const btnGavel = el("btn-gavel");
+  const deckStatus = el("deck-status");
+  const trialBox = el("trial-box");
+  const activeCaseTitle = el("active-case-title");
+  const voteTimer = el("vote-timer");
+  const voteGuiltyN = el("vote-guilty-n");
+  const voteInnocentN = el("vote-innocent-n");
+  const voteGuiltyBar = el("vote-guilty-bar");
+  const voteInnocentBar = el("vote-innocent-bar");
+  const btnForceGuilty = el("btn-force-guilty");
+  const btnForceInnocent = el("btn-force-innocent");
+  const trialStatus = el("trial-status");
+  const eventFeed = el("event-feed");
 
   let ws: WebSocket | null = null;
 
@@ -130,6 +102,16 @@ namespace Desk {
     return value ? { "X-Tribunal-Secret": value } : {};
   }
 
+  function post(path: string, body: Record<string, unknown>): Promise<boolean> {
+    return fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+      .then((res) => res.ok)
+      .catch(() => false);
+  }
+
   function sendAction(action: string, payload: Record<string, unknown>): void {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const body: Record<string, unknown> = { ...payload };
@@ -139,21 +121,11 @@ namespace Desk {
     ws.send(JSON.stringify({ action, payload: body }));
   }
 
-  function renderState(state: string, title: string): void {
-    Desk.say(currentState, state.toUpperCase());
-    currentState.classList.toggle("active", state !== "idle");
-    if (state !== "verdict") {
-      currentState.classList.remove("guilty", "innocent");
-    }
-    Desk.say(activeCaseTitle, title);
-  }
-
-  const eventFeed = el("event-feed");
-
-  function feed(text: string): void {
+  function feed(text: string, tag: string): void {
     const empty = eventFeed.querySelector(".feed-empty");
     if (empty) empty.remove();
     const item = document.createElement("li");
+    item.className = "feed-tag-" + tag;
     const now = new Date();
     const pad = (n: number): string => String(n).padStart(2, "0");
     const stamp = document.createElement("span");
@@ -169,33 +141,29 @@ namespace Desk {
     }
   }
 
-  function loadSettings(): void {
-    fetch("/api/settings")
+  function renderMeter(meter: number): void {
+    const clamped = Math.max(0, Math.min(100, meter));
+    meterFill.style.width = clamped + "%";
+    meterNum.textContent = clamped + "%";
+    meterFill.classList.toggle("hot", clamped >= 60);
+  }
+
+  function pollStatus(): void {
+    fetch("/api/status")
       .then((res) => res.json())
-      .then((settings: Desk.CourtSettings) => {
-        const mins = settings.min_amounts || {};
-        const fallback = settings.default_min;
-        minRub.value = String(mins["RUB"] ?? fallback ?? "");
-        minUsd.value = String(mins["USD"] ?? fallback ?? "");
-        minEur.value = String(mins["EUR"] ?? fallback ?? "");
-        minBits.value = String(mins["BITS"] ?? fallback ?? "");
-        minDefault.value = String(fallback ?? "");
-        punishmentsInput.value = (settings.punishments || []).join("\n");
+      .then((status: { meter?: number }) => {
+        if (typeof status.meter === "number") renderMeter(status.meter);
       })
       .catch(() => undefined);
   }
 
-  function loadProfile(): void {
-    fetch("/api/profile")
-      .then((res) => res.json())
-      .then((profile: Desk.StreamerProfile) => {
-        profileName.value = profile.name || "";
-        profileTitles.value = Desk.joinList(profile.titles);
-        profileTraits.value = Desk.joinList(profile.traits);
-        profileGags.value = Desk.joinList(profile.running_gags);
-        profileMercy.value = profile.mercy || "";
-      })
-      .catch(() => undefined);
+  function showTrial(title: string): void {
+    Desk.say(activeCaseTitle, title);
+    trialBox.classList.remove("hidden");
+  }
+
+  function hideTrial(): void {
+    trialBox.classList.add("hidden");
   }
 
   function connect(): void {
@@ -203,8 +171,7 @@ namespace Desk {
     ws.onopen = () => {
       wsDot.className = "dot connected";
       Desk.say(wsLabel, "На связи");
-      loadSettings();
-      loadProfile();
+      pollStatus();
     };
     ws.onclose = () => {
       wsDot.className = "dot disconnected";
@@ -218,16 +185,14 @@ namespace Desk {
         case "state_change": {
           const state = String(msg.payload.state || "idle");
           if (state === "idle") {
-            renderState(state, "Нет активного дела");
+            hideTrial();
           } else if (state === "voting") {
-            const caseTitle = String(msg.payload.case_title || "");
-            renderState(state, caseTitle ? caseTitle + ": голосование" : "Идет голосование");
-            feed("Голосование запущено" + (caseTitle ? ": " + caseTitle : ""));
+            showTrial(String(msg.payload.case_title || "Идет голосование"));
           } else {
             const caseTitle = String(msg.payload.case_title || "");
             const defendant = String(msg.payload.defendant || "");
-            renderState(state, caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
-            if (caseTitle) feed("Открыто дело: " + caseTitle);
+            showTrial(caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
+            if (caseTitle) feed("Открыто дело: " + caseTitle, "trial");
           }
           break;
         }
@@ -236,35 +201,64 @@ namespace Desk {
           const amount = Number(msg.payload.amount || 0);
           const currency = String(msg.payload.currency || "");
           const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
-          feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — записан в память");
+          feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в память", "donation");
+          break;
+        }
+        case "suspicion": {
+          const meter = Number(msg.payload.meter || 0);
+          renderMeter(meter);
+          feed("Папка дела №404: " + meter + "%", "trial");
+          break;
+        }
+        case "voting_update": {
+          const guilty = Number(msg.payload.guilty_count || 0);
+          const innocent = Number(msg.payload.innocent_count || 0);
+          Desk.say(voteTimer, String(msg.payload.time_left_sec));
+          Desk.say(voteGuiltyN, String(guilty));
+          Desk.say(voteInnocentN, String(innocent));
+          const total = guilty + innocent;
+          const share = total > 0 ? Math.round((guilty / total) * 100) : 50;
+          voteGuiltyBar.style.width = share + "%";
+          voteInnocentBar.style.width = 100 - share + "%";
           break;
         }
         case "verdict": {
-          const guilty = String(msg.payload.verdict || "") === "ВИНОВЕН";
           const parts = ["Вердикт: " + String(msg.payload.verdict || "")];
           const witnessCount = Number(msg.payload.witnesses || 0);
-          if (witnessCount > 0) {
-            parts.push("свидетели +" + witnessCount);
-          }
-          if (msg.payload.penalty) {
-            parts.push("наказание: " + String(msg.payload.penalty));
-          }
-          renderState("verdict", parts.join(" · "));
-          currentState.classList.toggle("guilty", guilty);
-          currentState.classList.toggle("innocent", !guilty);
-          feed(parts.join(" · "));
-          loadProfile();
+          if (witnessCount > 0) parts.push("свидетели +" + witnessCount);
+          if (msg.payload.penalty) parts.push("наказание: " + String(msg.payload.penalty));
+          if (msg.payload.twist) parts.push(String(msg.payload.twist));
+          feed(parts.join(" · "), "verdict");
           break;
         }
         case "panic":
-          renderState("idle", "Сброшено");
-          feed("Суд сброшен вручную");
+          hideTrial();
+          feed("Суд сброшен вручную", "trial");
           break;
         default:
           break;
       }
     };
   }
+
+  document.querySelectorAll<HTMLButtonElement>(".tile").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      post("/api/trial", {
+        defendant: tile.getAttribute("data-defendant") || "Стример",
+        crime: tile.getAttribute("data-crime") || "",
+        context: tile.getAttribute("data-context") || "",
+      }).then((ok) => {
+        Desk.say(deckStatus, ok ? "Дело открыто." : "Суд занят или нет связи.");
+      });
+    });
+  });
+
+  btnGavel.addEventListener("click", () => {
+    sendAction("animation", { name: "slam" });
+    post("/api/say", { text: "Суд слушает!" }).then((ok) => {
+      if (!ok) Desk.say(deckStatus, "Молоток не долетел: проверьте секрет.");
+    });
+  });
 
   btnPanic.addEventListener("click", () => sendAction("panic", {}));
 
@@ -275,66 +269,19 @@ namespace Desk {
     }
   });
 
-  settingsForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const num = (input: HTMLInputElement): number | null => {
-      const raw = input.value.trim();
-      if (raw === "") return null;
-      const parsed = Number(raw);
-      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-    };
-    const mins: Record<string, number> = {};
-    const rub = num(minRub);
-    const usd = num(minUsd);
-    const eur = num(minEur);
-    const bits = num(minBits);
-    if (rub !== null) mins["RUB"] = rub;
-    if (usd !== null) mins["USD"] = usd;
-    if (eur !== null) mins["EUR"] = eur;
-    if (bits !== null) mins["BITS"] = bits;
-    const fallback = num(minDefault);
-    const body: Record<string, unknown> = {
-      min_amounts: mins,
-      punishments: Desk.splitLines(punishmentsInput.value),
-    };
-    if (fallback !== null) body["default_min"] = fallback;
-    fetch("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify(body),
-    })
-      .then((res) => {
-        Desk.say(settingsStatus, res.ok ? "Записано в реестр." : "Не записано: проверьте секрет.");
-      })
-      .catch(() => {
-        Desk.say(settingsStatus, "Нет связи с сервером.");
-      });
-  });
+  function forceVerdict(guilty: boolean): void {
+    post("/api/verdict", { guilty }).then((ok) => {
+      Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет голосования или нет связи.");
+    });
+  }
 
-  profileForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    fetch("/api/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({
-        name: profileName.value.trim(),
-        titles: Desk.splitList(profileTitles.value),
-        traits: Desk.splitList(profileTraits.value),
-        running_gags: Desk.splitList(profileGags.value),
-        mercy: profileMercy.value.trim(),
-      }),
-    })
-      .then((res) => {
-        Desk.say(profileStatus, res.ok ? "Портрет обновлен." : "Не сохранено: проверьте секрет.");
-      })
-      .catch(() => {
-        Desk.say(profileStatus, "Нет связи с сервером.");
-      });
-  });
+  btnForceGuilty.addEventListener("click", () => forceVerdict(true));
+  btnForceInnocent.addEventListener("click", () => forceVerdict(false));
 
   const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
   if (backdrop) Backdrop.mount(backdrop);
   const gooey = document.getElementById("gooey-nav");
   if (gooey) GooeyNav.mount(gooey);
   connect();
+  window.setInterval(pollStatus, 2000);
 })();

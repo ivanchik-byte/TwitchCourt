@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Stream Tribunal Overlay</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+  <div id="stage">
+    <div id="case-teaser" class="hidden">
+      <div id="teaser-folder">ДЕЛО №<span id="teaser-num">404</span></div>
+      <div id="teaser-bar"><div id="teaser-fill"></div></div>
+      <div id="teaser-caption">Дело формируется...</div>
+    </div>
+
+    <div id="court" class="hidden">
+      <div id="prosecutor">
+        <div id="bust">
+          <div id="hair"></div>
+          <div id="face">
+            <div class="eye left"></div>
+            <div class="eye right"></div>
+            <div id="mouth"></div>
+          </div>
+          <div id="suit"></div>
+          <div id="arm"></div>
+        </div>
+      </div>
+
+      <div id="docket">
+        <div id="case-no">ДЕЛО №404</div>
+        <div id="charge">Зал суда готов</div>
+        <div id="subtitles" aria-live="off"></div>
+      </div>
+
+      <div id="gauge" class="hidden">
+        <div id="gauge-guilty"><span id="gauge-guilty-n">0</span></div>
+        <div id="gauge-timer">30</div>
+        <div id="gauge-innocent"><span id="gauge-innocent-n">0</span></div>
+      </div>
+    </div>
+
+    <div id="objection" class="hidden">ПРОТЕСТУЮ!</div>
+    <div id="verdict" class="hidden"><span id="verdict-text">ВИНОВЕН</span></div>
+  </div>
+
+  <script src="overlay.js"></script>
+</body>
+</html>

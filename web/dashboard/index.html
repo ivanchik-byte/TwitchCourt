@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal · Канцелярия суда</title>
+  <title>Stream Tribunal · Пульт</title>
   <link rel="stylesheet" href="dashboard.css">
   <link rel="stylesheet" href="gooey.css">
 </head>
@@ -11,7 +11,7 @@
   <canvas id="bg-canvas" aria-hidden="true"></canvas>
   <nav class="gooey-nav" id="gooey-nav" aria-label="Разделы">
     <ul>
-      <li class="active"><a href="/" data-page="desk">Дело</a></li>
+      <li class="active"><a href="/" data-page="desk">Пульт</a></li>
       <li><a href="/settings" data-page="settings">Настройки</a></li>
       <li><a href="/modes" data-page="modes">Режимы</a></li>
     </ul>
@@ -19,69 +19,59 @@
   <div class="ledger">
     <header class="masthead">
       <div class="masthead-title">
-        <p class="overline">Реестр №404 · открыто</p>
-        <h1>Stream Tribunal</h1>
-        <p class="subline">Канцелярия суда над стримером</p>
+        <p class="overline">Реестр №404 · пульт</p>
+        <h1>Пульт трибунала</h1>
+        <p class="subline">Быстрые руки, громкий молоток</p>
       </div>
       <div class="masthead-status">
-        <p class="docket-line">Связь: <span id="ws-label">Подключение...</span> <span id="ws-dot" class="dot" aria-hidden="true"></span></p>
-        <p class="docket-line">Состояние суда: <span id="current-state" class="state-badge">Ожидание</span></p>
-        <p class="docket-line">Дело: <span id="active-case-title">Нет активного дела</span></p>
+        <p class="docket-line"><span id="ws-dot" class="dot" aria-hidden="true"></span> <span id="ws-label">Подключение...</span></p>
+        <div class="meter-wrap">
+          <div class="meter-head"><span>Терпение трибунала</span><span id="meter-num">0%</span></div>
+          <div class="meter-bar"><div id="meter-fill"></div></div>
+        </div>
         <div class="masthead-keys">
           <input type="password" id="secret-input" placeholder="Секрет" autocomplete="off">
-          <a class="btn btn-ghost" href="/settings">Настройки</a>
-          <button type="button" id="btn-panic" class="btn btn-seal">Сбросить суд</button>
+          <button type="button" id="btn-panic" class="btn btn-seal">Мьют (F12)</button>
         </div>
       </div>
     </header>
 
     <main class="folio">
-      <section class="article article-wide" id="court-feed-wrap" aria-labelledby="feed-heading">
+      <section class="article" aria-labelledby="deck-heading">
+        <p class="overline">Быстрый вызов</p>
+        <h2 id="deck-heading">Открыть дело</h2>
+        <div class="deck">
+          <button type="button" class="tile" data-defendant="Стример" data-crime="Купание в лаве с полным инвентарем" data-context="Чат: опять в лаву!">Лава</button>
+          <button type="button" class="tile" data-defendant="Стример" data-crime="Взрыв на крипере у порога дома" data-context="Чат: крипер подкрался сзади!">Крипер</button>
+          <button type="button" class="tile" data-defendant="Стример" data-crime="Слив клатча один в один" data-context="Чат: клатч был твой!">Клатч</button>
+          <button type="button" class="tile" data-defendant="Стример" data-crime="Опоздание на стрим на 40 минут без предупреждения" data-context="Чат: где стрим?">Опоздание</button>
+        </div>
+        <button type="button" id="btn-gavel" class="btn btn-gavel">Молоток · «Суд слушает!»</button>
+        <p id="deck-status" class="footnote" aria-live="polite"></p>
+      </section>
+
+      <section class="article hidden" id="trial-box" aria-labelledby="trial-heading">
+        <p class="overline">Идет заседание</p>
+        <h2 id="trial-heading">Активный суд</h2>
+        <p id="active-case-title" class="case-line">Нет активного дела</p>
+        <p class="trial-timer"><span id="vote-timer">--</span></p>
+        <div class="trial-gauge">
+          <div class="trial-bar guilty" id="vote-guilty-bar"><span id="vote-guilty-n">0</span></div>
+          <div class="trial-bar innocent" id="vote-innocent-bar"><span id="vote-innocent-n">0</span></div>
+        </div>
+        <div class="trial-verdict-row">
+          <button type="button" id="btn-force-guilty" class="btn btn-danger">Виновен</button>
+          <button type="button" id="btn-force-innocent" class="btn btn-success">Оправдать</button>
+        </div>
+        <p id="trial-status" class="footnote" aria-live="polite"></p>
+      </section>
+
+      <section class="article article-wide" aria-labelledby="feed-heading">
         <p class="overline">Телеметрия</p>
         <h2 id="feed-heading">Лента событий</h2>
         <ul id="event-feed" class="event-feed" aria-live="polite">
-          <li class="feed-empty">Пока тихо. Откройте дело или киньте тестовый донат.</li>
+          <li class="feed-empty">Пока тихо. Откройте дело плиткой выше.</li>
         </ul>
-      </section>
-
-      <section class="article" id="article-settings" aria-labelledby="settings-heading">
-        <p class="overline">Статья вторая</p>
-        <h2 id="settings-heading">Настройки суда</h2>
-        <form id="settings-form">
-          <h3>Пороги доната для суда</h3>
-          <div class="row">
-            <label class="field"><span>RUB</span><input type="number" id="min-rub" min="0" step="1"></label>
-            <label class="field"><span>USD</span><input type="number" id="min-usd" min="0" step="1"></label>
-            <label class="field"><span>EUR</span><input type="number" id="min-eur" min="0" step="1"></label>
-            <label class="field"><span>BITS</span><input type="number" id="min-bits" min="0" step="1"></label>
-            <label class="field"><span>Остальные</span><input type="number" id="min-default" min="0" step="1"></label>
-          </div>
-          <h3>Наказания <small>(по одному на строку, выпадает за «виновен»)</small></h3>
-          <label class="field">
-            <span class="visually-hidden">Наказания</span>
-            <textarea id="punishments-input" rows="4"></textarea>
-          </label>
-          <button type="submit" class="btn btn-verdict">Сохранить настройки</button>
-        </form>
-        <p id="settings-status" class="footnote" aria-live="polite"></p>
-
-        <hr class="rule">
-
-        <h3>Портрет стримера</h3>
-        <form id="profile-form">
-          <label class="field"><span>Имя</span><input type="text" id="profile-name" placeholder="Стример"></label>
-          <label class="field"><span>Титулы (через запятую)</span><input type="text" id="profile-titles"></label>
-          <label class="field"><span>Черты (через запятую)</span><input type="text" id="profile-traits"></label>
-          <label class="field"><span>Дежурные мемы (через запятую)</span><input type="text" id="profile-gags"></label>
-          <label class="field"><span>Строгость суда</span><input type="text" id="profile-mercy"></label>
-          <button type="submit" class="btn">Сохранить портрет</button>
-        </form>
-        <p id="profile-status" class="footnote" aria-live="polite"></p>
-
-        <hr class="rule">
-
-        <h3>Ключи интеграций</h3>
-        <p class="footnote">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются: DonationAlerts: токен виджета (<code>DONATE_TOKEN</code>), DonatePay: API-ключ (<code>DONATEPAY_API_KEY</code>), Twitch: токен (<code>TWITCH_TOKEN</code>) плюс <code>client_id</code> и <code>broadcaster_id</code> в конфиге.</p>
       </section>
     </main>
 
