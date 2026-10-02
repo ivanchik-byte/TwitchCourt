@@ -35,6 +35,7 @@ courtroom:
   title: "Инквизитор Твича"
   sue_threshold: 5
   voting_duration_sec: 25
+  defense_sec: 20
   cooldown_min: 10
   punishments:
     - "10 приседаний в прямом эфире"
@@ -74,3 +75,7 @@ twitch:
   channel: ""
   nick: "tribunal_bot"
   token: ""
+  client_id: ""
+  broadcaster_id: ""
+  # moderator_id defaults to broadcaster_id; token needs
+  # moderator:read:unban_requests + moderator:manage:unban_requests for Unban Court

@@ -54,7 +54,7 @@ func NewClient(cfg config.AIConfig) *Client {
 	client := &Client{
 		cfg:        cfg,
 		endpoint:   endpoint,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 90 * time.Second},
 		isMock:     cfg.APIKey == "" && cfg.Provider != "ollama",
 	}
 
@@ -65,6 +65,10 @@ func (c *Client) StreamCompletion(ctx context.Context, messages []ChatMessage, o
 	if c.isMock {
 		return c.simulateStream(ctx, onDelta)
 	}
+
+	// bound every completion: caller cancel (panic button) still wins
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 
 	reqBody := ChatCompletionRequest{
 		Model:       c.cfg.Model,

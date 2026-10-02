@@ -48,6 +48,9 @@ func main() {
 	aiClient := ai.NewClient(cfg.AI)
 	recall := memory.NewStore(cfg.Game.MemoryPath)
 
+	unbanCourt := bot.NewUnbanClient(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, cfg.Twitch.ModeratorID)
+	unbanBoard := newUnbanBoard()
+
 	var engine *court.Engine
 
 	limiter := newActionLimiter(500 * time.Millisecond)
@@ -120,6 +123,20 @@ func main() {
 				}
 				recall.AddSueCall(sueReq.Author)
 				engine.AddChatComment(sueReq.Author, "!sue")
+			}
+		case "defense":
+			var defReq struct {
+				Author string `json:"author"`
+				Text   string `json:"text"`
+			}
+			if err := json.Unmarshal(payload, &defReq); err == nil {
+				if defReq.Author == "" {
+					defReq.Author = "стример"
+				}
+				if !limiter.allow("defense:" + defReq.Author) {
+					return
+				}
+				engine.AddDefense(defReq.Author, defReq.Text)
 			}
 		case "animation":
 			var animReq struct {
@@ -202,6 +219,9 @@ func main() {
 		}
 		// queue donation as testimony during active trial instead of competing
 		if engine.AddWitness(donor, d.Amount, d.Currency, d.Message) {
+			if isBribe(d.Message) {
+				engine.AddBribe(donor, d.Amount, d.Currency)
+			}
 			return
 		}
 		openDonationTrial(donor, event)
@@ -256,6 +276,7 @@ func main() {
 			Defendant string `json:"defendant"`
 			Crime     string `json:"crime"`
 			Context   string `json:"context"`
+			Viewer    bool   `json:"viewer"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -264,8 +285,14 @@ func main() {
 		if req.Defendant == "" {
 			req.Defendant = cfg.Game.StreamerName
 		}
-		if err := engine.StartTrial(req.Defendant, req.Crime, req.Context); err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+		var trialErr error
+		if req.Viewer {
+			trialErr = engine.StartViewerTrial(req.Defendant, req.Crime)
+		} else {
+			trialErr = engine.StartTrial(req.Defendant, req.Crime, req.Context)
+		}
+		if trialErr != nil {
+			http.Error(w, trialErr.Error(), http.StatusConflict)
 			return
 		}
 		pacing.MarkTrial(time.Now())
@@ -344,6 +371,43 @@ func main() {
 			"trials": recall.RecentTrials(10),
 			"top":    recall.TopAccusers(5),
 		})
+	})
+
+	mux.HandleFunc("/api/unban", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"requests": unbanBoard.list()})
+	})
+
+	mux.HandleFunc("/api/unban/resolve", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			ID      string `json:"id"`
+			Approve bool   `json:"approve"`
+			Text    string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		if err := unbanCourt.Resolve(ctx, req.ID, req.Approve, req.Text); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		unbanBoard.refresh(context.Background(), unbanCourt)
+		w.WriteHeader(http.StatusAccepted)
 	})
 
 	mux.HandleFunc("/api/judge/photo", func(w http.ResponseWriter, r *http.Request) {
@@ -585,6 +649,10 @@ func main() {
 		go bitsWatcher.Run(gameCtx)
 		log.Println("twitch bits watcher started")
 	}
+	if cfg.Twitch.Token != "" && cfg.Twitch.ClientID != "" && cfg.Twitch.BroadcasterID != "" {
+		go unbanBoard.watch(gameCtx, unbanCourt)
+		log.Println("unban court watcher started")
+	}
 
 	var chat *bot.TwitchIRC
 	chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, func(cmd bot.ChatCommand) {
@@ -604,6 +672,15 @@ func main() {
 		case bot.CommandCrime:
 			if cmd.Argument != "" {
 				engine.AddChatComment(cmd.Author, "!crime "+cmd.Argument)
+				if err := engine.StartViewerTrial(cmd.Author, cmd.Argument); err == nil {
+					pacing.MarkTrial(time.Now())
+					sueTracker.MarkTrial(time.Now())
+					chat.SendMessage("Зритель " + cmd.Author + " сам сел на скамью. Доносы принимаются: !snitch <текст>")
+				}
+			}
+		case bot.CommandSnitch:
+			if cmd.Argument != "" {
+				engine.AddChatComment(cmd.Author, "!snitch "+cmd.Argument)
 			}
 		default:
 			engine.AddChatComment(cmd.Author, cmd.Argument)
@@ -623,6 +700,10 @@ func main() {
 			text += " " + twist
 		}
 		chat.SendMessage(text)
+	}
+
+	engine.TimeoutHook = func(user string, secs int, reason string) {
+		chat.Timeout(user, secs)
 	}
 
 	engine.SetPunishments(cfg.Courtroom.Punishments)
@@ -689,6 +770,11 @@ func checkSecret(cfg *config.Config, got string) bool {
 		return true
 	}
 	return got != "" && got == cfg.Server.Secret
+}
+
+// isBribe spots donor money marked as a judge payoff
+func isBribe(message string) bool {
+	return strings.Contains(strings.ToLower(message), "взятк")
 }
 
 var judgePhotoExts = map[string]bool{
@@ -770,6 +856,49 @@ func checkHTTPAuth(cfg *config.Config, r *http.Request) bool {
 		return true
 	}
 	return r.URL.Query().Get("secret") != "" && r.URL.Query().Get("secret") == cfg.Server.Secret
+}
+
+// unbanBoard caches pending pardon appeals between Helix polls
+type unbanBoard struct {
+	mu    sync.Mutex
+	items []bot.UnbanRequest
+}
+
+func newUnbanBoard() *unbanBoard {
+	return &unbanBoard{}
+}
+
+func (b *unbanBoard) list() []bot.UnbanRequest {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]bot.UnbanRequest, len(b.items))
+	copy(out, b.items)
+	return out
+}
+
+func (b *unbanBoard) refresh(ctx context.Context, court *bot.UnbanClient) {
+	items, err := court.FetchPending(ctx)
+	if err != nil {
+		log.Printf("unban court refresh: %v", err)
+		return
+	}
+	b.mu.Lock()
+	b.items = items
+	b.mu.Unlock()
+}
+
+func (b *unbanBoard) watch(ctx context.Context, court *bot.UnbanClient) {
+	b.refresh(ctx, court)
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			b.refresh(ctx, court)
+		}
+	}
 }
 
 type actionLimiter struct {

@@ -61,6 +61,7 @@ type CourtroomConfig struct {
 	Title             string   `yaml:"title"`
 	SueThreshold      int      `yaml:"sue_threshold"`
 	VotingDurationSec int      `yaml:"voting_duration_sec"`
+	DefenseSec        int      `yaml:"defense_sec"`
 	CooldownMin       int      `yaml:"cooldown_min"`
 	Punishments       []string `yaml:"punishments"`
 }
@@ -109,6 +110,7 @@ type TwitchConfig struct {
 	Token         string `yaml:"token"`
 	ClientID      string `yaml:"client_id"`
 	BroadcasterID string `yaml:"broadcaster_id"`
+	ModeratorID   string `yaml:"moderator_id"`
 }
 
 func DefaultConfig() *Config {
@@ -156,6 +158,7 @@ func DefaultConfig() *Config {
 			Title:             "Инквизитор Твича",
 			SueThreshold:      5,
 			VotingDurationSec: 25,
+			DefenseSec:        20,
 			CooldownMin:       10,
 			Punishments: []string{
 				"10 приседаний в прямом эфире",
@@ -239,6 +242,9 @@ func LoadConfig(path string) (*Config, error) {
 	if secret := os.Getenv("TRIBUNAL_SECRET"); secret != "" && cfg.Server.Secret == "" {
 		cfg.Server.Secret = secret
 	}
+	if cfg.Twitch.ModeratorID == "" {
+		cfg.Twitch.ModeratorID = cfg.Twitch.BroadcasterID
+	}
 
 	switch cfg.TTS.Engine {
 	case "edge", "piper", "mock", "silero":
@@ -268,6 +274,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Courtroom.JudgeName == "" {
 		cfg.Courtroom.JudgeName = "Судья"
+	}
+	if cfg.Courtroom.DefenseSec <= 0 {
+		cfg.Courtroom.DefenseSec = 20
 	}
 
 	return cfg, nil

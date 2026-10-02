@@ -124,4 +124,71 @@
   const gooey = document.getElementById("gooey-nav");
   if (gooey && typeof GooeyNav !== "undefined") GooeyNav.mount(gooey);
   connect();
+
+  interface UnbanRequest {
+    ID: string;
+    UserID: string;
+    UserLogin: string;
+    UserName: string;
+    Text: string;
+    CreatedAt: string;
+  }
+
+  const unbanList = document.getElementById("unban-list");
+
+  function resolveUnban(id: string, approve: boolean): void {
+    fetch("/api/unban/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ id, approve }),
+    })
+      .then((res) => {
+        if (res.ok) loadUnban();
+      })
+      .catch(() => undefined);
+  }
+
+  function loadUnban(): void {
+    if (!unbanList) return;
+    fetch("/api/unban")
+      .then((res) => res.json())
+      .then((data: { requests?: UnbanRequest[] }) => {
+        while (unbanList.firstChild) unbanList.firstChild.remove();
+        const items = (data && data.requests) || [];
+        if (items.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "feed-empty";
+          empty.textContent = "Заявок нет. Нужен токен модератора в конфиге.";
+          unbanList.appendChild(empty);
+          return;
+        }
+        items.forEach((req) => {
+          const item = document.createElement("li");
+          const name = document.createElement("strong");
+          name.textContent = req.UserName || req.UserLogin || req.UserID;
+          item.appendChild(name);
+          item.appendChild(document.createTextNode(": " + (req.Text || "без текста")));
+          const row = document.createElement("div");
+          row.className = "presets";
+          const pardon = document.createElement("button");
+          pardon.type = "button";
+          pardon.className = "chip";
+          pardon.textContent = "Помиловать";
+          pardon.addEventListener("click", () => resolveUnban(req.ID, true));
+          const punish = document.createElement("button");
+          punish.type = "button";
+          punish.className = "chip";
+          punish.textContent = "Казнить";
+          punish.addEventListener("click", () => resolveUnban(req.ID, false));
+          row.appendChild(pardon);
+          row.appendChild(punish);
+          item.appendChild(row);
+          unbanList.appendChild(item);
+        });
+      })
+      .catch(() => undefined);
+  }
+
+  loadUnban();
+  window.setInterval(loadUnban, 30000);
 })();

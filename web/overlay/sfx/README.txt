@@ -1,10 +1,9 @@
 Ace Attorney SFX samples live here. Files are loaded by name, missing files are skipped silently.
 
-Expected files (MP3 or WAV, keep the total under ~500 KB):
-  objection.mp3 — the "ПРОТЕСТУЮ!" shout, played on [objection] tags.
-  gavel.mp3     — wooden gavel hit, played on [slam] tags and verdicts.
+Shipped files (keep the total under ~500 KB):
+  gavel.mp3     — single powerful gavel hit, played on [slam] tags.
+  verdict.mp3   — triple gavel knock ("silence in the hall"), played on verdicts.
+  objection.mp3 — the "OBJECTION!" shout, played on [objection] tags.
+  crowd.mp3     — hushed courtroom crowd bed, looped quietly under trials.
   typewriter.mp3 — short loop under the indictment subtitles (optional).
   bgm.mp3       — tense courtroom loop, starts with the trial, stops on idle (optional).
-
-Generate the shouts with ElevenLabs free tier at max drama settings,
-rip the gavel/typewriter from any royalty-free pack.

@@ -43,17 +43,17 @@
             <p>Подсудимый всегда стример. Донаты, !sue и смерти в игре открывают дело.</p>
             <p class="mode-badge">Активен</p>
           </article>
-          <article class="mode-card locked">
+          <article class="mode-card active">
             <p class="mode-tag">Режим 02</p>
             <h3>Суд над зрителем</h3>
-            <p>Подсудимый выбирается командой !crime. Наказание — шуточный таймаут.</p>
-            <p class="mode-badge">Скоро</p>
+            <p>Зритель пишет !crime &lt;проступок&gt;, чат доносит через !snitch. Виновного ждёт мут на 90 секунд.</p>
+            <p class="mode-badge">Активен</p>
           </article>
-          <article class="mode-card locked">
+          <article class="mode-card active">
             <p class="mode-tag">Режим 03</p>
             <h3>Unban-суд</h3>
-            <p>Разбор заявок на разбан с голосованием зрителей.</p>
-            <p class="mode-badge">Скоро</p>
+            <p>Заявки на разбан из Twitch. Кнопка пишет решение сразу в Helix.</p>
+            <p class="mode-badge">Активен</p>
           </article>
         </div>
       </section>
@@ -109,6 +109,14 @@
           <button type="submit" class="btn">Отправить тестовый донат</button>
         </form>
         <p id="donate-status" class="footnote" aria-live="polite"></p>
+      </section>
+
+      <section class="article article-wide" id="article-unban" aria-labelledby="unban-heading">
+        <p class="overline">Режим 03 · апелляции</p>
+        <h2 id="unban-heading">Unban-суд</h2>
+        <ul id="unban-list" class="event-feed" aria-live="polite">
+          <li class="feed-empty">Заявок нет. Нужен токен модератора в конфиге.</li>
+        </ul>
       </section>
     </main>
 

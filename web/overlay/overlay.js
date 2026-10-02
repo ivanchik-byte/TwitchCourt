@@ -155,14 +155,17 @@
         }
     }
     function deskSlam() {
+        slamVisual();
+        thump();
+        playSfx("gavel.mp3");
+    }
+    function slamVisual() {
         prosecutor.classList.remove("slam");
         void prosecutor.offsetWidth;
         prosecutor.classList.add("slam");
         stage.classList.remove("shake");
         void stage.offsetWidth;
         stage.classList.add("shake");
-        thump();
-        playSfx("gavel.mp3");
         window.setTimeout(() => stage.classList.remove("shake"), 300);
     }
     function showObjection() {
@@ -189,9 +192,10 @@
         verdict.classList.remove("drop");
         void verdict.offsetWidth;
         verdict.classList.add("drop");
+        stopCrowd();
+        slamVisual();
         thump();
-        playSfx("gavel.mp3");
-        deskSlam();
+        playSfx("verdict.mp3");
     }
     function hideVerdict() {
         verdict.classList.add("hidden");
@@ -232,10 +236,37 @@
             /* no sample yet */
         }
     }
+    // Hushed crowd bed under the trial, cut on verdict for silence in the hall.
+    let crowd = null;
+    function startCrowd() {
+        try {
+            if (!crowd) {
+                crowd = new Audio("sfx/crowd.mp3");
+                crowd.loop = true;
+                crowd.volume = 0.6;
+            }
+            void crowd.play().catch(() => undefined);
+        }
+        catch {
+            /* no sample yet */
+        }
+    }
+    function stopCrowd() {
+        try {
+            if (crowd) {
+                crowd.pause();
+                crowd.currentTime = 0;
+            }
+        }
+        catch {
+            /* no sample yet */
+        }
+    }
     function resetStage() {
         currentStageState = "idle";
         window.clearTimeout(briefCourtTimer);
         stopAudio();
+        stopCrowd();
         court.classList.add("hidden");
         gauge.classList.add("hidden");
         hideVerdict();
@@ -266,12 +297,14 @@
                 currentStageState = state;
                 if (state === "idle") {
                     stopBgm();
+                    stopCrowd();
                     resetStage();
                 }
                 else {
                     window.clearTimeout(briefCourtTimer);
                     court.classList.remove("hidden");
                     startBgm();
+                    startCrowd();
                     hideVerdict();
                     if (msg.payload.case_title)
                         caseNo.textContent = msg.payload.case_title;

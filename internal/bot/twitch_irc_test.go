@@ -17,6 +17,7 @@ func TestParseChatLine(t *testing.T) {
 		{"ivan", "!guilty", CommandGuilty, ""},
 		{"ivan", "!innocent", CommandInnocent, ""},
 		{"ivan", "!crime украл алмазы", CommandCrime, "украл алмазы"},
+		{"ivan", "!snitch он сидит на другом стриме", CommandSnitch, "он сидит на другом стриме"},
 		{"ivan", "просто коммент", CommandChat, "просто коммент"},
 	}
 	for _, c := range cases {
@@ -42,6 +43,19 @@ func TestParsePrivMsg(t *testing.T) {
 
 	if _, _, ok := parsePrivMsg("PING :tmi.twitch.tv"); ok {
 		t.Fatal("PING must not parse as privmsg")
+	}
+}
+
+func TestTimeoutCommand(t *testing.T) {
+	irc := NewTwitchIRC("channel", "bot", "token", func(ChatCommand) {})
+	irc.Timeout("troll", 90)
+	select {
+	case msg := <-irc.sendCh:
+		if msg != "/timeout troll 90" {
+			t.Fatalf("bad timeout command: %q", msg)
+		}
+	default:
+		t.Fatal("timeout must queue a message")
 	}
 }
 

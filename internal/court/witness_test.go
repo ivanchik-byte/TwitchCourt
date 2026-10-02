@@ -3,9 +3,13 @@ package court
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"stream-tribunal/internal/ai"
+	"stream-tribunal/internal/audio"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/memory"
+	"stream-tribunal/internal/obs"
 	"stream-tribunal/internal/safety"
 )
 
@@ -120,6 +124,53 @@ func TestSsmlBreakStrippedForDisplay(t *testing.T) {
 	}
 }
 
+func TestAddDefenseWindow(t *testing.T) {
+	e := newWitnessEngine()
+	if e.AddDefense("streamer", "я не виноват") {
+		t.Fatal("idle court must reject defense")
+	}
+
+	e.state = StateDefense
+	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	if !e.AddDefense("streamer", "я не виноват, кот всё видел") {
+		t.Fatal("defense window must accept speech")
+	}
+	if !strings.Contains(e.currCase.Defense, "кот") {
+		t.Fatalf("defense not stored: %q", e.currCase.Defense)
+	}
+	if e.AddDefense("streamer", "   ") {
+		t.Fatal("empty defense must be rejected")
+	}
+
+	e.state = StateVoting
+	if e.AddDefense("streamer", "опоздал") {
+		t.Fatal("voting court must reject defense")
+	}
+}
+
+func TestAddDefenseCapsLength(t *testing.T) {
+	e := newWitnessEngine()
+	e.state = StateDefense
+	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	if !e.AddDefense("streamer", strings.Repeat("слово ", 300)) {
+		t.Fatal("long defense must attach")
+	}
+	if got := len([]rune(e.currCase.Defense)); got > maxDefenseRunes+3 {
+		t.Fatalf("defense over cap: %d runes", got)
+	}
+}
+
+func TestFallbackDefense(t *testing.T) {
+	e := newWitnessEngine()
+	if got := e.fallbackDefense(); got != "молчит как партизан" {
+		t.Fatalf("empty transcript fallback: %q", got)
+	}
+	e.recall.AddComment("ivan", "он точно сам в лаву прыгнул")
+	if got := e.fallbackDefense(); !strings.Contains(got, "ivan") {
+		t.Fatalf("fallback misses chat: %q", got)
+	}
+}
+
 func TestCastVoiceMapping(t *testing.T) {
 	e := newWitnessEngine()
 	e.cfg = config.DefaultConfig()
@@ -132,5 +183,78 @@ func TestCastVoiceMapping(t *testing.T) {
 	}
 	if got := e.castVoice("ru-RU-DmitryNeural", ""); got != "ru-RU-DmitryNeural" {
 		t.Fatalf("empty silero speaker must fall back, got %q", got)
+	}
+}
+
+func TestStartViewerTrialBusy(t *testing.T) {
+	e := newWitnessEngine()
+	e.state = StateVoting
+	if err := e.StartViewerTrial("ivan", "спит на стриме"); err == nil {
+		t.Fatal("busy court must reject viewer trial")
+	}
+}
+
+// guilty viewer verdict must fire the chat-jail hook end to end
+func TestViewerTrialTimeoutEndToEnd(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Courtroom.DefenseSec = 1
+	cfg.Courtroom.VotingDurationSec = 2
+	voice, _ := audio.NewPiperDaemon(cfg.TTS)
+	e := NewEngine(cfg, obs.NewHub(nil), ai.NewClient(cfg.AI), voice, safety.NewFilter(nil))
+	e.AttachMemory(memory.NewStore(""))
+	e.SetPunishments([]string{"присесть 10 раз"})
+
+	timedOut := make(chan string, 1)
+	e.TimeoutHook = func(user string, secs int, reason string) {
+		if secs != 90 {
+			t.Errorf("jail term must be 90s, got %d", secs)
+		}
+		timedOut <- user
+	}
+
+	if err := e.StartViewerTrial("troll", "спит на стриме"); err != nil {
+		t.Fatalf("viewer trial rejected: %v", err)
+	}
+	waitState(t, e, StateVoting, 30*time.Second)
+	if !e.ForceVerdict(true) {
+		t.Fatal("force verdict rejected")
+	}
+	waitState(t, e, StateIdle, 30*time.Second)
+	select {
+	case got := <-timedOut:
+		if got != "troll" {
+			t.Fatalf("wrong user jailed: %q", got)
+		}
+	default:
+		t.Fatal("guilty viewer verdict must fire the timeout hook")
+	}
+}
+
+func waitState(t *testing.T, e *Engine, want State, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for e.GetState() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("never reached %q, stuck in %q", want, e.GetState())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestAddBribeOnce(t *testing.T) {
+	e := newWitnessEngine()
+	if e.AddBribe("ivan", 150, "RUB") {
+		t.Fatal("idle court must reject bribes")
+	}
+	e.state = StateIndictment
+	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	if !e.AddBribe("ivan", 150, "RUB") {
+		t.Fatal("active court must accept the first bribe")
+	}
+	if e.AddBribe("maria", 500, "RUB") {
+		t.Fatal("second bribe must be rejected")
+	}
+	if !e.currCase.Bribed {
+		t.Fatal("bribe flag not set")
 	}
 }

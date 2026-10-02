@@ -23,6 +23,7 @@ const (
 	CommandGuilty   = "guilty"
 	CommandInnocent = "innocent"
 	CommandCrime    = "crime"
+	CommandSnitch   = "snitch"
 )
 
 func ParseChatLine(author, text string) ChatCommand {
@@ -37,6 +38,8 @@ func ParseChatLine(author, text string) ChatCommand {
 		return ChatCommand{Author: author, Kind: CommandInnocent}
 	case strings.HasPrefix(lower, "!crime"):
 		return ChatCommand{Author: author, Kind: CommandCrime, Argument: strings.TrimSpace(trimmed[len("!crime"):])}
+	case strings.HasPrefix(lower, "!snitch"):
+		return ChatCommand{Author: author, Kind: CommandSnitch, Argument: strings.TrimSpace(trimmed[len("!snitch"):])}
 	default:
 		return ChatCommand{Author: author, Kind: CommandChat, Argument: trimmed}
 	}
@@ -95,6 +98,11 @@ func (t *TwitchIRC) SendMessage(text string) {
 	case t.sendCh <- text:
 	default:
 	}
+}
+
+// Timeout puts a user into chat jail; the bot must moderate the channel
+func (t *TwitchIRC) Timeout(user string, secs int) {
+	t.SendMessage(fmt.Sprintf("/timeout %s %d", user, secs))
 }
 
 func (t *TwitchIRC) Run(ctx context.Context) {

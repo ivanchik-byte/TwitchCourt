@@ -508,4 +508,169 @@ var GooeyNav;
     if (gooey && typeof GooeyNav !== "undefined")
         GooeyNav.mount(gooey);
     connect();
+    const unbanList = document.getElementById("unban-list");
+    function resolveUnban(id, approve) {
+        fetch("/api/unban/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ id, approve }),
+        })
+            .then((res) => {
+            if (res.ok)
+                loadUnban();
+        })
+            .catch(() => undefined);
+    }
+    function loadUnban() {
+        if (!unbanList)
+            return;
+        fetch("/api/unban")
+            .then((res) => res.json())
+            .then((data) => {
+            while (unbanList.firstChild)
+                unbanList.firstChild.remove();
+            const items = (data && data.requests) || [];
+            if (items.length === 0) {
+                const empty = document.createElement("li");
+                empty.className = "feed-empty";
+                empty.textContent = "Заявок нет. Нужен токен модератора в конфиге.";
+                unbanList.appendChild(empty);
+                return;
+            }
+            items.forEach((req) => {
+                const item = document.createElement("li");
+                const name = document.createElement("strong");
+                name.textContent = req.UserName || req.UserLogin || req.UserID;
+                item.appendChild(name);
+                item.appendChild(document.createTextNode(": " + (req.Text || "без текста")));
+                const row = document.createElement("div");
+                row.className = "presets";
+                const pardon = document.createElement("button");
+                pardon.type = "button";
+                pardon.className = "chip";
+                pardon.textContent = "Помиловать";
+                pardon.addEventListener("click", () => resolveUnban(req.ID, true));
+                const punish = document.createElement("button");
+                punish.type = "button";
+                punish.className = "chip";
+                punish.textContent = "Казнить";
+                punish.addEventListener("click", () => resolveUnban(req.ID, false));
+                row.appendChild(pardon);
+                row.appendChild(punish);
+                item.appendChild(row);
+                unbanList.appendChild(item);
+            });
+        })
+            .catch(() => undefined);
+    }
+    loadUnban();
+    window.setInterval(loadUnban, 30000);
+})();
+"use strict";
+// Invisible defense mic: while the court is in the defense window,
+// the dashboard tab listens to the streamer via Web Speech API and
+// streams final transcripts to the server. No UI of its own: status
+// reuses the existing trial-status footnote when present.
+(function () {
+    const Impl = window.SpeechRecognition ||
+        window.webkitSpeechRecognition;
+    let ws = null;
+    let rec = null;
+    let defending = false;
+    let pending = "";
+    function status(text) {
+        const node = document.getElementById("trial-status");
+        if (node)
+            node.textContent = text;
+    }
+    function sendChunk() {
+        const text = pending.trim();
+        pending = "";
+        if (!text || !ws || ws.readyState !== WebSocket.OPEN)
+            return;
+        ws.send(JSON.stringify({ action: "defense", payload: { author: "стример", text } }));
+    }
+    function startMic() {
+        pending = "";
+        if (!Impl)
+            return;
+        try {
+            rec = new Impl();
+        }
+        catch {
+            return;
+        }
+        rec.lang = "ru-RU";
+        rec.continuous = true;
+        rec.interimResults = false;
+        rec.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const res = event.results[i];
+                if (res.isFinal) {
+                    pending += String(res[0].transcript) + " ";
+                    sendChunk();
+                }
+            }
+        };
+        // Chrome ends sessions on silence: resume while the window is open.
+        rec.onend = () => {
+            if (defending) {
+                try {
+                    rec.start();
+                }
+                catch {
+                    /* mic locked, chat quotes cover the defense */
+                }
+            }
+        };
+        try {
+            rec.start();
+        }
+        catch {
+            rec = null;
+            return;
+        }
+        status("Суд слушает защиту, говорите...");
+    }
+    function stopMic() {
+        defending = false;
+        if (rec) {
+            try {
+                rec.onend = null;
+                rec.stop();
+            }
+            catch {
+                /* already stopped */
+            }
+            rec = null;
+        }
+        sendChunk();
+    }
+    function connect() {
+        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(protocol + "//" + location.host + "/ws");
+        ws.onmessage = (event) => {
+            let msg;
+            try {
+                msg = JSON.parse(event.data);
+            }
+            catch {
+                return;
+            }
+            if (msg.type !== "state_change")
+                return;
+            const state = String((msg.payload && msg.payload.state) || "idle");
+            if (state === "defense" && !defending) {
+                defending = true;
+                startMic();
+            }
+            else if (state !== "defense" && defending) {
+                stopMic();
+            }
+        };
+        ws.onclose = () => {
+            window.setTimeout(connect, 2000);
+        };
+    }
+    connect();
 })();

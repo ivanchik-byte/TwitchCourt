@@ -17,6 +17,12 @@ func TestArchetypes(t *testing.T) {
 		if !strings.Contains(a.System, "35 слов") {
 			t.Fatalf("archetype %q misses brevity cap", a.Name)
 		}
+		if strings.Contains(a.System, "ProsodyDirection") {
+			t.Fatalf("archetype %q leaks Go code into prompt", a.Name)
+		}
+		if !strings.Contains(a.System, "АУДИО-РЕЖИССУРА") {
+			t.Fatalf("archetype %q misses prosody direction", a.Name)
+		}
 		if seen[a.Name] {
 			t.Fatalf("duplicate archetype %q", a.Name)
 		}

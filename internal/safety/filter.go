@@ -3,7 +3,6 @@ package safety
 import (
 	"fmt"
 	"html"
-	"math/rand"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ var defaultReplacements = []string{
 type Filter struct {
 	customBlacklist []string
 	compiledRegexes []*regexp.Regexp
+	replacement     string
 	mu              sync.RWMutex
 }
 
@@ -49,6 +49,23 @@ func (f *Filter) compile() {
 			f.compiledRegexes = append(f.compiledRegexes, re)
 		}
 	}
+
+	// one joke word for every match: it must not trigger any pattern,
+	// otherwise replacements cascade into each other (or loop forever)
+	f.replacement = ""
+	for _, candidate := range defaultReplacements {
+		banned := false
+		for _, re := range f.compiledRegexes {
+			if re.MatchString(candidate) {
+				banned = true
+				break
+			}
+		}
+		if !banned {
+			f.replacement = candidate
+			break
+		}
+	}
 }
 
 func (f *Filter) Sanitize(input string) string {
@@ -58,10 +75,8 @@ func (f *Filter) Sanitize(input string) string {
 	defer f.mu.RUnlock()
 
 	for _, re := range f.compiledRegexes {
-		for re.MatchString(cleaned) {
-			replacement := defaultReplacements[rand.Intn(len(defaultReplacements))]
-			cleaned = re.ReplaceAllString(cleaned, "${1}"+replacement+"${3}")
-		}
+		// single pass per pattern: f.replacement cannot re-trigger anything
+		cleaned = re.ReplaceAllString(cleaned, "${1}"+f.replacement+"${3}")
 	}
 
 	return html.EscapeString(cleaned)

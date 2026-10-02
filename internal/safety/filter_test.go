@@ -3,6 +3,7 @@ package safety
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFilterSanitize(t *testing.T) {
@@ -24,5 +25,25 @@ func TestFilterSanitize(t *testing.T) {
 	cleanNormal := filter.Sanitize("Обычное нормальное сообщение")
 	if cleanNormal != "Обычное нормальное сообщение" {
 		t.Errorf("expected unchanged message, got %s", cleanNormal)
+	}
+}
+
+// banned replacement words must terminate instead of looping forever
+func TestFilterSelfTrigger(t *testing.T) {
+	done := make(chan string, 1)
+	go func() {
+		filter := NewFilter([]string{"банан", "сыр", "пирожок", "крендель", "цензура"})
+		done <- filter.Sanitize("съел банан и сыр с цензурой")
+	}()
+	select {
+	case got := <-done:
+		lowered := strings.ToLower(got)
+		for _, banned := range []string{"банан", "сыр"} {
+			if strings.Contains(lowered, banned) {
+				t.Fatalf("banned word leaked: %q", got)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("sanitize hung on self-triggering replacement")
 	}
 }

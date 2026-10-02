@@ -42,6 +42,9 @@ type TrialCase struct {
 	Voters        map[string]bool
 	Witnesses     []Witness
 	Archetype     ai.Archetype
+	Defense       string
+	Viewer        string
+	Bribed        bool
 	forceVerdict  *bool
 }
 
@@ -59,6 +62,9 @@ const maxWitnessWeight = 3
 
 const maxWitnessMessageRunes = 140
 
+// maxDefenseRunes caps the streamer's live defense fed into the counter-prompt
+const maxDefenseRunes = 600
+
 type Engine struct {
 	cfg         *config.Config
 	hub         *obs.Hub
@@ -68,6 +74,8 @@ type Engine struct {
 	recall      *memory.Store
 	deck        *bot.Deck
 	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
+	// TimeoutHook jails a convicted viewer; wired to Twitch chat in main
+	TimeoutHook func(user string, secs int, reason string)
 	mu          sync.RWMutex
 	speakMu     sync.Mutex
 	state       State
@@ -158,6 +166,16 @@ func (e *Engine) TriggerPanic() {
 }
 
 func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
+	return e.startTrialWith(defendant, crime, chatContext, "")
+}
+
+// StartViewerTrial opens an opt-in viewer trial; a guilty verdict
+// puts the viewer into chat jail via TimeoutHook
+func (e *Engine) StartViewerTrial(viewer, crime string) error {
+	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
+}
+
+func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) error {
 	e.mu.Lock()
 	if e.state != StateIdle {
 		e.mu.Unlock()
@@ -174,6 +192,7 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 		ChatContext: e.filter.Sanitize(chatContext),
 		Voters:      make(map[string]bool),
 		Archetype:   archetype,
+		Viewer:      e.filter.Sanitize(viewer),
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
@@ -249,6 +268,15 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	case <-speechDone:
 	}
 
+	defense := e.runDefenseWindow(ctx, c)
+	if ctx.Err() != nil {
+		return
+	}
+	e.runObjection(ctx, c, chunkIndex+1, defense)
+	if ctx.Err() != nil {
+		return
+	}
+
 	// read queued testimony before voting starts
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
 		_ = e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
@@ -274,6 +302,116 @@ func (e *Engine) clearTrial() {
 	}
 }
 
+// runDefenseWindow opens the floor to the streamer and returns what was said
+func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
+	dur := e.cfg.Courtroom.DefenseSec
+	if dur <= 0 {
+		dur = 20
+	}
+	e.mu.Lock()
+	if e.state != StateIndictment || e.currCase != c {
+		e.mu.Unlock()
+		return ""
+	}
+	e.state = StateDefense
+	e.mu.Unlock()
+
+	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
+		State:       string(StateDefense),
+		TimeLeftSec: dur,
+	})
+
+	select {
+	case <-ctx.Done():
+		return ""
+	case <-time.After(time.Duration(dur) * time.Second):
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return c.Defense
+}
+
+// runObjection lets the prosecutor interrupt the streamer with a counter-punch
+func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int, defense string) {
+	e.mu.Lock()
+	if e.currCase != c {
+		e.mu.Unlock()
+		return
+	}
+	e.state = StateObjection
+	e.mu.Unlock()
+
+	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateObjection)})
+
+	if strings.TrimSpace(html.UnescapeString(defense)) == "" {
+		defense = e.fallbackDefense()
+	}
+	messages := []ai.ChatMessage{
+		{Role: "system", Content: c.Archetype.System},
+		{Role: "user", Content: ai.BuildCounterArgumentPrompt(defense)},
+	}
+	chunker := ai.NewSentenceChunker()
+	index := startIndex
+	_ = e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
+		for _, s := range chunker.Feed(delta) {
+			if err := e.speak(ctx, s, index, false,
+				e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate); err != nil {
+				return err
+			}
+			index++
+		}
+		return nil
+	})
+	if last := chunker.Flush(); last != nil {
+		_ = e.speak(ctx, *last, index, false,
+			e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate)
+	}
+}
+
+// fallbackDefense feeds recent chat lines when the streamer stayed silent
+func (e *Engine) fallbackDefense() string {
+	if e.recall == nil {
+		return "молчит как партизан"
+	}
+	lines := e.recall.RecentComments(3)
+	parts := make([]string, 0, len(lines))
+	for _, l := range lines {
+		author := l.Author
+		if author == "" {
+			author = "чат"
+		}
+		parts = append(parts, author+": "+html.UnescapeString(l.Text))
+	}
+	if len(parts) == 0 {
+		return "молчит как партизан"
+	}
+	return strings.Join(parts, " / ")
+}
+
+// AddDefense appends a line of the streamer's live defense; open only in the defense window
+func (e *Engine) AddDefense(author, text string) bool {
+	cleanAuthor := e.filter.Sanitize(author)
+	if cleanAuthor == "" {
+		cleanAuthor = "стример"
+	}
+	clean := e.filter.Sanitize(text)
+	if strings.TrimSpace(html.UnescapeString(clean)) == "" {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.state != StateDefense || e.currCase == nil {
+		return false
+	}
+	line := cleanAuthor + ": " + html.UnescapeString(clean)
+	if e.currCase.Defense != "" {
+		e.currCase.Defense += " / "
+	}
+	e.currCase.Defense = truncateRunes(e.currCase.Defense+line, maxDefenseRunes)
+	return true
+}
+
 var ssmlDisplayRe = regexp.MustCompile(`<break[^>]*/?>`)
 
 func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker string) error {
@@ -291,19 +429,24 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 		e.hub.BroadcastEvent(obs.EventAnimation, obs.AnimationPayload{Name: s.Animation})
 	}
 
+	// user input arrives escaped: unwrap entities before voice and display
+	// (break tags stay intact for Edge SSML, XSS is dead via textContent)
+	speechText := html.UnescapeString(s.Text)
+
 	// strip SSML pause tags from subtitle display
+	shown := strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(speechText, ""))
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
 		Speaker: speaker,
-		Text:    strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(s.Text, "")),
+		Text:    shown,
 	})
 
 	if e.recall != nil {
-		e.recall.AddSpeechLine(s.Text)
+		e.recall.AddSpeechLine(shown)
 	}
 
 	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	rawBytes, err := e.voice.Synthesize(synthCtx, s.Text)
+	rawBytes, err := e.voice.Synthesize(synthCtx, speechText)
 	if err != nil {
 		log.Printf("tts synthesis error: %v", err)
 		return nil
@@ -316,7 +459,7 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 	e.hub.BroadcastEvent(obs.EventAudioChunk, obs.AudioChunkPayload{
 		Index:       index,
 		AudioBase64: b64Audio,
-		Text:        s.Text,
+		Text:        shown,
 		IsLast:      isLast,
 	})
 
@@ -503,6 +646,17 @@ func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	return buildWitnessInterlude(c.Witnesses)
 }
 
+// AddBribe flags donor money; first bribe per trial wins
+func (e *Engine) AddBribe(donor string, amount float64, currency string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.state == StateIdle || e.currCase == nil || e.currCase.Bribed {
+		return false
+	}
+	e.currCase.Bribed = true
+	return true
+}
+
 // voice final ruling with the judge voice
 func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innocent int, penalty, twist string) {
 	prompt := ai.BuildVerdictSpeechPrompt(verdict, guilty, innocent)
@@ -539,11 +693,18 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	e.state = StateVerdict
 	weight := witnessWeight(c.Witnesses)
 	effectiveGuilty := c.GuiltyVotes + weight
-	isGuilty := effectiveGuilty > c.InnocentVotes
+	effectiveInnocent := c.InnocentVotes
+	if c.Bribed {
+		effectiveInnocent += 2
+	}
+	isGuilty := effectiveGuilty > effectiveInnocent
 	if c.forceVerdict != nil {
 		isGuilty = *c.forceVerdict
 	}
 	twist := ""
+	if c.Bribed {
+		twist = "Судья переобулся прямо в зале: взятка принята, весы качнулись к оправданию!"
+	}
 	if isGuilty && c.forceVerdict == nil && c.GuiltyVotes+c.InnocentVotes >= 5 &&
 		float64(c.GuiltyVotes)/float64(c.GuiltyVotes+c.InnocentVotes) >= 0.9 &&
 		rand.Intn(100) < 15 {
@@ -560,8 +721,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 	witnessCount := len(c.Witnesses)
 	defendant := c.Defendant
 	crime := c.Crime
+	viewer := html.UnescapeString(c.Viewer)
 	penalty := ""
-	if isGuilty && e.deck != nil {
+	if isGuilty && viewer != "" {
+		penalty = "одиночная камера: мут на 90 секунд"
+	} else if isGuilty && e.deck != nil {
 		penalty = e.deck.Draw()
 	}
 	e.mu.Unlock()
@@ -603,6 +767,9 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 
 	if e.VerdictHook != nil {
 		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes, twist)
+	}
+	if isGuilty && viewer != "" && e.TimeoutHook != nil {
+		e.TimeoutHook(viewer, 90, "Решение суда: "+penalty)
 	}
 
 	select {
