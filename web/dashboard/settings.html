@@ -72,10 +72,27 @@
             <label class="field"><span>Черты (через запятую)</span><input type="text" id="profile-traits"></label>
             <label class="field"><span>Дежурные мемы (через запятую)</span><input type="text" id="profile-gags"></label>
             <label class="field"><span>Строгость суда</span><input type="text" id="profile-mercy"></label>
-            <button type="submit" class="btn">Сохранить портрет</button>
-          </form>
-          <p id="profile-status" class="footnote" aria-live="polite"></p>
-        </section>
+          <button type="submit" class="btn">Сохранить портрет</button>
+        </form>
+        <p id="profile-status" class="footnote" aria-live="polite"></p>
+
+        <h3>Фото судьи</h3>
+        <p class="guide">Три состояния: обычное, злое, молоток. JPG/PNG/WebP до 5 МБ.</p>
+        <form id="judge-form">
+          <div class="row">
+            <label class="field"><span>Состояние</span>
+              <select id="judge-state">
+                <option value="normal">Обычное</option>
+                <option value="angry">Злое</option>
+                <option value="gavel">Молоток</option>
+              </select>
+            </label>
+            <label class="field"><span>Файл</span><input type="file" id="judge-file" accept="image/jpeg,image/png,image/webp"></label>
+          </div>
+          <button type="submit" class="btn">Загрузить фото</button>
+        </form>
+        <p id="judge-status" class="footnote" aria-live="polite"></p>
+      </section>
       </div>
 
       <div class="settings-view hidden" id="view-games">

@@ -168,6 +168,31 @@ namespace Settings {
       });
   });
 
+  const judgeForm = el("judge-form") as HTMLFormElement;
+  const judgeState = el("judge-state") as HTMLSelectElement;
+  const judgeFile = el("judge-file") as HTMLInputElement;
+  const judgeStatus = el("judge-status");
+
+  judgeForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!judgeFile.files || judgeFile.files.length === 0) {
+      say(judgeStatus, "Выбери файл.");
+      return;
+    }
+    const data = new FormData();
+    data.append("photo", judgeFile.files[0]);
+    fetch("/api/judge/photo?state=" + encodeURIComponent(judgeState.value), {
+      method: "POST",
+      body: data,
+    })
+      .then((res) => {
+        say(judgeStatus, res.ok ? "Фото судьи обновлено." : "Не сохранено: нужен секрет или другой файл.");
+      })
+      .catch(() => {
+        say(judgeStatus, "Нет связи с сервером.");
+      });
+  });
+
   // Настройка игры Minecraft и автопоиск latest.log
   const cardMinecraft = el("card-minecraft");
   const modalMinecraft = el("modal-minecraft");

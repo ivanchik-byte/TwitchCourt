@@ -143,6 +143,36 @@
             /* audio locked until first gesture */
         }
     }
+    const judgeFrame = el("judge-frame");
+    const judgeImg = el("judge");
+    let judgeTimer = 0;
+    // Short samples live in sfx/, missing files stay silent on purpose.
+    function playSfx(name) {
+        try {
+            const audio = new Audio("sfx/" + name);
+            audio.volume = 0.9;
+            void audio.play().catch(() => undefined);
+        }
+        catch {
+            /* no sample yet */
+        }
+    }
+    function setJudge(state, flashMs = 0) {
+        judgeImg.src = "/api/judge/photo?state=" + state + "&t=" + Date.now();
+        judgeFrame.classList.remove("angry", "bang");
+        void judgeFrame.offsetWidth;
+        if (state === "angry")
+            judgeFrame.classList.add("angry");
+        if (state === "gavel")
+            judgeFrame.classList.add("bang");
+        window.clearTimeout(judgeTimer);
+        if (flashMs > 0) {
+            judgeTimer = window.setTimeout(() => {
+                judgeFrame.classList.remove("angry", "bang");
+                judgeImg.src = "/api/judge/photo?state=normal&t=" + Date.now();
+            }, flashMs);
+        }
+    }
     function deskSlam() {
         prosecutor.classList.remove("slam");
         void prosecutor.offsetWidth;
@@ -151,6 +181,8 @@
         void stage.offsetWidth;
         stage.classList.add("shake");
         thump();
+        playSfx("gavel.mp3");
+        setJudge("gavel", 900);
         window.setTimeout(() => stage.classList.remove("shake"), 300);
     }
     function showObjection() {
@@ -158,6 +190,7 @@
         objection.classList.remove("show");
         void objection.offsetWidth;
         objection.classList.add("show");
+        playSfx("objection.mp3");
         window.clearTimeout(objectionTimer);
         objectionTimer = window.setTimeout(() => objection.classList.add("hidden"), 1250);
     }
@@ -176,7 +209,9 @@
         verdict.classList.remove("drop");
         void verdict.offsetWidth;
         verdict.classList.add("drop");
+        setJudge("angry", 2500);
         thump();
+        playSfx("gavel.mp3");
         deskSlam();
     }
     function hideVerdict() {
@@ -195,6 +230,29 @@
             }, durationMs);
         }
     }
+    let bgm = null;
+    function startBgm() {
+        try {
+            if (!bgm) {
+                bgm = new Audio("sfx/bgm.mp3");
+                bgm.loop = true;
+                bgm.volume = 0.25;
+            }
+            void bgm.play().catch(() => undefined);
+        }
+        catch {
+            /* no sample yet */
+        }
+    }
+    function stopBgm() {
+        try {
+            if (bgm)
+                bgm.pause();
+        }
+        catch {
+            /* no sample yet */
+        }
+    }
     function resetStage() {
         currentStageState = "idle";
         window.clearTimeout(briefCourtTimer);
@@ -204,6 +262,7 @@
         hideVerdict();
         objection.classList.add("hidden");
         caseTeaser.classList.add("hidden");
+        setJudge("normal");
     }
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -228,11 +287,13 @@
                 const state = String(msg.payload.state || "idle");
                 currentStageState = state;
                 if (state === "idle") {
+                    stopBgm();
                     resetStage();
                 }
                 else {
                     window.clearTimeout(briefCourtTimer);
                     court.classList.remove("hidden");
+                    startBgm();
                     hideVerdict();
                     if (msg.payload.case_title)
                         caseNo.textContent = msg.payload.case_title;
@@ -286,6 +347,7 @@
                 showTeaser(msg.payload.meter);
                 break;
             case "panic":
+                stopBgm();
                 resetStage();
                 break;
             default:

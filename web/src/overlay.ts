@@ -212,6 +212,36 @@ namespace Overlay {
     }
   }
 
+  const judgeFrame = el("judge-frame");
+  const judgeImg = el("judge") as unknown as HTMLImageElement;
+  let judgeTimer = 0;
+
+  // Short samples live in sfx/, missing files stay silent on purpose.
+  function playSfx(name: string): void {
+    try {
+      const audio = new Audio("sfx/" + name);
+      audio.volume = 0.9;
+      void audio.play().catch(() => undefined);
+    } catch {
+      /* no sample yet */
+    }
+  }
+
+  function setJudge(state: string, flashMs = 0): void {
+    judgeImg.src = "/api/judge/photo?state=" + state + "&t=" + Date.now();
+    judgeFrame.classList.remove("angry", "bang");
+    void judgeFrame.offsetWidth;
+    if (state === "angry") judgeFrame.classList.add("angry");
+    if (state === "gavel") judgeFrame.classList.add("bang");
+    window.clearTimeout(judgeTimer);
+    if (flashMs > 0) {
+      judgeTimer = window.setTimeout(() => {
+        judgeFrame.classList.remove("angry", "bang");
+        judgeImg.src = "/api/judge/photo?state=normal&t=" + Date.now();
+      }, flashMs);
+    }
+  }
+
   function deskSlam(): void {
     prosecutor.classList.remove("slam");
     void prosecutor.offsetWidth;
@@ -220,6 +250,8 @@ namespace Overlay {
     void stage.offsetWidth;
     stage.classList.add("shake");
     thump();
+    playSfx("gavel.mp3");
+    setJudge("gavel", 900);
     window.setTimeout(() => stage.classList.remove("shake"), 300);
   }
 
@@ -228,6 +260,7 @@ namespace Overlay {
     objection.classList.remove("show");
     void objection.offsetWidth;
     objection.classList.add("show");
+    playSfx("objection.mp3");
     window.clearTimeout(objectionTimer);
     objectionTimer = window.setTimeout(() => objection.classList.add("hidden"), 1250);
   }
@@ -248,7 +281,9 @@ namespace Overlay {
     verdict.classList.remove("drop");
     void verdict.offsetWidth;
     verdict.classList.add("drop");
+    setJudge("angry", 2500);
     thump();
+    playSfx("gavel.mp3");
     deskSlam();
   }
 
@@ -270,6 +305,29 @@ namespace Overlay {
     }
   }
 
+  let bgm: HTMLAudioElement | null = null;
+
+  function startBgm(): void {
+    try {
+      if (!bgm) {
+        bgm = new Audio("sfx/bgm.mp3");
+        bgm.loop = true;
+        bgm.volume = 0.25;
+      }
+      void bgm.play().catch(() => undefined);
+    } catch {
+      /* no sample yet */
+    }
+  }
+
+  function stopBgm(): void {
+    try {
+      if (bgm) bgm.pause();
+    } catch {
+      /* no sample yet */
+    }
+  }
+
   function resetStage(): void {
     currentStageState = "idle";
     window.clearTimeout(briefCourtTimer);
@@ -279,6 +337,7 @@ namespace Overlay {
     hideVerdict();
     objection.classList.add("hidden");
     caseTeaser.classList.add("hidden");
+    setJudge("normal");
   }
 
   function connect(): void {
@@ -304,10 +363,12 @@ namespace Overlay {
         const state = String(msg.payload.state || "idle");
         currentStageState = state;
         if (state === "idle") {
+          stopBgm();
           resetStage();
         } else {
           window.clearTimeout(briefCourtTimer);
           court.classList.remove("hidden");
+          startBgm();
           hideVerdict();
           if (msg.payload.case_title) caseNo.textContent = msg.payload.case_title;
           if (msg.payload.charge) charge.textContent = "Обвинение: " + msg.payload.charge;
@@ -353,6 +414,7 @@ namespace Overlay {
         showTeaser(msg.payload.meter);
         break;
       case "panic":
+        stopBgm();
         resetStage();
         break;
       default:
