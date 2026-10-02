@@ -346,45 +346,4 @@ html, body {
   100% { transform: translate(0, 0) rotate(0); }
 }
 
-/* Судья: портрет с состояниями, молоток анимируется тряской кадра. */
-#judge-frame {
-  position: absolute;
-  top: 90px;
-  right: 120px;
-  width: 300px;
-  text-align: center;
-  z-index: 5;
-}
 
-#judge {
-  width: 300px;
-  height: 300px;
-  object-fit: cover;
-  border: 3px solid #c9a227;
-  border-radius: 12px;
-  background: #000;
-}
-
-#judge-frame.angry #judge {
-  border-color: #ff5148;
-  filter: saturate(1.4) contrast(1.1);
-}
-
-#judge-frame.bang #judge {
-  animation: judge-bang 0.6s ease;
-}
-
-@keyframes judge-bang {
-  0% { transform: scale(1) rotate(0); }
-  25% { transform: scale(1.12) rotate(-2deg); }
-  55% { transform: scale(0.97) rotate(1deg); }
-  100% { transform: scale(1) rotate(0); }
-}
-
-#judge-plate {
-  margin-top: 8px;
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 22px;
-  letter-spacing: 0.3em;
-  color: #c9a227;
-}

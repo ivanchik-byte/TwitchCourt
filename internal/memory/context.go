@@ -3,9 +3,7 @@ package memory
 import "fmt"
 import "strings"
 
-// SmartContext renders a short Russian summary for the LLM prompt.
-// Sections: streamer portrait, momentum, recidivism, regulars, bribes, live lines.
-// Kept under ~12 lines so it never eats the context window.
+// SmartContext renders a <=12 line summary for the LLM prompt
 func (s *Store) SmartContext(defendant string) string {
 	var parts []string
 

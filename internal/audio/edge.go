@@ -8,8 +8,7 @@ import (
 	edge "github.com/difyz9/edge-tts-go/pkg/communicate"
 )
 
-// EdgeSynthesizer streams MP3 from Microsoft Edge TTS over websocket.
-// Zero CPU on the streamer machine, no API key required.
+// EdgeSynthesizer streams MP3 from Microsoft Edge TTS over websocket
 type EdgeSynthesizer struct {
 	mu     sync.RWMutex
 	voice  string
@@ -34,8 +33,7 @@ func NewEdgeSynthesizer(voice, rate, volume, pitch string) *EdgeSynthesizer {
 	return &EdgeSynthesizer{voice: voice, rate: rate, volume: volume, pitch: pitch}
 }
 
-// SetVoiceProfile switches the voice and rate for upcoming syntheses.
-// Piper and mock fallbacks ignore it by design.
+// SetVoiceProfile switches voice and rate for subsequent syntheses
 func (s *EdgeSynthesizer) SetVoiceProfile(voice, rate string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

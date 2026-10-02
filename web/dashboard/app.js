@@ -1,6 +1,4 @@
 "use strict";
-// Particles backdrop: vanilla WebGL port of the rotating particle sphere.
-// Fullscreen canvas behind the desk, hover drift, zero dependencies.
 var Backdrop;
 (function (Backdrop) {
     const COUNT = 200;
@@ -256,8 +254,6 @@ var Backdrop;
     Backdrop.mount = mount;
 })(Backdrop || (Backdrop = {}));
 "use strict";
-// GooeyNav port: sticky pill nav with gooey blob + bubble particles.
-// Vanilla, no dependencies. Items scroll to page sections (stub content).
 var GooeyNav;
 (function (GooeyNav) {
     const PARTICLE_COUNT = 8;
@@ -397,8 +393,6 @@ var GooeyNav;
     GooeyNav.mount = mount;
 })(GooeyNav || (GooeyNav = {}));
 "use strict";
-// Тактический пульт стримера: шкала терпения, быстрые плитки,
-// активный суд с ручным вердиктом, лента событий с метками.
 var Desk;
 (function (Desk) {
     function socketUrl(path) {
@@ -555,13 +549,13 @@ var Desk;
                     const amount = Number(msg.payload.amount || 0);
                     const currency = String(msg.payload.currency || "");
                     const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
-                    feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в память", "donation");
+                    feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в копилку", "donation");
                     break;
                 }
                 case "suspicion": {
                     const meter = Number(msg.payload.meter || 0);
                     renderMeter(meter);
-                    feed("Папка дела №404: " + meter + "%", "trial");
+                    feed("Шкала дела: " + meter + "%", "trial");
                     break;
                 }
                 case "voting_update": {
@@ -612,7 +606,7 @@ var Desk;
         sendAction("animation", { name: "slam" });
         post("/api/say", { text: "Суд слушает!" }).then((ok) => {
             if (!ok)
-                Desk.say(deckStatus, "Молоток не долетел: проверьте секрет.");
+                Desk.say(deckStatus, "Команда отклонена: проверьте секретный ключ.");
         });
     });
     btnPanic.addEventListener("click", () => sendAction("panic", {}));
@@ -624,7 +618,7 @@ var Desk;
     });
     function forceVerdict(guilty) {
         post("/api/verdict", { guilty }).then((ok) => {
-            Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет голосования или нет связи.");
+            Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет активного голосования или связи.");
         });
     }
     btnForceGuilty.addEventListener("click", () => forceVerdict(true));

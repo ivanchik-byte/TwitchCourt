@@ -1,6 +1,4 @@
 "use strict";
-// Particles backdrop: vanilla WebGL port of the rotating particle sphere.
-// Fullscreen canvas behind the desk, hover drift, zero dependencies.
 var Backdrop;
 (function (Backdrop) {
     const COUNT = 200;
@@ -256,8 +254,6 @@ var Backdrop;
     Backdrop.mount = mount;
 })(Backdrop || (Backdrop = {}));
 "use strict";
-// GooeyNav port: sticky pill nav with gooey blob + bubble particles.
-// Vanilla, no dependencies. Items scroll to page sections (stub content).
 var GooeyNav;
 (function (GooeyNav) {
     const PARTICLE_COUNT = 8;
@@ -397,7 +393,6 @@ var GooeyNav;
     GooeyNav.mount = mount;
 })(GooeyNav || (GooeyNav = {}));
 "use strict";
-// Страница режимов: статус суда, запуск дела, симулятор доната.
 (function () {
     function el(id) {
         const node = document.getElementById(id);
@@ -500,7 +495,7 @@ var GooeyNav;
             }),
         })
             .then((res) => {
-            say(donateStatus, res.ok ? "Донат принят судом." : "Донат отклонен: проверьте секрет.");
+            say(donateStatus, res.ok ? "Тестовый донат отправлен." : "Ошибка: проверьте секретный ключ.");
         })
             .catch(() => {
             say(donateStatus, "Нет связи с сервером.");

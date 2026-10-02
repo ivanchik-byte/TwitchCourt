@@ -42,12 +42,10 @@ type TrialCase struct {
 	Voters        map[string]bool
 	Witnesses     []Witness
 	Archetype     ai.Archetype
-	// forceVerdict ends voting early with the streamer's own ruling.
-	forceVerdict *bool
+	forceVerdict  *bool
 }
 
-// Witness is a donation attached to the running trial as testimony.
-// It never interrupts speech, it is read out between prosecutor lines.
+// Witness represents a donation queued as trial testimony.
 type Witness struct {
 	Donor    string
 	Amount   float64
@@ -59,18 +57,16 @@ type Witness struct {
 // so a single whale cannot decide the verdict alone.
 const maxWitnessWeight = 3
 
-// maxWitnessMessageRunes caps a single testimony line for speech.
 const maxWitnessMessageRunes = 140
 
 type Engine struct {
-	cfg      *config.Config
-	hub      *obs.Hub
-	aiClient *ai.Client
-	voice    audio.Synthesizer
-	filter   *safety.Filter
-	recall   *memory.Store
-	deck     *bot.Deck
-	// VerdictHook runs after the verdict broadcast, used for chat announces.
+	cfg         *config.Config
+	hub         *obs.Hub
+	aiClient    *ai.Client
+	voice       audio.Synthesizer
+	filter      *safety.Filter
+	recall      *memory.Store
+	deck        *bot.Deck
 	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
 	mu          sync.RWMutex
 	speakMu     sync.Mutex
@@ -91,8 +87,6 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 	}
 }
 
-// applyVoiceProfile switches the TTS voice to the trial archetype.
-// Engines without voice profiles (piper, mock) ignore it silently.
 func (e *Engine) applyVoiceProfile(voice, rate string) {
 	type profiler interface{ SetVoiceProfile(string, string) }
 	if p, ok := e.voice.(profiler); ok {
@@ -100,8 +94,7 @@ func (e *Engine) applyVoiceProfile(voice, rate string) {
 	}
 }
 
-// speak serializes voice switch and synthesis so a manual Say can never
-// cut into trial speech with the wrong voice.
+// speak serializes voice profile switch and audio synthesis
 func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker, voice, rate string) error {
 	e.speakMu.Lock()
 	defer e.speakMu.Unlock()
@@ -109,16 +102,26 @@ func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLas
 	return e.dispatchSpeechChunk(ctx, s, index, isLast, speaker)
 }
 
-// juryVoice draws a random voice for jury lines from the cast pool.
 func (e *Engine) juryVoice() string {
 	pool := e.cfg.TTS.JuryVoices
+	if e.cfg.TTS.Engine == "silero" {
+		pool = e.cfg.TTS.SileroJury
+	}
 	if len(pool) == 0 {
 		return e.cfg.TTS.Voice
 	}
 	return pool[rand.Intn(len(pool))]
 }
 
-// AttachMemory swaps the in-memory recall store for a persistent one.
+// castVoice maps an Edge voice name to the Silero speaker when the
+// Silero engine is active, so one config drives every engine.
+func (e *Engine) castVoice(edge, silero string) string {
+	if e.cfg.TTS.Engine == "silero" && silero != "" {
+		return silero
+	}
+	return edge
+}
+
 func (e *Engine) AttachMemory(store *memory.Store) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -127,7 +130,6 @@ func (e *Engine) AttachMemory(store *memory.Store) {
 	}
 }
 
-// SetPunishments replaces the guilty-verdict punishment deck.
 func (e *Engine) SetPunishments(items []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -210,7 +212,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		defer close(speechDone)
 		for item := range speechQueue {
 			if err := e.speak(ctx, item.chunk, item.index, item.last,
-				e.cfg.Courtroom.ProsecutorName, c.Archetype.Voice, c.Archetype.Rate); err != nil {
+				e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate); err != nil {
 				return
 			}
 		}
@@ -247,9 +249,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	case <-speechDone:
 	}
 
-	// Witness interlude: testimony queued during the indictment is read
-	// out as a separate beat before voting, speech is never interrupted.
-	// A random juror voice reads it, not the prosecutor.
+	// read queued testimony before voting starts
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
 		_ = e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
 			"Присяжные", e.juryVoice(), "+0%")
@@ -265,7 +265,6 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	e.clearTrial()
 }
 
-// clearTrial releases the trial cancel func after a normal finish.
 func (e *Engine) clearTrial() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -292,7 +291,7 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 		e.hub.BroadcastEvent(obs.EventAnimation, obs.AnimationPayload{Name: s.Animation})
 	}
 
-	// SSML pause tags stay in the TTS text but never reach the screen.
+	// strip SSML pause tags from subtitle display
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
 		Speaker: speaker,
 		Text:    strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(s.Text, "")),
@@ -411,9 +410,7 @@ func (e *Engine) ForceVerdict(guilty bool) bool {
 	return true
 }
 
-// Say speaks an arbitrary line through TTS right away, even with no
-// trial running. Used for the gavel button and manual interjections.
-// The gavel belongs to the judge, so it uses the judge voice.
+// Say speaks immediately using the judge voice (gavel interjections)
 func (e *Engine) Say(text string) {
 	clean := e.filter.Sanitize(text)
 	if clean == "" {
@@ -423,11 +420,10 @@ func (e *Engine) Say(text string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 		_ = e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true,
-			e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate)
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
 	}()
 }
 
-// AddChatComment stores a chat line for the live trial transcript.
 func (e *Engine) AddChatComment(author, text string) {
 	if e.recall == nil {
 		return
@@ -437,10 +433,7 @@ func (e *Engine) AddChatComment(author, text string) {
 	e.recall.AddComment(cleanAuthor, cleanText)
 }
 
-// AddWitness attaches a donation to the running trial as testimony.
-// It returns false when no trial is in session, so the caller can
-// open a fresh trial instead. Testimony never interrupts speech,
-// it is read out between prosecutor lines and adds weight to guilty.
+// AddWitness queues testimony; returns false when no trial is active
 func (e *Engine) AddWitness(donor string, amount float64, currency, message string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -467,7 +460,6 @@ func (e *Engine) AddWitness(donor string, amount float64, currency, message stri
 	return true
 }
 
-// witnessWeight converts testimony into guilty points, capped.
 func witnessWeight(witnesses []Witness) int {
 	if len(witnesses) > maxWitnessWeight {
 		return maxWitnessWeight
@@ -475,8 +467,6 @@ func witnessWeight(witnesses []Witness) int {
 	return len(witnesses)
 }
 
-// buildWitnessInterlude renders queued testimony as one prosecutor line.
-// Pure function, safe to unit test without TTS or network.
 func buildWitnessInterlude(witnesses []Witness) string {
 	if len(witnesses) == 0 {
 		return ""
@@ -507,15 +497,13 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max]) + "..."
 }
 
-// drainWitnessInterlude snapshots queued testimony for the interlude beat.
 func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return buildWitnessInterlude(c.Witnesses)
 }
 
-// speakVerdict voices the final ruling with the judge voice.
-// The verdict stamp appears instantly, the voice catches up right after.
+// voice final ruling with the judge voice
 func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innocent int, penalty, twist string) {
 	prompt := ai.BuildVerdictSpeechPrompt(verdict, guilty, innocent)
 	if penalty != "" {
@@ -533,7 +521,7 @@ func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innoc
 	_ = e.aiClient.StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
-				e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate); err != nil {
+				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
 				return err
 			}
 			index++
@@ -542,7 +530,7 @@ func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innoc
 	})
 	if last := chunker.Flush(); last != nil {
 		_ = e.speak(ctx, *last, index, true,
-			e.cfg.Courtroom.JudgeName, e.cfg.TTS.JudgeVoice, e.cfg.TTS.JudgeRate)
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
 	}
 }
 

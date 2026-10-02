@@ -44,6 +44,9 @@ type TTSConfig struct {
 	JudgeVoice   string   `yaml:"judge_voice"`
 	JudgeRate    string   `yaml:"judge_rate"`
 	JuryVoices   []string `yaml:"jury_voices"`
+	SileroURL    string   `yaml:"silero_url"`
+	SileroJudge  string   `yaml:"silero_judge"`
+	SileroJury   []string `yaml:"silero_jury"`
 	PiperBinary  string   `yaml:"piper_binary"`
 	ModelPath    string   `yaml:"model_path"`
 	ConfigPath   string   `yaml:"config_path"`
@@ -72,19 +75,16 @@ type DonationsConfig struct {
 	TwitchBits     ToggleSource       `yaml:"twitch_bits"`
 }
 
-// WidgetSource is a DonationAlerts widget token connection.
 type WidgetSource struct {
 	Enabled bool   `yaml:"enabled"`
 	Token   string `yaml:"token"`
 }
 
-// KeySource is an API-key connection like DonatePay.
 type KeySource struct {
 	Enabled bool   `yaml:"enabled"`
 	APIKey  string `yaml:"api_key"`
 }
 
-// ToggleSource is a feature flag without credentials.
 type ToggleSource struct {
 	Enabled bool `yaml:"enabled"`
 }
@@ -140,6 +140,9 @@ func DefaultConfig() *Config {
 			JudgeVoice:   "ru-RU-DmitryNeural",
 			JudgeRate:    "-10%",
 			JuryVoices:   []string{"ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"},
+			SileroURL:    "http://127.0.0.1:7892",
+			SileroJudge:  "kseniya",
+			SileroJury:   []string{"aidar", "baya", "ruslan", "natasha"},
 			PiperBinary:  binaryName,
 			ModelPath:    filepath.Join("models", "ru_dmitri.onnx"),
 			ConfigPath:   filepath.Join("models", "ru_dmitri.onnx.json"),
@@ -238,9 +241,18 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	switch cfg.TTS.Engine {
-	case "edge", "piper", "mock":
+	case "edge", "piper", "mock", "silero":
 	default:
 		cfg.TTS.Engine = "edge"
+	}
+	if cfg.TTS.SileroURL == "" {
+		cfg.TTS.SileroURL = "http://127.0.0.1:7892"
+	}
+	if cfg.TTS.SileroJudge == "" {
+		cfg.TTS.SileroJudge = "kseniya"
+	}
+	if len(cfg.TTS.SileroJury) == 0 {
+		cfg.TTS.SileroJury = []string{"aidar", "baya", "ruslan", "natasha"}
 	}
 	if cfg.TTS.Voice == "" {
 		cfg.TTS.Voice = "ru-RU-DmitryNeural"

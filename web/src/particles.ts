@@ -1,5 +1,3 @@
-// Particles backdrop: vanilla WebGL port of the rotating particle sphere.
-// Fullscreen canvas behind the desk, hover drift, zero dependencies.
 namespace Backdrop {
   const COUNT = 200;
   const SPREAD = 10;

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/safety"
 )
@@ -116,5 +117,20 @@ func TestSsmlBreakStrippedForDisplay(t *testing.T) {
 	got := ssmlDisplayRe.ReplaceAllString(`Протестую. <break time="300ms" /> Слушаем.`, "")
 	if strings.Contains(got, "<break") {
 		t.Fatalf("break tag leaked to subtitles: %q", got)
+	}
+}
+
+func TestCastVoiceMapping(t *testing.T) {
+	e := newWitnessEngine()
+	e.cfg = config.DefaultConfig()
+	if got := e.castVoice("ru-RU-DmitryNeural", "aidar"); got != "ru-RU-DmitryNeural" {
+		t.Fatalf("edge engine must keep edge voice, got %q", got)
+	}
+	e.cfg.TTS.Engine = "silero"
+	if got := e.castVoice("ru-RU-DmitryNeural", "aidar"); got != "aidar" {
+		t.Fatalf("silero engine must map to speaker, got %q", got)
+	}
+	if got := e.castVoice("ru-RU-DmitryNeural", ""); got != "ru-RU-DmitryNeural" {
+		t.Fatalf("empty silero speaker must fall back, got %q", got)
 	}
 }

@@ -1,4 +1,3 @@
-// Страница настроек: пороги донатов, наказания, портрет. Без сокетов.
 namespace Settings {
   export interface CourtSettings {
     min_amounts: Record<string, number>;
@@ -140,7 +139,7 @@ namespace Settings {
       body: JSON.stringify(body),
     })
       .then((res) => {
-        say(settingsStatus, res.ok ? "Записано в реестр." : "Не записано: нужен секрет.");
+        say(settingsStatus, res.ok ? "Настройки сохранены." : "Ошибка: требуется секретный ключ.");
       })
       .catch(() => {
         say(settingsStatus, "Нет связи с сервером.");
@@ -161,7 +160,7 @@ namespace Settings {
       }),
     })
       .then((res) => {
-        say(profileStatus, res.ok ? "Портрет обновлен." : "Не сохранено: нужен секрет.");
+        say(profileStatus, res.ok ? "Портрет сохранен." : "Ошибка: требуется секретный ключ.");
       })
       .catch(() => {
         say(profileStatus, "Нет связи с сервером.");
@@ -176,7 +175,7 @@ namespace Settings {
   judgeForm.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!judgeFile.files || judgeFile.files.length === 0) {
-      say(judgeStatus, "Выбери файл.");
+      say(judgeStatus, "Выберите файл изображения.");
       return;
     }
     const data = new FormData();
@@ -186,14 +185,13 @@ namespace Settings {
       body: data,
     })
       .then((res) => {
-        say(judgeStatus, res.ok ? "Фото судьи обновлено." : "Не сохранено: нужен секрет или другой файл.");
+        say(judgeStatus, res.ok ? "Фото обновлено." : "Ошибка загрузки: проверьте файл и секретный ключ.");
       })
       .catch(() => {
         say(judgeStatus, "Нет связи с сервером.");
       });
   });
 
-  // Настройка игры Minecraft и автопоиск latest.log
   const cardMinecraft = el("card-minecraft");
   const modalMinecraft = el("modal-minecraft");
   const btnCloseModal = el("mc-modal-close");
@@ -320,7 +318,7 @@ namespace Settings {
   }
 
   btnAutodetect.addEventListener("click", () => {
-    detectNote.textContent = "Ищем файлы latest.log...";
+    detectNote.textContent = "Поиск latest.log...";
     detectNote.className = "modal-note";
     fetch("/api/game/minecraft/detect")
       .then((res) => res.json())
@@ -332,14 +330,14 @@ namespace Settings {
           } catch {}
           updatePathStatus(data.path, !!data.found);
           if (data.found) {
-            detectNote.textContent = "Лог найден: " + data.path;
+            detectNote.textContent = "Файл найден: " + data.path;
             detectNote.className = "modal-note note-ok";
           } else {
-            detectNote.textContent = "Предложен путь: " + data.path + " (создастся при запуске)";
+            detectNote.textContent = "Найден путь: " + data.path + " (файл появится после запуска игры)";
             detectNote.className = "modal-note";
           }
         } else {
-          detectNote.textContent = "Стандартный путь не найден. Выбери шаблон или укажи вручную.";
+          detectNote.textContent = "Файл не найден. Выберите шаблон или укажите путь вручную.";
           detectNote.className = "modal-note note-err";
         }
       })
@@ -365,7 +363,7 @@ namespace Settings {
   });
 
   btnTestTrial.addEventListener("click", () => {
-    testStatus.textContent = "Отправка тестового дела...";
+    testStatus.textContent = "Запуск тестового дела...";
     const targetDefendant = mcNicks.length > 0 ? mcNicks[0] : (profileName.value.trim() || "Стример");
     fetch("/api/trial", {
       method: "POST",
@@ -378,9 +376,9 @@ namespace Settings {
     })
       .then((res) => {
         if (res.ok) {
-          testStatus.textContent = "Суд открыт для игрока " + targetDefendant + "!";
+          testStatus.textContent = "Заседание открыто для игрока " + targetDefendant + "!";
         } else {
-          testStatus.textContent = "Суд занят или уже идет другое дело.";
+          testStatus.textContent = "Суд уже рассматривает другое дело.";
         }
       })
       .catch(() => {
@@ -470,7 +468,6 @@ namespace Settings {
     }
   });
 
-  // Синхронизация вкладок и хэша URL
   function openView(name: string | null, syncHash = true): void {
     document.querySelectorAll<HTMLButtonElement>(".seg-card").forEach((btn) => {
       btn.classList.toggle("active", btn.getAttribute("data-view") === name);

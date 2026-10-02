@@ -26,16 +26,16 @@
       <div class="masthead-status">
         <p class="docket-line">Сервер: <span id="srv-label">Проверка...</span> <span id="srv-dot" class="dot" aria-hidden="true"></span></p>
         <div class="masthead-keys">
-          <a class="btn btn-ghost" href="/">К канцелярии</a>
+          <a class="btn btn-ghost" href="/">В пульт</a>
         </div>
       </div>
     </header>
 
     <nav class="seg-nav" aria-label="Разделы настроек">
       <button type="button" class="seg-card" data-view="view-court"><span class="seg-num">01</span><span class="seg-name">Суд</span><small>Пороги, наказания, портрет</small></button>
-      <button type="button" class="seg-card" data-view="view-games"><span class="seg-num">02</span><span class="seg-name">Подкл. игры</span><small>Minecraft и другие</small></button>
+      <button type="button" class="seg-card" data-view="view-games"><span class="seg-num">02</span><span class="seg-name">Игры</span><small>Minecraft</small></button>
       <button type="button" class="seg-card" data-view="view-donates"><span class="seg-num">03</span><span class="seg-name">Донаты</span><small>Источники и ключи</small></button>
-      <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">04</span><span class="seg-name">Оверлей</span><small>Заглушка</small></button>
+      <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">04</span><span class="seg-name">Оверлей</span><small>Статус</small></button>
     </nav>
 
     <main class="folio">
@@ -43,7 +43,7 @@
         <section class="article" aria-labelledby="donate-heading">
           <p class="overline">Суд · пороги</p>
           <h2 id="donate-heading">Донаты и пороги</h2>
-          <p class="guide">Суд открывается сам, когда донат дотянул до порога своей валюты. Ниже порога донат просто пишется в память суда.</p>
+          <p class="guide">Суд запускается автоматически при достижении порога в валюте доната. Донаты ниже порога сохраняются в истории.</p>
           <form id="settings-form">
             <div class="row">
               <label class="field"><span>RUB</span><input type="number" id="min-rub" min="0" step="1"></label>
@@ -52,7 +52,7 @@
               <label class="field"><span>BITS</span><input type="number" id="min-bits" min="0" step="1"></label>
               <label class="field"><span>Остальные</span><input type="number" id="min-default" min="0" step="1"></label>
             </div>
-            <h3>Наказания <small>по одному на строку, выпадает за «виновен»</small></h3>
+            <h3>Наказания <small>по одному на строку, применяются при вердикте «Виновен»</small></h3>
             <label class="field">
               <span class="visually-hidden">Наказания</span>
               <textarea id="punishments-input" rows="5"></textarea>
@@ -65,7 +65,7 @@
         <section class="article" aria-labelledby="portrait-heading">
           <p class="overline">Суд · портрет</p>
           <h2 id="portrait-heading">Портрет стримера</h2>
-          <p class="guide">Суд помнит это между заседаниями и вплетает в обвинения.</p>
+          <p class="guide">Судья помнит эти данные между заседаниями и использует в обвинениях.</p>
           <form id="profile-form">
             <label class="field"><span>Имя</span><input type="text" id="profile-name" placeholder="Стример"></label>
             <label class="field"><span>Титулы (через запятую)</span><input type="text" id="profile-titles"></label>
@@ -84,7 +84,7 @@
               <select id="judge-state">
                 <option value="normal">Обычное</option>
                 <option value="angry">Злое</option>
-                <option value="gavel">Молоток</option>
+                <option value="gavel">Удар молотком</option>
               </select>
             </label>
             <label class="field"><span>Файл</span><input type="file" id="judge-file" accept="image/jpeg,image/png,image/webp"></label>
@@ -125,7 +125,7 @@
                     </div>
                     <span class="game-arrow mc-arrow" aria-hidden="true">Настройка →</span>
                   </div>
-                  <p class="game-card-desc">Отслеживание смертей через latest.log в реальном времени.</p>
+                  <p class="game-card-desc">Отслеживание смертей игрока через latest.log.</p>
                   <div class="game-meta-pills">
                     <span class="meta-pill" id="mc-meta-path">Лог: автопоиск</span>
                     <span class="meta-pill" id="mc-meta-nicks">Ники: все игроки</span>
@@ -142,7 +142,7 @@
         <section class="article" aria-labelledby="sources-heading">
           <p class="overline">Донаты · источники</p>
           <h2 id="sources-heading">Платежки</h2>
-          <p class="guide">Все источники сводятся к одному событию: кто, сколько, валюта, текст. Пороги задаются во вкладке «Суд».</p>
+          <p class="guide">Все донаты приводятся к единому формату: отправитель, сумма, валюта и текст. Пороги настраиваются во вкладке «Суд».</p>
           <ul class="source-list">
             <li><strong>DonationAlerts</strong><span>токен виджета · сокет беты</span></li>
             <li><strong>DonatePay</strong><span>API-ключ · официальный Centrifugo</span></li>
@@ -154,7 +154,7 @@
         <section class="article article-wide" aria-labelledby="keys-heading">
           <p class="overline">Донаты · ключи</p>
           <h2 id="keys-heading">Ключи интеграций</h2>
-          <p class="guide">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются. Поля ниже пока только для чтения картинки: подключение включишь отдельной командой.</p>
+          <p class="guide">Ключи настраиваются в <code>config.yaml</code> или переменных окружения. Поля ниже доступны только для чтения.</p>
           <div class="row">
             <label class="field"><span>DonationAlerts · токен виджета</span><input type="password" value="" placeholder="DONATE_TOKEN" disabled></label>
             <label class="field"><span>DonatePay · API-ключ</span><input type="password" value="" placeholder="DONATEPAY_API_KEY" disabled></label>
@@ -168,9 +168,9 @@
 
       <div class="settings-view hidden" id="view-overlay">
         <section class="article" aria-labelledby="overlay-heading">
-          <p class="overline">Оверлей · заглушка</p>
-          <h2 id="overlay-heading">Оверлей демонтирован</h2>
-          <p class="guide">Роут /overlay отвечает 410. Новым оверлеем займемся после настроек, скажешь как: нарисую.</p>
+          <p class="overline">Оверлей · статус</p>
+          <h2 id="overlay-heading">Оверлей в разработке</h2>
+          <p class="guide">Для вывода судьи в OBS используйте отдельный браузерный источник <code>/overlay/judge.html</code>.</p>
         </section>
       </div>
     </main>
@@ -217,7 +217,7 @@
           <div class="tag-cloud" id="mc-tag-cloud" aria-live="polite"></div>
 
           <div class="tag-input-row">
-            <input type="text" id="mc-nick-input" placeholder="Введи ник (например Steve)" autocomplete="off">
+            <input type="text" id="mc-nick-input" placeholder="Никнейм (например Steve)" autocomplete="off">
             <button type="button" id="mc-btn-add-nick" class="btn btn-sm">Добавить</button>
             <button type="button" id="mc-btn-add-streamer" class="btn btn-sm btn-ghost">+ Ник стримера</button>
           </div>
@@ -228,11 +228,11 @@
             <h3>Поиск Minecraft и файл логов</h3>
             <span class="modal-badge-status" id="mc-path-status">Не проверено</span>
           </div>
-          <p class="modal-hint">Minecraft записывает все события в файл latest.log. Укажи путь вручную или запусти автопоиск.</p>
+          <p class="modal-hint">Minecraft записывает события в latest.log. Укажите путь вручную или запустите автопоиск.</p>
 
           <div class="path-search-row">
             <input type="text" id="mc-log-path-input" placeholder="Путь к latest.log" autocomplete="off">
-            <button type="button" id="mc-btn-autodetect" class="btn btn-sm btn-accent">Найти авто</button>
+            <button type="button" id="mc-btn-autodetect" class="btn btn-sm btn-accent">Автопоиск</button>
           </div>
 
           <div class="launcher-presets">
@@ -252,8 +252,8 @@
             <h3>Проверка связи</h3>
           </div>
           <div class="test-action-row">
-            <button type="button" id="mc-btn-test-trial" class="btn btn-sm">⚡ Эмулировать гибель в лаве</button>
-            <span id="mc-test-status" class="test-feedback" aria-live="polite">Проверит открытие суда без запуска игры</span>
+            <button type="button" id="mc-btn-test-trial" class="btn btn-sm">⚡ Тестовая гибель в лаве</button>
+            <span id="mc-test-status" class="test-feedback" aria-live="polite">Запустит тестовое заседание без игры</span>
           </div>
         </section>
       </div>

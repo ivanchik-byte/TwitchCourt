@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// TrialRecord is a single finished courtroom session.
 type TrialRecord struct {
 	At        time.Time `json:"at"`
 	Defendant string    `json:"defendant"`
@@ -20,7 +19,6 @@ type TrialRecord struct {
 	Summary   string    `json:"summary,omitempty"`
 }
 
-// DonationRecord is a single donor bribe attempt.
 type DonationRecord struct {
 	At       time.Time `json:"at"`
 	Donor    string    `json:"donor"`
@@ -29,7 +27,6 @@ type DonationRecord struct {
 	Message  string    `json:"message"`
 }
 
-// Participant tracks a chat member across sessions.
 type Participant struct {
 	Name       string    `json:"name"`
 	SueCalls   int       `json:"sue_calls"`
@@ -38,15 +35,12 @@ type Participant struct {
 	LastSeenAt time.Time `json:"last_seen_at"`
 }
 
-// Comment is a single chat line kept for the running trial.
 type Comment struct {
 	At     time.Time `json:"at"`
 	Author string    `json:"author"`
 	Text   string    `json:"text"`
 }
 
-// StreamerProfile is the editable portrait of the streamer.
-// The streamer edits it by hand, the engine only appends auto notes.
 type StreamerProfile struct {
 	Name        string   `json:"name"`
 	Titles      []string `json:"titles,omitempty"`
@@ -64,8 +58,6 @@ const (
 	maxAutoNotes    = 20
 )
 
-// Store keeps trial history and donor ledger on local disk.
-// Everything stays on the streamer machine, nothing leaves it.
 type Store struct {
 	path         string
 	mu           sync.RWMutex
@@ -118,7 +110,6 @@ func (s *Store) AddDonation(d DonationRecord) {
 	s.save()
 }
 
-// AddComment keeps a chat line for the running trial and tracks the author.
 func (s *Store) AddComment(author, text string) {
 	if text == "" {
 		return
@@ -136,7 +127,6 @@ func (s *Store) AddComment(author, text string) {
 	s.mu.Unlock()
 }
 
-// AddSueCall records a !sue trigger from a chat member.
 func (s *Store) AddSueCall(author string) {
 	if author == "" {
 		return
@@ -149,7 +139,6 @@ func (s *Store) AddSueCall(author string) {
 	s.saveSoon()
 }
 
-// AddVote records a guilty/innocent vote from a chat member.
 func (s *Store) AddVote(voter string) {
 	if voter == "" {
 		return
@@ -162,7 +151,6 @@ func (s *Store) AddVote(voter string) {
 	s.saveSoon()
 }
 
-// AddSpeechLine appends a prosecutor line to the running transcript.
 func (s *Store) AddSpeechLine(text string) {
 	if text == "" {
 		return
@@ -175,7 +163,6 @@ func (s *Store) AddSpeechLine(text string) {
 	s.mu.Unlock()
 }
 
-// ClearTranscript drops the running trial transcript after verdict.
 func (s *Store) ClearTranscript() {
 	s.mu.Lock()
 	s.comments = nil
@@ -204,14 +191,12 @@ func (s *Store) participantLocked(name string) *Participant {
 	return p
 }
 
-// GetProfile returns a copy of the streamer profile.
 func (s *Store) GetProfile() StreamerProfile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.profile
 }
 
-// SetProfile replaces the hand-edited part of the profile, keeps auto notes.
 func (s *Store) SetProfile(p StreamerProfile) {
 	s.mu.Lock()
 	auto := s.profile.AutoNotes
@@ -221,7 +206,6 @@ func (s *Store) SetProfile(p StreamerProfile) {
 	s.save()
 }
 
-// NoteForAI appends an auto observation about the streamer or chat.
 func (s *Store) NoteForAI(note string) {
 	if note == "" {
 		return
@@ -269,7 +253,6 @@ func (s *Store) RecentDonations(n int) []DonationRecord {
 	return out
 }
 
-// TopAccusers returns up to n participants ordered by sue calls then votes.
 func (s *Store) TopAccusers(n int) []Participant {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -293,7 +276,6 @@ func (s *Store) TopAccusers(n int) []Participant {
 	return best
 }
 
-// RecentComments returns the running trial transcript tail.
 func (s *Store) RecentComments(n int) []Comment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -305,7 +287,7 @@ func (s *Store) RecentComments(n int) []Comment {
 	return out
 }
 
-// saveSoon coalesces hot-path writes to at most one disk flush per second.
+// saveSoon throttles writes to at most one disk flush per second
 func (s *Store) saveSoon() {
 	if s.path == "" {
 		return

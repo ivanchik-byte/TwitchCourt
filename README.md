@@ -66,11 +66,21 @@ DonationAlerts подключается токеном виджета (`donation
 | `ai.provider` | — | `groq`, `cerebras` или `ollama` |
 | `ai.api_key` | `GROQ_API_KEY` / `CEREBRAS_API_KEY` | Без ключа включается mock-режим для проверки тракта (кроме ollama) |
 | `twitch.token` | `TWITCH_TOKEN` | Токен чата, без него модуль чата выключен |
-| `tts.engine` | — | `edge` по дефолту, `piper` оффлайн, автофолбэк флагом |
+| `tts.engine` | — | `edge` по дефолту, `silero` локально живой, `piper` оффлайн, автофолбэк флагом |
 | `game.minecraft_log` | — | Путь к `latest.log`, пусто значит выключено |
 | `game.memory_path` | — | Куда писать память судов, дефолт `data/memory.json` |
 
 История судов и профиль: `GET /api/history`, `GET/PUT /api/profile`. Ручной запуск: `POST /api/trial`, статус: `GET /api/status`.
+
+## Silero (живой голос локально)
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install numpy
+python tools/silero_sidecar.py   # http://127.0.0.1:7892
+```
+
+В `config.yaml`: `tts.engine: silero`. Модель `v5_ru.pt` (~87 МБ) скачается сама при первом запуске. Кастинг: судья `kseniya`, архетипы `aidar/baya/eugene`, присяжные из пула — всё правится ключами `silero_*`. Без sidecar рядом движок тихо откатится на запасной по флагу `auto_fallback`.
 
 ## Ограничения
 

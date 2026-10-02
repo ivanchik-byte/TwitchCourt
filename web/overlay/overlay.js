@@ -143,9 +143,6 @@
             /* audio locked until first gesture */
         }
     }
-    const judgeFrame = el("judge-frame");
-    const judgeImg = el("judge");
-    let judgeTimer = 0;
     // Short samples live in sfx/, missing files stay silent on purpose.
     function playSfx(name) {
         try {
@@ -157,22 +154,6 @@
             /* no sample yet */
         }
     }
-    function setJudge(state, flashMs = 0) {
-        judgeImg.src = "/api/judge/photo?state=" + state + "&t=" + Date.now();
-        judgeFrame.classList.remove("angry", "bang");
-        void judgeFrame.offsetWidth;
-        if (state === "angry")
-            judgeFrame.classList.add("angry");
-        if (state === "gavel")
-            judgeFrame.classList.add("bang");
-        window.clearTimeout(judgeTimer);
-        if (flashMs > 0) {
-            judgeTimer = window.setTimeout(() => {
-                judgeFrame.classList.remove("angry", "bang");
-                judgeImg.src = "/api/judge/photo?state=normal&t=" + Date.now();
-            }, flashMs);
-        }
-    }
     function deskSlam() {
         prosecutor.classList.remove("slam");
         void prosecutor.offsetWidth;
@@ -182,7 +163,6 @@
         stage.classList.add("shake");
         thump();
         playSfx("gavel.mp3");
-        setJudge("gavel", 900);
         window.setTimeout(() => stage.classList.remove("shake"), 300);
     }
     function showObjection() {
@@ -209,7 +189,6 @@
         verdict.classList.remove("drop");
         void verdict.offsetWidth;
         verdict.classList.add("drop");
-        setJudge("angry", 2500);
         thump();
         playSfx("gavel.mp3");
         deskSlam();
@@ -262,7 +241,6 @@
         hideVerdict();
         objection.classList.add("hidden");
         caseTeaser.classList.add("hidden");
-        setJudge("normal");
     }
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";

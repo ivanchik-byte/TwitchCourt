@@ -1,0 +1,38 @@
+/* Отдельный OBS-источник судьи: только фото, прозрачный фон.
+   Размер и позицию стример крутит самим источником в OBS. */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+#judge {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+}
+
+#judge.bang {
+  animation: judge-bang 0.6s ease;
+}
+
+@keyframes judge-bang {
+  0% { transform: scale(1) rotate(0); }
+  25% { transform: scale(1.12) rotate(-2deg); }
+  55% { transform: scale(0.97) rotate(1deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #judge.bang {
+    animation: none;
+  }
+}

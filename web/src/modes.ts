@@ -1,4 +1,3 @@
-// Страница режимов: статус суда, запуск дела, симулятор доната.
 (function () {
   function el<T extends HTMLElement>(id: string): T {
     const node = document.getElementById(id);
@@ -113,7 +112,7 @@
       }),
     })
       .then((res) => {
-        say(donateStatus, res.ok ? "Донат принят судом." : "Донат отклонен: проверьте секрет.");
+        say(donateStatus, res.ok ? "Тестовый донат отправлен." : "Ошибка: проверьте секретный ключ.");
       })
       .catch(() => {
         say(donateStatus, "Нет связи с сервером.");

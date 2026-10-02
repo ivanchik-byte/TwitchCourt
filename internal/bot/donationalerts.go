@@ -15,7 +15,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Donation is a single DonationAlerts event reduced to what court needs.
 type Donation struct {
 	Donor    string
 	Amount   float64
@@ -23,11 +22,7 @@ type Donation struct {
 	Message  string
 }
 
-// DonationsWatcher listens to DonationAlerts via the streamer widget token.
-// The token is the ?token= value from any alerts widget URL, no OAuth needed.
-// Beta: the widget socket protocol is reverse-engineered, every step is logged
-// so a live test shows exactly where it stands. POST /api/donate and the
-// dashboard simulate button always work regardless.
+// DonationsWatcher connects to DonationAlerts via widget token.
 type DonationsWatcher struct {
 	token string
 	emit  func(Donation)
@@ -149,7 +144,6 @@ func (w *DonationsWatcher) handshake(ctx context.Context, socketURL string) (str
 	return parseHandshakeSID(string(body))
 }
 
-// parseHandshakeSID extracts the session id from an engine.io polling body.
 func parseHandshakeSID(body string) (string, error) {
 	rest := body
 	for len(rest) > 0 {
@@ -188,7 +182,6 @@ func (w *DonationsWatcher) handlePacket(conn *websocket.Conn, packet string) {
 	}
 }
 
-// scanDonation finds a donation-shaped object inside a socket.io event payload.
 func scanDonation(payload []byte) (Donation, bool) {
 	var items []any
 	if err := json.Unmarshal(payload, &items); err != nil {

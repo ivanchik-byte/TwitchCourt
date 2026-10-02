@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// SueTracker counts !sue calls inside a sliding window and enforces
-// a cooldown between auto-started trials so chat cannot DDoS the court.
+// SueTracker counts !sue commands in a sliding window with cooldown
 type SueTracker struct {
 	mu        sync.Mutex
 	threshold int
@@ -16,12 +15,10 @@ type SueTracker struct {
 	lastTrial time.Time
 }
 
-// NewSueTracker builds a tracker. Non-positive threshold disables auto-start.
 func NewSueTracker(threshold int, window, cooldown time.Duration) *SueTracker {
 	return &SueTracker{threshold: threshold, window: window, cooldown: cooldown}
 }
 
-// Hit records a !sue and reports whether a trial should auto-start.
 func (t *SueTracker) Hit(now time.Time) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -48,7 +45,6 @@ func (t *SueTracker) Hit(now time.Time) bool {
 	return false
 }
 
-// MarkTrial records a manually started trial for cooldown purposes.
 func (t *SueTracker) MarkTrial(now time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

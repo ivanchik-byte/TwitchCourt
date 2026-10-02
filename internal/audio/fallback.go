@@ -5,8 +5,7 @@ import (
 	"log"
 )
 
-// AutoSynthesizer tries primary first and falls back to secondary on error.
-// Used as edge -> piper -> mock so the show continues without network.
+// AutoSynthesizer cascades primary -> secondary synthesizer on error
 type AutoSynthesizer struct {
 	primary   Synthesizer
 	secondary Synthesizer
@@ -32,7 +31,6 @@ func (s *AutoSynthesizer) Synthesize(ctx context.Context, text string) ([]byte, 
 	return nil, context.DeadlineExceeded
 }
 
-// SetVoiceProfile forwards to the primary engine when supported.
 func (s *AutoSynthesizer) SetVoiceProfile(voice, rate string) {
 	type profiler interface{ SetVoiceProfile(string, string) }
 	if p, ok := s.primary.(profiler); ok {

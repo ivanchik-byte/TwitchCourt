@@ -20,6 +20,9 @@ tts:
   judge_voice: "ru-RU-DmitryNeural"
   judge_rate: "-10%"
   jury_voices: ["ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"]
+  silero_url: "http://127.0.0.1:7892"
+  silero_judge: "kseniya"
+  silero_jury: ["aidar", "baya", "ruslan", "natasha"]
   piper_binary: ""
   model_path: "models/ru_dmitri.onnx"
   config_path: "models/ru_dmitri.onnx.json"

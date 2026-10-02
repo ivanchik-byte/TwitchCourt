@@ -1,5 +1,3 @@
-// GooeyNav port: sticky pill nav with gooey blob + bubble particles.
-// Vanilla, no dependencies. Items scroll to page sections (stub content).
 namespace GooeyNav {
   const PARTICLE_COUNT = 8;
   const PARTICLE_DISTANCES: [number, number] = [90, 10];

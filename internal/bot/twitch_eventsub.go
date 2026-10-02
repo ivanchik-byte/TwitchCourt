@@ -12,9 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// EventSubWatcher listens to Twitch Bits cheers over EventSub WebSocket.
-// Needs a user access token with bits:read scope, the app client id and
-// the broadcaster user id. Idle without all three, nothing else breaks.
+// EventSubWatcher listens to bits cheers (requires bits:read scope)
 type EventSubWatcher struct {
 	token         string
 	clientID      string
@@ -155,7 +153,6 @@ func (w *EventSubWatcher) duplicate(id string) bool {
 	return false
 }
 
-// parseCheerEvent extracts a cheer notification into a donation-shaped event.
 func parseCheerEvent(payload []byte) (DonationEvent, bool) {
 	var note struct {
 		Subscription struct {

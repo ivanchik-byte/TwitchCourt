@@ -1,5 +1,3 @@
-// Тактический пульт стримера: шкала терпения, быстрые плитки,
-// активный суд с ручным вердиктом, лента событий с метками.
 namespace Desk {
   export type ServerEvent =
     | { type: "state_change"; payload: StateChange }
@@ -201,13 +199,13 @@ namespace Desk {
           const amount = Number(msg.payload.amount || 0);
           const currency = String(msg.payload.currency || "");
           const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
-          feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в память", "donation");
+          feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в копилку", "donation");
           break;
         }
         case "suspicion": {
           const meter = Number(msg.payload.meter || 0);
           renderMeter(meter);
-          feed("Папка дела №404: " + meter + "%", "trial");
+          feed("Шкала дела: " + meter + "%", "trial");
           break;
         }
         case "voting_update": {
@@ -256,7 +254,7 @@ namespace Desk {
   btnGavel.addEventListener("click", () => {
     sendAction("animation", { name: "slam" });
     post("/api/say", { text: "Суд слушает!" }).then((ok) => {
-      if (!ok) Desk.say(deckStatus, "Молоток не долетел: проверьте секрет.");
+      if (!ok) Desk.say(deckStatus, "Команда отклонена: проверьте секретный ключ.");
     });
   });
 
@@ -271,7 +269,7 @@ namespace Desk {
 
   function forceVerdict(guilty: boolean): void {
     post("/api/verdict", { guilty }).then((ok) => {
-      Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет голосования или нет связи.");
+      Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет активного голосования или связи.");
     });
   }
 

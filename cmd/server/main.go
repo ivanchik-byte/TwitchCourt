@@ -137,8 +137,7 @@ func main() {
 	engine.AttachMemory(recall)
 	engine.SetPunishments(cfg.Courtroom.Punishments)
 
-	// requestTrial opens a trial right away. Force bypasses the pacing
-	// gate and is reserved for streamer intent and platinum donations.
+	// force bypasses pacing cooldown for manual starts and platinum donations
 	requestTrial = func(defendant, crime, context string, force bool) {
 		if !force && !pacing.Ready(time.Now()) {
 			log.Printf("trial suppressed by cooldown")
@@ -152,9 +151,7 @@ func main() {
 		sueTracker.MarkTrial(time.Now())
 	}
 
-	// chargeTrial banks suspicion points and opens the trial at 100%.
-	// Milestones go to the overlay as a forming-case tease.
-	// It reports whether a trial opened.
+	// banks suspicion points and opens trial on reaching 100%
 	chargeTrial = func(points int, defendant, crime, context string) bool {
 		idle := engine.GetState() == court.StateIdle
 		fired, meter, milestone := pacing.Add(points, time.Now(), idle)
@@ -203,8 +200,7 @@ func main() {
 		if d.Amount >= 500 && donor != "" {
 			recall.NoteForAI("меценат " + donor + " любит взятки и ждет снисхождения")
 		}
-		// Active trial: the donation joins as witness testimony instead
-		// of opening a competing case. Speech is never interrupted.
+		// queue donation as testimony during active trial instead of competing
 		if engine.AddWitness(donor, d.Amount, d.Currency, d.Message) {
 			return
 		}
@@ -673,6 +669,12 @@ func buildSynthesizer(cfg *config.Config) audio.Synthesizer {
 		return fallback
 	case "mock":
 		return fallback
+	case "silero":
+		primary := audio.NewSileroSynthesizer(cfg.TTS.SileroURL, cfg.TTS.SileroJudge)
+		if cfg.TTS.AutoFallback {
+			return audio.NewAutoSynthesizer(primary, fallback)
+		}
+		return primary
 	default:
 		primary := audio.NewEdgeSynthesizer(cfg.TTS.Voice, cfg.TTS.Rate, cfg.TTS.Volume, cfg.TTS.Pitch)
 		if cfg.TTS.AutoFallback {
@@ -701,8 +703,7 @@ func judgePhotoPath(state string) string {
 	return filepath.Join("data", "judge", state+".jpg")
 }
 
-// serveJudgePhoto serves an uploaded judge portrait, falling back to the
-// embedded default (angry/gavel fall back to normal until uploaded).
+// fallback to embedded default (angry/gavel fall back to normal until uploaded)
 func serveJudgePhoto(w http.ResponseWriter, r *http.Request, state string) {
 	if raw, err := os.ReadFile(judgePhotoPath(state)); err == nil {
 		w.Header().Set("Content-Type", http.DetectContentType(raw))

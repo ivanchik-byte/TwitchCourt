@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Death maps a Minecraft log line to a courtroom charge in Russian.
+// Death maps a log line to a courtroom charge
 type Death struct {
 	Crime   string
 	Context string
@@ -29,7 +29,7 @@ var deathPatterns = []struct {
 	{regexp.MustCompile(`(?i)was slain by|was shot by`), "Проигранный бой мобу"},
 }
 
-// Watcher tails latest.log and reports deaths.
+// Watcher tails latest.log and reports deaths
 type Watcher struct {
 	mu      sync.RWMutex
 	logPath string

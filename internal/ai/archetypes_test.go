@@ -11,7 +11,7 @@ func TestArchetypes(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, a := range Archetypes {
-		if a.Name == "" || a.System == "" || a.Voice == "" || a.Rate == "" {
+		if a.Name == "" || a.System == "" || a.Voice == "" || a.Rate == "" || a.Silero == "" {
 			t.Fatalf("archetype has empty fields: %+v", a)
 		}
 		if !strings.Contains(a.System, "35 слов") {

@@ -24,14 +24,14 @@ const (
 	edgeUserAgent  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0"
 )
 
-// breakTagRe matches only the pause tags our own chunker inserts.
-// Anything else stays escaped, so user text can never inject SSML.
+// breakTagRe matches our own pause tags, user input stays escaped
 var breakTagRe = regexp.MustCompile(`&lt;break time=&#34;(\d{1,4})ms&#34;/&gt;`)
 
-// ssmlBody escapes user text but re-enables our pause tags.
 func ssmlBody(text, voice, rate, volume, pitch string) string {
-	escaped := html.EscapeString(text)
+	escaped := html.EscapeString(strings.TrimSpace(text))
 	escaped = breakTagRe.ReplaceAllString(escaped, `<break time="${1}ms" />`)
+	liveRate, livePitch := lively(escaped, rate, pitch)
+	rate, pitch = liveRate, livePitch
 	return fmt.Sprintf(
 		"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>"+
 			"<voice name='%s'>"+
@@ -43,8 +43,30 @@ func ssmlBody(text, voice, rate, volume, pitch string) string {
 		voice, pitch, rate, volume, escaped)
 }
 
-// secMSGEC reproduces the Edge Sec-MS-GEC token: uppercase SHA256 hex of
-// 5-minute-rounded Windows ticks concatenated with the client token.
+// lively raises rate and pitch on exclamations for emotional delivery
+func lively(escaped, rate, pitch string) (string, string) {
+	trimmed := strings.TrimSpace(escaped)
+	switch {
+	case strings.HasSuffix(trimmed, "!"):
+		return shiftRate(rate, 10), shiftPitch(pitch, 5)
+	default:
+		return rate, pitch
+	}
+}
+
+func shiftRate(rate string, delta int) string {
+	var base int
+	fmt.Sscanf(strings.TrimSuffix(rate, "%"), "%d", &base)
+	return fmt.Sprintf("%+d%%", base+delta)
+}
+
+func shiftPitch(pitch string, delta int) string {
+	var base int
+	fmt.Sscanf(strings.TrimSuffix(pitch, "Hz"), "%d", &base)
+	return fmt.Sprintf("%+dHz", base+delta)
+}
+
+// secMSGEC reproduces Edge token: SHA256 hex of 5-min Windows ticks + token
 func secMSGEC() string {
 	ticks := float64(time.Now().UTC().Unix()) + 11644473600
 	ticks = math.Floor(ticks/300) * 300
@@ -61,8 +83,7 @@ func edgeTimestamp() string {
 	return time.Now().UTC().Format("Mon Jan 02 2006 15:04:05 GMT+0000 (Coordinated Universal Time)")
 }
 
-// directSynthesize talks raw SSML to Edge, bypassing the helper library
-// whose forced EscapeXML kills our <break> pause tags.
+// directSynthesize sends raw SSML directly to preserve <break> pause tags
 func directSynthesize(ctx context.Context, text, voice, rate, volume, pitch string) ([]byte, error) {
 	url := edgeWSSURL + "&Sec-MS-GEC=" + secMSGEC() +
 		"&Sec-MS-GEC-Version=" + edgeGECVersion +

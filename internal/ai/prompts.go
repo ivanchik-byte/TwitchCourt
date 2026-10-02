@@ -18,18 +18,14 @@ PROSODY FOR SPEECH SYNTHESIS:
 8. One exclamation per sentence max. Alternate loud and quiet sentences so the voice breathes.
 9. Plain words win. Avoid tongue twisters and homograph traps so offline voices stay clear.`
 
-// ProsodyDirection teaches the model to write for ears, not eyes.
-// Ellipses, dashes and interjections steer any voice; plus-stresses
-// (вин+овен) fix Russian stress for neural voices; a rare
-// <break time="300ms" /> survives into SSML as a dramatic pause.
+// Prosody instructions for TTS generation (ellipses, stress marks, pauses)
 const ProsodyDirection = `АУДИО-РЕЖИССУРА:
 - Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."
 - Тире для смысловых ударов, междометия для живости: "Кхм...", "Позвольте!", "Ого!"
 - Знак + перед ударной гласной в спорных словах: вин+овен, в+аша честь, казн+ить.
 - Не чаще одного <break time="300ms" /> на реплику, только перед кульминацией.`
 
-// JudgeSystemPrompt voices the final ruling: slow, weighty, final.
-// The judge never jokes about the verdict itself, only about the crowd.
+// JudgeSystemPrompt voices the final ruling
 const JudgeSystemPrompt = `Ты — Судья трибунала. Голос медленный, весомый, окончательный.
 Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
 Твоя реплика — это ВСЕГДА ровно 2 предложения и не больше 35 слов.

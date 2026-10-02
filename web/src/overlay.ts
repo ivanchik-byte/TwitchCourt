@@ -1,4 +1,3 @@
-// OBS overlay client: transparent stage, lipsynced actor, gauges, seals.
 namespace Overlay {
   export type ServerEvent =
     | { type: "state_change"; payload: StateChange }
@@ -212,10 +211,6 @@ namespace Overlay {
     }
   }
 
-  const judgeFrame = el("judge-frame");
-  const judgeImg = el("judge") as unknown as HTMLImageElement;
-  let judgeTimer = 0;
-
   // Short samples live in sfx/, missing files stay silent on purpose.
   function playSfx(name: string): void {
     try {
@@ -224,21 +219,6 @@ namespace Overlay {
       void audio.play().catch(() => undefined);
     } catch {
       /* no sample yet */
-    }
-  }
-
-  function setJudge(state: string, flashMs = 0): void {
-    judgeImg.src = "/api/judge/photo?state=" + state + "&t=" + Date.now();
-    judgeFrame.classList.remove("angry", "bang");
-    void judgeFrame.offsetWidth;
-    if (state === "angry") judgeFrame.classList.add("angry");
-    if (state === "gavel") judgeFrame.classList.add("bang");
-    window.clearTimeout(judgeTimer);
-    if (flashMs > 0) {
-      judgeTimer = window.setTimeout(() => {
-        judgeFrame.classList.remove("angry", "bang");
-        judgeImg.src = "/api/judge/photo?state=normal&t=" + Date.now();
-      }, flashMs);
     }
   }
 
@@ -251,7 +231,6 @@ namespace Overlay {
     stage.classList.add("shake");
     thump();
     playSfx("gavel.mp3");
-    setJudge("gavel", 900);
     window.setTimeout(() => stage.classList.remove("shake"), 300);
   }
 
@@ -281,7 +260,6 @@ namespace Overlay {
     verdict.classList.remove("drop");
     void verdict.offsetWidth;
     verdict.classList.add("drop");
-    setJudge("angry", 2500);
     thump();
     playSfx("gavel.mp3");
     deskSlam();
@@ -337,7 +315,6 @@ namespace Overlay {
     hideVerdict();
     objection.classList.add("hidden");
     caseTeaser.classList.add("hidden");
-    setJudge("normal");
   }
 
   function connect(): void {

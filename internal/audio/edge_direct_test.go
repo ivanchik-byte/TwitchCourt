@@ -33,3 +33,23 @@ func TestSecMSGECShape(t *testing.T) {
 		}
 	}
 }
+
+func TestLivelyMarks(t *testing.T) {
+	shout := ssmlBody(`Протестую!`, "ru-RU-DmitryNeural", "+0%", "+0%", "+0Hz")
+	if !strings.Contains(shout, `'+10%'`) || !strings.Contains(shout, `'+5Hz'`) {
+		t.Fatalf("shout not lifted: %s", shout)
+	}
+	flat := ssmlBody(`Суд слушает дело.`, "ru-RU-DmitryNeural", "+0%", "+0%", "+0Hz")
+	if !strings.Contains(flat, `'+0%'`) || !strings.Contains(flat, `'+0Hz'`) {
+		t.Fatalf("plain line must keep base profile: %s", flat)
+	}
+}
+
+func TestShiftHelpers(t *testing.T) {
+	if got := shiftRate("+15%", 10); got != "+25%" {
+		t.Fatalf("rate: %s", got)
+	}
+	if got := shiftPitch("-10Hz", 5); got != "-5Hz" {
+		t.Fatalf("pitch: %s", got)
+	}
+}

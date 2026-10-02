@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// ChatCommand is a parsed chat trigger relevant to the court.
 type ChatCommand struct {
 	Author   string
 	Kind     string
@@ -26,8 +25,6 @@ const (
 	CommandCrime    = "crime"
 )
 
-// ParseChatLine extracts a court command from a chat message.
-// Plain text becomes a chat comment, !-prefixed triggers map to actions.
 func ParseChatLine(author, text string) ChatCommand {
 	trimmed := strings.TrimSpace(text)
 	lower := strings.ToLower(trimmed)
@@ -45,8 +42,6 @@ func ParseChatLine(author, text string) ChatCommand {
 	}
 }
 
-// parsePrivMsg parses a raw IRC line into author and message.
-// Handles both plain and tag-prefixed Twitch lines.
 func parsePrivMsg(line string) (author, message string, ok bool) {
 	rest := line
 	if strings.HasPrefix(rest, "@") {
@@ -77,7 +72,6 @@ func parsePrivMsg(line string) (author, message string, ok bool) {
 	return author, message, true
 }
 
-// TwitchIRC reads Twitch chat over TLS IRC and emits parsed commands.
 type TwitchIRC struct {
 	channel string
 	nick    string
@@ -86,7 +80,6 @@ type TwitchIRC struct {
 	sendCh  chan string
 }
 
-// NewTwitchIRC builds a chat listener. Empty token means disabled.
 func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIRC {
 	return &TwitchIRC{
 		channel: strings.ToLower(strings.TrimPrefix(channel, "#")),
@@ -97,7 +90,6 @@ func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIR
 	}
 }
 
-// SendMessage queues a bot line for the channel.
 func (t *TwitchIRC) SendMessage(text string) {
 	select {
 	case t.sendCh <- text:
@@ -105,7 +97,6 @@ func (t *TwitchIRC) SendMessage(text string) {
 	}
 }
 
-// Run connects and stays connected until ctx ends. Idle without credentials.
 func (t *TwitchIRC) Run(ctx context.Context) {
 	if t.token == "" || t.channel == "" {
 		return

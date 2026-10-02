@@ -26,7 +26,7 @@
       <div class="masthead-status">
         <p class="docket-line">Состояние суда: <span id="current-state" class="state-badge">Ожидание</span></p>
         <div class="masthead-keys">
-          <input type="password" id="secret-input" placeholder="Секрет" autocomplete="off">
+          <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
           <button type="button" id="btn-panic" class="btn btn-seal">Сбросить суд</button>
         </div>
       </div>
@@ -46,13 +46,13 @@
           <article class="mode-card locked">
             <p class="mode-tag">Режим 02</p>
             <h3>Суд над зрителем</h3>
-            <p>Подсудимый только по команде !crime. Наказание шуточный тайм-аут.</p>
+            <p>Подсудимый выбирается командой !crime. Наказание — шуточный таймаут.</p>
             <p class="mode-badge">Скоро</p>
           </article>
           <article class="mode-card locked">
             <p class="mode-tag">Режим 03</p>
             <h3>Unban-суд</h3>
-            <p>Разбор заявок на разбан с вердиктом чата.</p>
+            <p>Разбор заявок на разбан с голосованием зрителей.</p>
             <p class="mode-badge">Скоро</p>
           </article>
         </div>
@@ -86,11 +86,11 @@
 
         <hr class="rule">
 
-        <h3>Проверка доната вживую</h3>
+        <h3>Тестовый донат</h3>
         <form id="donate-sim-form">
           <div class="row">
             <label class="field">
-              <span>Кто кинул</span>
+              <span>Отправитель</span>
               <input type="text" id="sim-donor" value="Аноним">
             </label>
             <label class="field">
@@ -103,10 +103,10 @@
             </label>
           </div>
           <label class="field">
-            <span>Текст доната</span>
+            <span>Сообщение</span>
             <input type="text" id="sim-message" value="Накинь ему статью!">
           </label>
-          <button type="submit" class="btn">Кинуть тестовый донат</button>
+          <button type="submit" class="btn">Отправить тестовый донат</button>
         </form>
         <p id="donate-status" class="footnote" aria-live="polite"></p>
       </section>

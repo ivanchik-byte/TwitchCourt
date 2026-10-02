@@ -2,20 +2,22 @@ package ai
 
 import "math/rand"
 
-// Archetype is one prosecutor persona: system prompt plus voice.
-// A random archetype is drawn per trial so the show never sounds samey.
+// Archetype defines a prosecutor persona: system prompt and voice profile.
 type Archetype struct {
 	Name   string
 	System string
 	Voice  string
 	Rate   string
+	// Silero is the speaker name for the Silero sidecar engine.
+	Silero string
 }
 
 var Archetypes = []Archetype{
 	{
-		Name:  "karlov",
-		Voice: "ru-RU-DmitryNeural",
-		Rate:  "+0%",
+		Name:   "karlov",
+		Voice:  "ru-RU-DmitryNeural",
+		Rate:   "+0%",
+		Silero: "aidar",
 		System: `Ты — Главный Прокурор-инквизитор Карлов, холодный и пафосный.
 Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
 Твоя реплика — это ВСЕГДА ровно 2 предложения и не больше 35 слов.
@@ -26,9 +28,10 @@ var Archetypes = []Archetype{
 " + ProsodyDirection + `,
 	},
 	{
-		Name:  "klavdia",
-		Voice: "ru-RU-SvetlanaNeural",
-		Rate:  "+0%",
+		Name:   "klavdia",
+		Voice:  "ru-RU-SvetlanaNeural",
+		Rate:   "+0%",
+		Silero: "baya",
 		System: `Ты — Клавдия Степановна, советская вахтерша при суде. Ворчливая, строгая, всех отчитываешь.
 Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
 Твоя реплика — это ВСЕГДА ровно 2 предложения и не больше 35 слов.
@@ -39,9 +42,10 @@ var Archetypes = []Archetype{
 " + ProsodyDirection + `,
 	},
 	{
-		Name:  "dealer",
-		Voice: "ru-RU-DmitryNeural",
-		Rate:  "+15%",
+		Name:   "dealer",
+		Voice:  "ru-RU-DmitryNeural",
+		Rate:   "+15%",
+		Silero: "eugene",
 		System: `Ты — Продажный адвокат Делец. Бойкий, скороговоркой, открыто намекаешь, что за донат готов свалить вину на крипера.
 Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
 Твоя реплика — это ВСЕГДА ровно 2 предложения и не больше 35 слов.
@@ -53,7 +57,6 @@ var Archetypes = []Archetype{
 	},
 }
 
-// DrawArchetype picks a random prosecutor for a trial.
 func DrawArchetype() Archetype {
 	return Archetypes[rand.Intn(len(Archetypes))]
 }
