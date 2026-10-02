@@ -1,10 +1,12 @@
 #!/bin/sh
-# Compile the control desk TypeScript into a single plain JS bundle.
+# Compile desk TypeScript into plain single-file JS bundles.
 # Output stays dependency-free so the Go embed needs no toolchain.
 set -e
 cd "$(dirname "$0")"
 rm -rf compiled
-tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/desk.ts
-cp compiled/desk.js dashboard/app.js
+tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/particles.ts src/gooey.ts src/desk.ts src/settings.ts src/modes.ts
+cat compiled/particles.js compiled/gooey.js compiled/desk.js > dashboard/app.js
+cat compiled/particles.js compiled/gooey.js compiled/settings.js > dashboard/settings.js
+cat compiled/particles.js compiled/gooey.js compiled/modes.js > dashboard/modes.js
 rm -rf compiled
-echo "frontend built: dashboard/app.js"
+echo "frontend built: dashboard/app.js dashboard/settings.js dashboard/modes.js"

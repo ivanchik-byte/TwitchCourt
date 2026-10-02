@@ -3,10 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal — Канцелярия суда</title>
+  <title>Stream Tribunal · Канцелярия суда</title>
   <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="gooey.css">
 </head>
 <body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <nav class="gooey-nav" id="gooey-nav" aria-label="Разделы">
+    <ul>
+      <li class="active"><a href="/" data-page="desk">Дело</a></li>
+      <li><a href="/settings" data-page="settings">Настройки</a></li>
+      <li><a href="/modes" data-page="modes">Режимы</a></li>
+    </ul>
+  </nav>
   <div class="ledger">
     <header class="masthead">
       <div class="masthead-title">
@@ -20,66 +29,22 @@
         <p class="docket-line">Дело: <span id="active-case-title">Нет активного дела</span></p>
         <div class="masthead-keys">
           <input type="password" id="secret-input" placeholder="Секрет" autocomplete="off">
+          <a class="btn btn-ghost" href="/settings">Настройки</a>
           <button type="button" id="btn-panic" class="btn btn-seal">Сбросить суд</button>
         </div>
       </div>
     </header>
 
     <main class="folio">
-      <section class="article" aria-labelledby="case-heading">
-        <p class="overline">Статья первая</p>
-        <h2 id="case-heading">Новое дело</h2>
-        <form id="trial-form">
-          <label class="field">
-            <span>Подсудимый</span>
-            <input type="text" id="defendant-input" value="Стример" required>
-          </label>
-          <label class="field">
-            <span>Обвинение</span>
-            <input type="text" id="crime-input" value="Купание в лаве с полным инвентарем" required>
-          </label>
-          <label class="field">
-            <span>Контекст из чата или игры</span>
-            <textarea id="context-input" rows="3">Чат: Стример опять слил все алмазы!</textarea>
-          </label>
-          <div class="presets">
-            <span class="presets-caption">Готовые статьи:</span>
-            <button type="button" class="chip" data-crime="Купание в лаве с полным инвентарем">Лава</button>
-            <button type="button" class="chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
-            <button type="button" class="chip" data-crime="Падение в пустоту с алмазами">Шахта</button>
-            <button type="button" class="chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание</button>
-          </div>
-          <button type="submit" class="btn btn-verdict">Открыть заседание</button>
-        </form>
-
-        <hr class="rule">
-
-        <h3>Проверка доната вживую</h3>
-        <form id="donate-sim-form">
-          <div class="row">
-            <label class="field">
-              <span>Кто кинул</span>
-              <input type="text" id="sim-donor" value="Аноним">
-            </label>
-            <label class="field">
-              <span>Сумма</span>
-              <input type="number" id="sim-amount" min="1" step="1" value="150">
-            </label>
-            <label class="field">
-              <span>Валюта</span>
-              <input type="text" id="sim-currency" value="RUB">
-            </label>
-          </div>
-          <label class="field">
-            <span>Текст доната</span>
-            <input type="text" id="sim-message" value="Накинь ему статью!">
-          </label>
-          <button type="submit" class="btn">Кинуть тестовый донат</button>
-        </form>
-        <p id="donate-status" class="footnote" aria-live="polite"></p>
+      <section class="article article-wide" id="court-feed-wrap" aria-labelledby="feed-heading">
+        <p class="overline">Телеметрия</p>
+        <h2 id="feed-heading">Лента событий</h2>
+        <ul id="event-feed" class="event-feed" aria-live="polite">
+          <li class="feed-empty">Пока тихо. Откройте дело или киньте тестовый донат.</li>
+        </ul>
       </section>
 
-      <section class="article" aria-labelledby="settings-heading">
+      <section class="article" id="article-settings" aria-labelledby="settings-heading">
         <p class="overline">Статья вторая</p>
         <h2 id="settings-heading">Настройки суда</h2>
         <form id="settings-form">
@@ -116,12 +81,18 @@
         <hr class="rule">
 
         <h3>Ключи интеграций</h3>
-        <p class="footnote">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются: DonationAlerts — токен виджета (<code>DONATE_TOKEN</code>), DonatePay — API-ключ (<code>DONATEPAY_API_KEY</code>), Twitch — токен (<code>TWITCH_TOKEN</code>) плюс <code>client_id</code> и <code>broadcaster_id</code> в конфиге.</p>
+        <p class="footnote">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются: DonationAlerts: токен виджета (<code>DONATE_TOKEN</code>), DonatePay: API-ключ (<code>DONATEPAY_API_KEY</code>), Twitch: токен (<code>TWITCH_TOKEN</code>) плюс <code>client_id</code> и <code>broadcaster_id</code> в конфиге.</p>
       </section>
     </main>
 
-    <footer class="colophon">
+    <footer class="colophon" id="court-contacts">
       <p>Суд над стримером · подсудимый всегда стример · ничья в пользу подсудимого</p>
+      <div class="social-dock" role="navigation" aria-label="Связь">
+        <a class="dock-item" href="https://t.me/ivanchikbyte" target="_blank" rel="noopener" data-short="TG" data-full="Telegram"><span>TG</span></a>
+        <a class="dock-item" href="https://t.me/ivanchik_byte" target="_blank" rel="noopener" data-short="CH" data-full="Канал"><span>CH</span></a>
+        <a class="dock-item" href="https://github.com/ivanchik-byte" target="_blank" rel="noopener" data-short="GH" data-full="GitHub"><span>GH</span></a>
+        <a class="dock-item" href="https://github.com/ivanchik-byte?tab=repositories" target="_blank" rel="noopener" data-short="RP" data-full="Репозитории"><span>RP</span></a>
+      </div>
     </footer>
   </div>
 

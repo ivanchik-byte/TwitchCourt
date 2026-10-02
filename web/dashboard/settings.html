@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Tribunal · Настройки суда</title>
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="gooey.css">
+</head>
+<body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <nav class="gooey-nav" id="gooey-nav" aria-label="Разделы">
+    <ul>
+      <li><a href="/" data-page="desk">Дело</a></li>
+      <li class="active"><a href="/settings" data-page="settings">Настройки</a></li>
+      <li><a href="/modes" data-page="modes">Режимы</a></li>
+    </ul>
+  </nav>
+  <div class="ledger">
+    <header class="masthead">
+      <div class="masthead-title">
+        <p class="overline">Реестр №404 · приложение</p>
+        <h1>Настройки суда</h1>
+        <p class="subline">Пороги, наказания, портрет и ключи</p>
+      </div>
+      <div class="masthead-status">
+        <p class="docket-line">Сервер: <span id="srv-label">Проверка...</span> <span id="srv-dot" class="dot" aria-hidden="true"></span></p>
+        <div class="masthead-keys">
+          <a class="btn btn-ghost" href="/">К канцелярии</a>
+        </div>
+      </div>
+    </header>
+
+    <nav class="seg-nav" aria-label="Разделы настроек">
+      <button type="button" class="seg-card" data-view="view-court"><span class="seg-num">01</span><span class="seg-name">Суд</span><small>Пороги, наказания, портрет</small></button>
+      <button type="button" class="seg-card" data-view="view-games"><span class="seg-num">02</span><span class="seg-name">Подкл. игры</span><small>Minecraft и другие</small></button>
+      <button type="button" class="seg-card" data-view="view-donates"><span class="seg-num">03</span><span class="seg-name">Донаты</span><small>Источники и ключи</small></button>
+      <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">04</span><span class="seg-name">Оверлей</span><small>Заглушка</small></button>
+    </nav>
+
+    <main class="folio">
+      <div class="settings-view hidden" id="view-court">
+        <section class="article" aria-labelledby="donate-heading">
+          <p class="overline">Суд · пороги</p>
+          <h2 id="donate-heading">Донаты и пороги</h2>
+          <p class="guide">Суд открывается сам, когда донат дотянул до порога своей валюты. Ниже порога донат просто пишется в память суда.</p>
+          <form id="settings-form">
+            <div class="row">
+              <label class="field"><span>RUB</span><input type="number" id="min-rub" min="0" step="1"></label>
+              <label class="field"><span>USD</span><input type="number" id="min-usd" min="0" step="1"></label>
+              <label class="field"><span>EUR</span><input type="number" id="min-eur" min="0" step="1"></label>
+              <label class="field"><span>BITS</span><input type="number" id="min-bits" min="0" step="1"></label>
+              <label class="field"><span>Остальные</span><input type="number" id="min-default" min="0" step="1"></label>
+            </div>
+            <h3>Наказания <small>по одному на строку, выпадает за «виновен»</small></h3>
+            <label class="field">
+              <span class="visually-hidden">Наказания</span>
+              <textarea id="punishments-input" rows="5"></textarea>
+            </label>
+            <button type="submit" class="btn btn-verdict">Сохранить</button>
+          </form>
+          <p id="settings-status" class="footnote" aria-live="polite"></p>
+        </section>
+
+        <section class="article" aria-labelledby="portrait-heading">
+          <p class="overline">Суд · портрет</p>
+          <h2 id="portrait-heading">Портрет стримера</h2>
+          <p class="guide">Суд помнит это между заседаниями и вплетает в обвинения.</p>
+          <form id="profile-form">
+            <label class="field"><span>Имя</span><input type="text" id="profile-name" placeholder="Стример"></label>
+            <label class="field"><span>Титулы (через запятую)</span><input type="text" id="profile-titles"></label>
+            <label class="field"><span>Черты (через запятую)</span><input type="text" id="profile-traits"></label>
+            <label class="field"><span>Дежурные мемы (через запятую)</span><input type="text" id="profile-gags"></label>
+            <label class="field"><span>Строгость суда</span><input type="text" id="profile-mercy"></label>
+            <button type="submit" class="btn">Сохранить портрет</button>
+          </form>
+          <p id="profile-status" class="footnote" aria-live="polite"></p>
+        </section>
+      </div>
+
+      <div class="settings-view hidden" id="view-games">
+        <section class="article article-games article-wide" aria-labelledby="games-heading">
+          <p class="overline">Игры · интеграции</p>
+          <h2 id="games-heading">Подключенные игры</h2>
+          <div class="games-grid">
+            <!-- Minecraft (Слева, зеленый акцент) -->
+            <div class="game-card game-minecraft game-card-interactive" id="card-minecraft" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false">
+              <div class="game-card-main">
+                <svg class="game-logo mc-logo" viewBox="0 0 96 96" width="76" height="76" aria-hidden="true">
+                  <rect x="0" y="0" width="96" height="96" fill="#6abe30"/>
+                  <rect x="12" y="12" width="12" height="12" fill="#5a9e26"/>
+                  <rect x="60" y="0" width="12" height="12" fill="#5a9e26"/>
+                  <rect x="36" y="24" width="12" height="12" fill="#8bd450"/>
+                  <rect x="72" y="60" width="12" height="12" fill="#5a9e26"/>
+                  <rect x="0" y="72" width="12" height="12" fill="#5a9e26"/>
+                  <rect x="48" y="84" width="12" height="12" fill="#8bd450"/>
+                  <rect x="84" y="36" width="12" height="12" fill="#5a9e26"/>
+                  <rect x="12" y="24" width="24" height="24" fill="#0b0d0c"/>
+                  <rect x="60" y="24" width="24" height="24" fill="#0b0d0c"/>
+                  <rect x="36" y="48" width="24" height="24" fill="#0b0d0c"/>
+                  <rect x="24" y="72" width="48" height="12" fill="#0b0d0c"/>
+                </svg>
+                <div class="game-card-body">
+                  <div class="game-card-head">
+                    <div class="game-title-row">
+                      <strong>Minecraft (Java)</strong>
+                      <span class="state-badge" id="mc-card-badge">Настроить</span>
+                    </div>
+                    <span class="game-arrow mc-arrow" aria-hidden="true">Настройка →</span>
+                  </div>
+                  <p class="game-card-desc">Отслеживание смертей через latest.log в реальном времени.</p>
+                  <div class="game-meta-pills">
+                    <span class="meta-pill" id="mc-meta-path">Лог: автопоиск</span>
+                    <span class="meta-pill" id="mc-meta-nicks">Ники: все игроки</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </div>
+
+      <div class="settings-view hidden" id="view-donates">
+        <section class="article" aria-labelledby="sources-heading">
+          <p class="overline">Донаты · источники</p>
+          <h2 id="sources-heading">Платежки</h2>
+          <p class="guide">Все источники сводятся к одному событию: кто, сколько, валюта, текст. Пороги задаются во вкладке «Суд».</p>
+          <ul class="source-list">
+            <li><strong>DonationAlerts</strong><span>токен виджета · сокет беты</span></li>
+            <li><strong>DonatePay</strong><span>API-ключ · официальный Centrifugo</span></li>
+            <li><strong>Twitch Bits</strong><span>EventSub · скоп bits:read</span></li>
+            <li><strong>Своя платежка</strong><span>вебхук POST /api/donate</span></li>
+          </ul>
+        </section>
+
+        <section class="article article-wide" aria-labelledby="keys-heading">
+          <p class="overline">Донаты · ключи</p>
+          <h2 id="keys-heading">Ключи интеграций</h2>
+          <p class="guide">Ключи живут в <code>config.yaml</code> или переменных окружения и здесь не показываются. Поля ниже пока только для чтения картинки: подключение включишь отдельной командой.</p>
+          <div class="row">
+            <label class="field"><span>DonationAlerts · токен виджета</span><input type="password" value="" placeholder="DONATE_TOKEN" disabled></label>
+            <label class="field"><span>DonatePay · API-ключ</span><input type="password" value="" placeholder="DONATEPAY_API_KEY" disabled></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Twitch · токен</span><input type="password" value="" placeholder="TWITCH_TOKEN" disabled></label>
+            <label class="field"><span>Twitch · канал</span><input type="text" value="" placeholder="настраивается в config.yaml" disabled></label>
+          </div>
+        </section>
+      </div>
+
+      <div class="settings-view hidden" id="view-overlay">
+        <section class="article" aria-labelledby="overlay-heading">
+          <p class="overline">Оверлей · заглушка</p>
+          <h2 id="overlay-heading">Оверлей демонтирован</h2>
+          <p class="guide">Роут /overlay отвечает 410. Новым оверлеем займемся после настроек, скажешь как: нарисую.</p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="colophon">
+      <p>Суд над стримером · подсудимый всегда стример · ничья в пользу подсудимого</p>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modal-minecraft" role="dialog" aria-modal="true" aria-labelledby="mc-modal-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <svg class="modal-icon" viewBox="0 0 96 96" width="38" height="38" aria-hidden="true">
+            <rect x="0" y="0" width="96" height="96" fill="#6abe30"/>
+            <rect x="12" y="12" width="12" height="12" fill="#5a9e26"/>
+            <rect x="60" y="0" width="12" height="12" fill="#5a9e26"/>
+            <rect x="36" y="24" width="12" height="12" fill="#8bd450"/>
+            <rect x="72" y="60" width="12" height="12" fill="#5a9e26"/>
+            <rect x="0" y="72" width="12" height="12" fill="#5a9e26"/>
+            <rect x="48" y="84" width="12" height="12" fill="#8bd450"/>
+            <rect x="84" y="36" width="12" height="12" fill="#5a9e26"/>
+            <rect x="12" y="24" width="24" height="24" fill="#0b0d0c"/>
+            <rect x="60" y="24" width="24" height="24" fill="#0b0d0c"/>
+            <rect x="36" y="48" width="24" height="24" fill="#0b0d0c"/>
+            <rect x="24" y="72" width="48" height="12" fill="#0b0d0c"/>
+          </svg>
+          <div>
+            <h2 id="mc-modal-title">Настройки Minecraft</h2>
+            <p class="modal-subtitle">Автозапуск суда по смертям из latest.log</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" id="mc-modal-close" aria-label="Закрыть окно">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <section class="modal-block">
+          <div class="modal-block-head">
+            <h3>Ники для отслеживания в логах</h3>
+            <span class="modal-counter" id="mc-nicks-counter">Все игроки</span>
+          </div>
+          <p class="modal-hint">Суд запускается только при гибели этих игроков. Если список пуст, трибунал реагирует на гибель любого игрока на сервере.</p>
+
+          <div class="tag-cloud" id="mc-tag-cloud" aria-live="polite"></div>
+
+          <div class="tag-input-row">
+            <input type="text" id="mc-nick-input" placeholder="Введи ник (например Steve)" autocomplete="off">
+            <button type="button" id="mc-btn-add-nick" class="btn btn-sm">Добавить</button>
+            <button type="button" id="mc-btn-add-streamer" class="btn btn-sm btn-ghost">+ Ник стримера</button>
+          </div>
+        </section>
+
+        <section class="modal-block">
+          <div class="modal-block-head">
+            <h3>Поиск Minecraft и файл логов</h3>
+            <span class="modal-badge-status" id="mc-path-status">Не проверено</span>
+          </div>
+          <p class="modal-hint">Minecraft записывает все события в файл latest.log. Укажи путь вручную или запусти автопоиск.</p>
+
+          <div class="path-search-row">
+            <input type="text" id="mc-log-path-input" placeholder="Путь к latest.log" autocomplete="off">
+            <button type="button" id="mc-btn-autodetect" class="btn btn-sm btn-accent">Найти авто</button>
+          </div>
+
+          <div class="launcher-presets">
+            <span class="preset-label">Быстрые шаблоны:</span>
+            <div class="preset-buttons">
+              <button type="button" class="btn-preset" data-path="%APPDATA%\.minecraft\logs\latest.log">Vanilla Windows</button>
+              <button type="button" class="btn-preset" data-path="%APPDATA%\PrismLauncher\instances">Prism Windows</button>
+              <button type="button" class="btn-preset" data-path="~/.minecraft/logs/latest.log">Linux Vanilla</button>
+            </div>
+          </div>
+
+          <p id="mc-detect-note" class="modal-note" aria-live="polite"></p>
+        </section>
+
+        <section class="modal-block modal-block-test">
+          <div class="modal-block-head">
+            <h3>Проверка связи</h3>
+          </div>
+          <div class="test-action-row">
+            <button type="button" id="mc-btn-test-trial" class="btn btn-sm">⚡ Эмулировать гибель в лаве</button>
+            <span id="mc-test-status" class="test-feedback" aria-live="polite">Проверит открытие суда без запуска игры</span>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="mc-btn-dismiss" class="btn btn-ghost">Закрыть</button>
+        <button type="button" id="mc-btn-save" class="btn btn-verdict">Сохранить настройки</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

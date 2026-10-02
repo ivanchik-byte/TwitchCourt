@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Tribunal — Режимы суда</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="gooey.css">
+</head>
+<body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <nav class="gooey-nav" id="gooey-nav" aria-label="Разделы">
+    <ul>
+      <li><a href="/" data-page="desk">Дело</a></li>
+      <li><a href="/settings" data-page="settings">Настройки</a></li>
+      <li class="active"><a href="/modes" data-page="modes">Режимы</a></li>
+    </ul>
+  </nav>
+  <div class="ledger">
+    <header class="masthead">
+      <div class="masthead-title">
+        <p class="overline">Реестр №404 · режимы</p>
+        <h1>Режимы суда</h1>
+        <p class="subline">Что судим сегодня</p>
+      </div>
+      <div class="masthead-status">
+        <p class="docket-line">Состояние суда: <span id="current-state" class="state-badge">Ожидание</span></p>
+        <div class="masthead-keys">
+          <input type="password" id="secret-input" placeholder="Секрет" autocomplete="off">
+          <button type="button" id="btn-panic" class="btn btn-seal">Сбросить суд</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="folio">
+      <section class="modes" aria-labelledby="modes-heading">
+        <p class="overline">Выбор производства</p>
+        <h2 id="modes-heading" class="visually-hidden">Режимы суда</h2>
+        <div class="mode-cards">
+          <article class="mode-card active">
+            <p class="mode-tag">Режим 01</p>
+            <h3>Суд над стримером</h3>
+            <p>Подсудимый всегда стример. Донаты, !sue и смерти в игре открывают дело.</p>
+            <p class="mode-badge">Активен</p>
+          </article>
+          <article class="mode-card locked">
+            <p class="mode-tag">Режим 02</p>
+            <h3>Суд над зрителем</h3>
+            <p>Подсудимый только по команде !crime. Наказание шуточный тайм-аут.</p>
+            <p class="mode-badge">Скоро</p>
+          </article>
+          <article class="mode-card locked">
+            <p class="mode-tag">Режим 03</p>
+            <h3>Unban-суд</h3>
+            <p>Разбор заявок на разбан с вердиктом чата.</p>
+            <p class="mode-badge">Скоро</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="article article-wide" id="article-case" aria-labelledby="case-heading">
+        <p class="overline">Режим 01 · запуск</p>
+        <h2 id="case-heading">Новое дело</h2>
+        <form id="trial-form">
+          <label class="field">
+            <span>Подсудимый</span>
+            <input type="text" id="defendant-input" value="Стример" required>
+          </label>
+          <label class="field">
+            <span>Обвинение</span>
+            <input type="text" id="crime-input" value="Купание в лаве с полным инвентарем" required>
+          </label>
+          <label class="field">
+            <span>Контекст из чата или игры</span>
+            <textarea id="context-input" rows="3">Чат: Стример опять слил все алмазы!</textarea>
+          </label>
+          <div class="presets">
+            <span class="presets-caption">Готовые статьи:</span>
+            <button type="button" class="chip" data-crime="Купание в лаве с полным инвентарем">Лава</button>
+            <button type="button" class="chip" data-crime="Взрыв на крипере у порога дома">Крипер</button>
+            <button type="button" class="chip" data-crime="Падение в пустоту с алмазами">Шахта</button>
+            <button type="button" class="chip" data-crime="Опоздание на стрим на 40 минут без предупреждения">Опоздание</button>
+          </div>
+          <button type="submit" class="btn btn-verdict">Открыть заседание</button>
+        </form>
+
+        <hr class="rule">
+
+        <h3>Проверка доната вживую</h3>
+        <form id="donate-sim-form">
+          <div class="row">
+            <label class="field">
+              <span>Кто кинул</span>
+              <input type="text" id="sim-donor" value="Аноним">
+            </label>
+            <label class="field">
+              <span>Сумма</span>
+              <input type="number" id="sim-amount" min="1" step="1" value="150">
+            </label>
+            <label class="field">
+              <span>Валюта</span>
+              <input type="text" id="sim-currency" value="RUB">
+            </label>
+          </div>
+          <label class="field">
+            <span>Текст доната</span>
+            <input type="text" id="sim-message" value="Накинь ему статью!">
+          </label>
+          <button type="submit" class="btn">Кинуть тестовый донат</button>
+        </form>
+        <p id="donate-status" class="footnote" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <footer class="colophon">
+      <p>Суд над стримером · подсудимый всегда стример · ничья в пользу подсудимого</p>
+    </footer>
+  </div>
+
+  <script src="modes.js"></script>
+</body>
+</html>

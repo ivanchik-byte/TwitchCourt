@@ -4,8 +4,17 @@ namespace Desk {
     | { type: "state_change"; payload: StateChange }
     | { type: "voting_update"; payload: VotingUpdate }
     | { type: "verdict"; payload: Verdict }
+    | { type: "donation"; payload: Donation }
     | { type: "panic"; payload: Record<string, unknown> }
     | { type: string; payload: Record<string, unknown> };
+
+  export interface Donation {
+    donor: string;
+    amount: number;
+    currency: string;
+    message?: string;
+    opens_trial: boolean;
+  }
 
   export interface StateChange {
     state: string;
@@ -93,18 +102,6 @@ namespace Desk {
   const secretInput = el("secret-input") as HTMLInputElement;
   const btnPanic = el("btn-panic");
 
-  const trialForm = el("trial-form") as HTMLFormElement;
-  const defendantInput = el("defendant-input") as HTMLInputElement;
-  const crimeInput = el("crime-input") as HTMLInputElement;
-  const contextInput = el("context-input") as HTMLTextAreaElement;
-
-  const simForm = el("donate-sim-form") as HTMLFormElement;
-  const simDonor = el("sim-donor") as HTMLInputElement;
-  const simAmount = el("sim-amount") as HTMLInputElement;
-  const simCurrency = el("sim-currency") as HTMLInputElement;
-  const simMessage = el("sim-message") as HTMLInputElement;
-  const donateStatus = el("donate-status");
-
   const settingsForm = el("settings-form") as HTMLFormElement;
   const minRub = el("min-rub") as HTMLInputElement;
   const minUsd = el("min-usd") as HTMLInputElement;
@@ -149,6 +146,27 @@ namespace Desk {
       currentState.classList.remove("guilty", "innocent");
     }
     Desk.say(activeCaseTitle, title);
+  }
+
+  const eventFeed = el("event-feed");
+
+  function feed(text: string): void {
+    const empty = eventFeed.querySelector(".feed-empty");
+    if (empty) empty.remove();
+    const item = document.createElement("li");
+    const now = new Date();
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    const stamp = document.createElement("span");
+    stamp.className = "feed-time";
+    stamp.textContent = "[" + pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds()) + "] ";
+    item.appendChild(stamp);
+    item.appendChild(document.createTextNode(text));
+    eventFeed.prepend(item);
+    while (eventFeed.children.length > 30) {
+      const last = eventFeed.lastChild;
+      if (last) last.remove();
+      else break;
+    }
   }
 
   function loadSettings(): void {
@@ -201,11 +219,24 @@ namespace Desk {
           const state = String(msg.payload.state || "idle");
           if (state === "idle") {
             renderState(state, "Нет активного дела");
+          } else if (state === "voting") {
+            const caseTitle = String(msg.payload.case_title || "");
+            renderState(state, caseTitle ? caseTitle + ": голосование" : "Идет голосование");
+            feed("Голосование запущено" + (caseTitle ? ": " + caseTitle : ""));
           } else {
             const caseTitle = String(msg.payload.case_title || "");
             const defendant = String(msg.payload.defendant || "");
             renderState(state, caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
+            if (caseTitle) feed("Открыто дело: " + caseTitle);
           }
+          break;
+        }
+        case "donation": {
+          const donor = String(msg.payload.donor || "Аноним");
+          const amount = Number(msg.payload.amount || 0);
+          const currency = String(msg.payload.currency || "");
+          const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
+          feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — записан в память");
           break;
         }
         case "verdict": {
@@ -221,31 +252,19 @@ namespace Desk {
           renderState("verdict", parts.join(" · "));
           currentState.classList.toggle("guilty", guilty);
           currentState.classList.toggle("innocent", !guilty);
+          feed(parts.join(" · "));
+          loadProfile();
           break;
         }
         case "panic":
           renderState("idle", "Сброшено");
+          feed("Суд сброшен вручную");
           break;
         default:
           break;
       }
     };
   }
-
-  trialForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    sendAction("start_trial", {
-      defendant: defendantInput.value.trim(),
-      crime: crimeInput.value.trim(),
-      context: contextInput.value.trim(),
-    });
-  });
-
-  document.querySelectorAll<HTMLButtonElement>(".chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      crimeInput.value = chip.getAttribute("data-crime") || "";
-    });
-  });
 
   btnPanic.addEventListener("click", () => sendAction("panic", {}));
 
@@ -254,31 +273,6 @@ namespace Desk {
       event.preventDefault();
       sendAction("panic", {});
     }
-  });
-
-  simForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const amount = Number(simAmount.value);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      Desk.say(donateStatus, "Сумма должна быть больше нуля.");
-      return;
-    }
-    fetch("/api/donate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({
-        donor: simDonor.value.trim() || "Аноним",
-        amount,
-        currency: simCurrency.value.trim() || "RUB",
-        message: simMessage.value.trim(),
-      }),
-    })
-      .then((res) => {
-        Desk.say(donateStatus, res.ok ? "Донат принят судом." : "Донат отклонен: проверьте секрет.");
-      })
-      .catch(() => {
-        Desk.say(donateStatus, "Нет связи с сервером.");
-      });
   });
 
   settingsForm.addEventListener("submit", (event) => {
