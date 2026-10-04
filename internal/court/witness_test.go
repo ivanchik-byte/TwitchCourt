@@ -1,6 +1,7 @@
 package court
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func TestAddWitnessIdle(t *testing.T) {
 func TestAddWitnessActive(t *testing.T) {
 	e := newWitnessEngine()
 	e.state = StateIndictment
-	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	e.currCase = &TrialCase{Defendant: "streamer"}
 
 	if !e.AddWitness("ivan", 150, "RUB", "убил курицу по дороге") {
 		t.Fatal("active court must accept witnesses")
@@ -83,40 +84,6 @@ func TestBuildWitnessInterludeUnescapes(t *testing.T) {
 	}
 }
 
-func TestWitnessWeight(t *testing.T) {
-	cases := []struct {
-		n    int
-		want int
-	}{
-		{0, 0},
-		{1, 1},
-		{3, 3},
-		{5, maxWitnessWeight},
-	}
-	for _, c := range cases {
-		witnesses := make([]Witness, c.n)
-		if got := witnessWeight(witnesses); got != c.want {
-			t.Fatalf("weight(%d) = %d, want %d", c.n, got, c.want)
-		}
-	}
-}
-
-func TestForceVerdict(t *testing.T) {
-	e := newWitnessEngine()
-	if e.ForceVerdict(true) {
-		t.Fatal("idle court must reject forced verdict")
-	}
-
-	e.state = StateVoting
-	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
-	if !e.ForceVerdict(false) {
-		t.Fatal("voting court must accept forced verdict")
-	}
-	if e.currCase.forceVerdict == nil || *e.currCase.forceVerdict {
-		t.Fatal("forced verdict must stick as innocent")
-	}
-}
-
 func TestSsmlBreakStrippedForDisplay(t *testing.T) {
 	got := ssmlDisplayRe.ReplaceAllString(`Протестую. <break time="300ms" /> Слушаем.`, "")
 	if strings.Contains(got, "<break") {
@@ -131,7 +98,7 @@ func TestAddDefenseWindow(t *testing.T) {
 	}
 
 	e.state = StateDefense
-	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	e.currCase = &TrialCase{Defendant: "streamer"}
 	if !e.AddDefense("streamer", "я не виноват, кот всё видел") {
 		t.Fatal("defense window must accept speech")
 	}
@@ -142,16 +109,16 @@ func TestAddDefenseWindow(t *testing.T) {
 		t.Fatal("empty defense must be rejected")
 	}
 
-	e.state = StateVoting
+	e.state = StateDeliberation
 	if e.AddDefense("streamer", "опоздал") {
-		t.Fatal("voting court must reject defense")
+		t.Fatal("deliberating court must reject defense")
 	}
 }
 
 func TestAddDefenseCapsLength(t *testing.T) {
 	e := newWitnessEngine()
 	e.state = StateDefense
-	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	e.currCase = &TrialCase{Defendant: "streamer"}
 	if !e.AddDefense("streamer", strings.Repeat("слово ", 300)) {
 		t.Fatal("long defense must attach")
 	}
@@ -188,45 +155,35 @@ func TestCastVoiceMapping(t *testing.T) {
 
 func TestStartViewerTrialBusy(t *testing.T) {
 	e := newWitnessEngine()
-	e.state = StateVoting
+	e.state = StateDeliberation
 	if err := e.StartViewerTrial("ivan", "спит на стриме"); err == nil {
 		t.Fatal("busy court must reject viewer trial")
 	}
 }
 
-// guilty viewer verdict must fire the chat-jail hook end to end
-func TestViewerTrialTimeoutEndToEnd(t *testing.T) {
+// mock deliberation never says the magic word: the bench must acquit
+// and run the whole pipeline without hanging
+func TestViewerTrialRunsEndToEnd(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Courtroom.DefenseSec = 1
-	cfg.Courtroom.VotingDurationSec = 2
 	voice, _ := audio.NewPiperDaemon(cfg.TTS)
 	e := NewEngine(cfg, obs.NewHub(nil), ai.NewClient(cfg.AI), voice, safety.NewFilter(nil))
 	e.AttachMemory(memory.NewStore(""))
 	e.SetPunishments([]string{"присесть 10 раз"})
 
 	timedOut := make(chan string, 1)
-	e.TimeoutHook = func(user string, secs int, reason string) {
-		if secs != 90 {
-			t.Errorf("jail term must be 90s, got %d", secs)
-		}
+	e.TimeoutHook = func(user string, secs int, ban bool, reason string) {
 		timedOut <- user
 	}
 
 	if err := e.StartViewerTrial("troll", "спит на стриме"); err != nil {
 		t.Fatalf("viewer trial rejected: %v", err)
 	}
-	waitState(t, e, StateVoting, 30*time.Second)
-	if !e.ForceVerdict(true) {
-		t.Fatal("force verdict rejected")
-	}
-	waitState(t, e, StateIdle, 30*time.Second)
+	waitState(t, e, StateIdle, 60*time.Second)
 	select {
 	case got := <-timedOut:
-		if got != "troll" {
-			t.Fatalf("wrong user jailed: %q", got)
-		}
+		t.Fatalf("undecided bench must not jail, got %q", got)
 	default:
-		t.Fatal("guilty viewer verdict must fire the timeout hook")
 	}
 }
 
@@ -241,13 +198,35 @@ func waitState(t *testing.T, e *Engine, want State, timeout time.Duration) {
 	}
 }
 
+func TestFinalizeVerdictJailsViewer(t *testing.T) {
+	cfg := config.DefaultConfig()
+	voice, _ := audio.NewPiperDaemon(cfg.TTS)
+	e := NewEngine(cfg, obs.NewHub(nil), nil, voice, safety.NewFilter(nil))
+	e.AttachMemory(memory.NewStore(""))
+
+	var jailed string
+	var term int
+	var banned bool
+	e.TimeoutHook = func(user string, secs int, isBan bool, reason string) {
+		jailed, term, banned = user, secs, isBan
+	}
+	c := &TrialCase{Defendant: "troll", Crime: "спит", Viewer: "troll"}
+	e.finalizeVerdict(context.Background(), c, true, true)
+	if jailed != "troll" || term != 90 || banned {
+		t.Fatalf("guilty viewer must be jailed 90s, got %q %d ban=%v", jailed, term, banned)
+	}
+	if e.GetState() != StateIdle {
+		t.Fatalf("court must rest after verdict, got %q", e.GetState())
+	}
+}
+
 func TestAddBribeOnce(t *testing.T) {
 	e := newWitnessEngine()
 	if e.AddBribe("ivan", 150, "RUB") {
 		t.Fatal("idle court must reject bribes")
 	}
 	e.state = StateIndictment
-	e.currCase = &TrialCase{Defendant: "streamer", Voters: make(map[string]bool)}
+	e.currCase = &TrialCase{Defendant: "streamer"}
 	if !e.AddBribe("ivan", 150, "RUB") {
 		t.Fatal("active court must accept the first bribe")
 	}

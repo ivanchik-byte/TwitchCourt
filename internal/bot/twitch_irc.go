@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,28 +19,25 @@ type ChatCommand struct {
 }
 
 const (
-	CommandChat     = "chat"
-	CommandSue      = "sue"
-	CommandGuilty   = "guilty"
-	CommandInnocent = "innocent"
-	CommandCrime    = "crime"
-	CommandSnitch   = "snitch"
+	CommandChat   = "chat"
+	CommandCrime  = "crime"
+	CommandSnitch = "snitch"
+	CommandCourt  = "court"
+	CommandLeave  = "leave"
 )
 
 func ParseChatLine(author, text string) ChatCommand {
 	trimmed := strings.TrimSpace(text)
 	lower := strings.ToLower(trimmed)
 	switch {
-	case lower == "!sue":
-		return ChatCommand{Author: author, Kind: CommandSue}
-	case lower == "!guilty":
-		return ChatCommand{Author: author, Kind: CommandGuilty}
-	case lower == "!innocent":
-		return ChatCommand{Author: author, Kind: CommandInnocent}
 	case strings.HasPrefix(lower, "!crime"):
 		return ChatCommand{Author: author, Kind: CommandCrime, Argument: strings.TrimSpace(trimmed[len("!crime"):])}
 	case strings.HasPrefix(lower, "!snitch"):
 		return ChatCommand{Author: author, Kind: CommandSnitch, Argument: strings.TrimSpace(trimmed[len("!snitch"):])}
+	case strings.HasPrefix(lower, "!court"):
+		return ChatCommand{Author: author, Kind: CommandCourt, Argument: strings.TrimSpace(trimmed[len("!court"):])}
+	case lower == "!leave":
+		return ChatCommand{Author: author, Kind: CommandLeave}
 	default:
 		return ChatCommand{Author: author, Kind: CommandChat, Argument: trimmed}
 	}
@@ -81,6 +79,9 @@ type TwitchIRC struct {
 	token   string
 	emit    func(ChatCommand)
 	sendCh  chan string
+
+	modMu    sync.RWMutex
+	modError string
 }
 
 func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIRC {
@@ -103,6 +104,47 @@ func (t *TwitchIRC) SendMessage(text string) {
 // Timeout puts a user into chat jail; the bot must moderate the channel
 func (t *TwitchIRC) Timeout(user string, secs int) {
 	t.SendMessage(fmt.Sprintf("/timeout %s %d", user, secs))
+}
+
+// Ban removes a user from chat for good; the bot must moderate the channel
+func (t *TwitchIRC) Ban(user string) {
+	t.SendMessage(fmt.Sprintf("/ban %s", user))
+}
+
+// LastModError reports the latest moderation refusal from Twitch, if any
+func (t *TwitchIRC) LastModError() (string, bool) {
+	t.modMu.RLock()
+	defer t.modMu.RUnlock()
+	if t.modError == "" {
+		return "", false
+	}
+	return t.modError, true
+}
+
+// noteModError remembers moderation refusals so the desk can warn
+// about a missing /mod instead of failing silently
+func (t *TwitchIRC) noteModError(line string) {
+	if !strings.Contains(line, "NOTICE") {
+		return
+	}
+	lower := strings.ToLower(line)
+	switch {
+	case strings.Contains(lower, "permission"),
+		strings.Contains(lower, "moderator"),
+		strings.Contains(lower, "not sent"),
+		strings.Contains(lower, "suspended"),
+		strings.Contains(lower, "banned"):
+	default:
+		return
+	}
+	text := line
+	if i := strings.LastIndex(line, " :"); i >= 0 {
+		text = line[i+2:]
+	}
+	t.modMu.Lock()
+	t.modError = strings.TrimSpace(text)
+	t.modMu.Unlock()
+	log.Printf("twitch moderation refused: %s", t.modError)
 }
 
 func (t *TwitchIRC) Run(ctx context.Context) {
@@ -165,6 +207,7 @@ func (t *TwitchIRC) listen(ctx context.Context) error {
 		}
 		author, message, ok := parsePrivMsg(line)
 		if !ok {
+			t.noteModError(line)
 			continue
 		}
 		t.emit(ParseChatLine(author, message))

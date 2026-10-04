@@ -558,44 +558,6 @@ body {
   color: var(--dim);
 }
 
-/* Тактический пульт: шкала терпения, плитки, активный суд. */
-.meter-wrap {
-  margin-top: 10px;
-}
-
-.meter-head {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-  color: var(--dim);
-  margin-bottom: 6px;
-}
-
-.meter-head span:last-child {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-
-.meter-bar {
-  height: 12px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-#meter-fill {
-  height: 100%;
-  width: 0;
-  background: #c9a227;
-  transition: width 0.5s ease;
-}
-
-#meter-fill.hot {
-  background: #ff5148;
-}
-
 .deck {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -640,49 +602,6 @@ body {
 
 .btn-gavel:hover {
   filter: brightness(1.1);
-}
-
-.trial-timer {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-variant-numeric: tabular-nums;
-  margin: 4px 0 12px;
-}
-
-.trial-gauge {
-  display: flex;
-  height: 44px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-}
-
-.trial-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 1.1rem;
-  transition: width 0.3s linear;
-}
-
-.trial-bar.guilty {
-  width: 50%;
-  background: #b3202c;
-  color: #fff;
-}
-
-.trial-bar.innocent {
-  flex: 1;
-  background: #2f6fed;
-  color: #fff;
-}
-
-.trial-verdict-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 16px;
 }
 
 .case-line {

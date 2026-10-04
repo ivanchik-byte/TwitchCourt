@@ -34,9 +34,8 @@
 
     <nav class="seg-nav" aria-label="Разделы настроек">
       <button type="button" class="seg-card active" data-view="view-court"><span class="seg-num">01</span><span class="seg-name">Суд</span><small>Пороги, наказания, портрет</small></button>
-      <button type="button" class="seg-card" data-view="view-games"><span class="seg-num">02</span><span class="seg-name">Игры</span><small>Minecraft</small></button>
-      <button type="button" class="seg-card" data-view="view-donates"><span class="seg-num">03</span><span class="seg-name">Донаты</span><small>Источники и ключи</small></button>
-      <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">04</span><span class="seg-name">Оверлей</span><small>Статус</small></button>
+      <button type="button" class="seg-card" data-view="view-donates"><span class="seg-num">02</span><span class="seg-name">Донаты</span><small>Источники и ключи</small></button>
+      <button type="button" class="seg-card" data-view="view-overlay"><span class="seg-num">03</span><span class="seg-name">Оверлей</span><small>Статус</small></button>
     </nav>
 
     <main class="folio">
@@ -118,49 +117,6 @@
       </section>
       </div>
 
-      <div class="settings-view hidden" id="view-games">
-        <section class="article article-games article-wide" aria-labelledby="games-heading">
-          <p class="overline">Игры · интеграции</p>
-          <h2 id="games-heading">Подключенные игры</h2>
-          <div class="games-grid">
-            <!-- Minecraft (Слева, зеленый акцент) -->
-            <div class="game-card game-minecraft game-card-interactive" id="card-minecraft" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false">
-              <div class="game-card-main">
-                <svg class="game-logo mc-logo" viewBox="0 0 96 96" width="76" height="76" aria-hidden="true">
-                  <rect x="0" y="0" width="96" height="96" fill="#6abe30"/>
-                  <rect x="12" y="12" width="12" height="12" fill="#5a9e26"/>
-                  <rect x="60" y="0" width="12" height="12" fill="#5a9e26"/>
-                  <rect x="36" y="24" width="12" height="12" fill="#8bd450"/>
-                  <rect x="72" y="60" width="12" height="12" fill="#5a9e26"/>
-                  <rect x="0" y="72" width="12" height="12" fill="#5a9e26"/>
-                  <rect x="48" y="84" width="12" height="12" fill="#8bd450"/>
-                  <rect x="84" y="36" width="12" height="12" fill="#5a9e26"/>
-                  <rect x="12" y="24" width="24" height="24" fill="#0b0d0c"/>
-                  <rect x="60" y="24" width="24" height="24" fill="#0b0d0c"/>
-                  <rect x="36" y="48" width="24" height="24" fill="#0b0d0c"/>
-                  <rect x="24" y="72" width="48" height="12" fill="#0b0d0c"/>
-                </svg>
-                <div class="game-card-body">
-                  <div class="game-card-head">
-                    <div class="game-title-row">
-                      <strong>Minecraft (Java)</strong>
-                      <span class="state-badge" id="mc-card-badge">Настроить</span>
-                    </div>
-                    <span class="game-arrow mc-arrow" aria-hidden="true">Настройка →</span>
-                  </div>
-                  <p class="game-card-desc">Отслеживание смертей игрока через latest.log.</p>
-                  <div class="game-meta-pills">
-                    <span class="meta-pill" id="mc-meta-path">Лог: автопоиск</span>
-                    <span class="meta-pill" id="mc-meta-nicks">Ники: все игроки</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </section>
-      </div>
-
       <div class="settings-view hidden" id="view-donates">
         <section class="article" aria-labelledby="sources-heading">
           <p class="overline">Донаты · источники</p>
@@ -203,90 +159,6 @@
     </footer>
   </div>
 
-  <div class="modal-backdrop hidden" id="modal-minecraft" role="dialog" aria-modal="true" aria-labelledby="mc-modal-title">
-    <div class="modal-window">
-      <div class="modal-header">
-        <div class="modal-title-wrap">
-          <svg class="modal-icon" viewBox="0 0 96 96" width="38" height="38" aria-hidden="true">
-            <rect x="0" y="0" width="96" height="96" fill="#6abe30"/>
-            <rect x="12" y="12" width="12" height="12" fill="#5a9e26"/>
-            <rect x="60" y="0" width="12" height="12" fill="#5a9e26"/>
-            <rect x="36" y="24" width="12" height="12" fill="#8bd450"/>
-            <rect x="72" y="60" width="12" height="12" fill="#5a9e26"/>
-            <rect x="0" y="72" width="12" height="12" fill="#5a9e26"/>
-            <rect x="48" y="84" width="12" height="12" fill="#8bd450"/>
-            <rect x="84" y="36" width="12" height="12" fill="#5a9e26"/>
-            <rect x="12" y="24" width="24" height="24" fill="#0b0d0c"/>
-            <rect x="60" y="24" width="24" height="24" fill="#0b0d0c"/>
-            <rect x="36" y="48" width="24" height="24" fill="#0b0d0c"/>
-            <rect x="24" y="72" width="48" height="12" fill="#0b0d0c"/>
-          </svg>
-          <div>
-            <h2 id="mc-modal-title">Настройки Minecraft</h2>
-            <p class="modal-subtitle">Автозапуск суда по смертям из latest.log</p>
-          </div>
-        </div>
-        <button type="button" class="modal-close-btn" id="mc-modal-close" aria-label="Закрыть окно">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <section class="modal-block">
-          <div class="modal-block-head">
-            <h3>Ники для отслеживания в логах</h3>
-            <span class="modal-counter" id="mc-nicks-counter">Все игроки</span>
-          </div>
-          <p class="modal-hint">Суд запускается только при гибели этих игроков. Если список пуст, трибунал реагирует на гибель любого игрока на сервере.</p>
-
-          <div class="tag-cloud" id="mc-tag-cloud" aria-live="polite"></div>
-
-          <div class="tag-input-row">
-            <input type="text" id="mc-nick-input" placeholder="Никнейм (например Steve)" autocomplete="off">
-            <button type="button" id="mc-btn-add-nick" class="btn btn-sm">Добавить</button>
-            <button type="button" id="mc-btn-add-streamer" class="btn btn-sm btn-ghost">+ Ник стримера</button>
-          </div>
-        </section>
-
-        <section class="modal-block">
-          <div class="modal-block-head">
-            <h3>Поиск Minecraft и файл логов</h3>
-            <span class="modal-badge-status" id="mc-path-status">Не проверено</span>
-          </div>
-          <p class="modal-hint">Minecraft записывает события в latest.log. Укажите путь вручную или запустите автопоиск.</p>
-
-          <div class="path-search-row">
-            <input type="text" id="mc-log-path-input" placeholder="Путь к latest.log" autocomplete="off">
-            <button type="button" id="mc-btn-autodetect" class="btn btn-sm btn-accent">Автопоиск</button>
-          </div>
-
-          <div class="launcher-presets">
-            <span class="preset-label">Быстрые шаблоны:</span>
-            <div class="preset-buttons">
-              <button type="button" class="btn-preset" data-path="%APPDATA%\.minecraft\logs\latest.log">Vanilla Windows</button>
-              <button type="button" class="btn-preset" data-path="%APPDATA%\PrismLauncher\instances">Prism Windows</button>
-              <button type="button" class="btn-preset" data-path="~/.minecraft/logs/latest.log">Linux Vanilla</button>
-            </div>
-          </div>
-
-          <p id="mc-detect-note" class="modal-note" aria-live="polite"></p>
-        </section>
-
-        <section class="modal-block modal-block-test">
-          <div class="modal-block-head">
-            <h3>Проверка связи</h3>
-          </div>
-          <div class="test-action-row">
-            <button type="button" id="mc-btn-test-trial" class="btn btn-sm">⚡ Тестовая гибель в лаве</button>
-            <span id="mc-test-status" class="test-feedback" aria-live="polite">Запустит тестовое заседание без игры</span>
-          </div>
-        </section>
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" id="mc-btn-dismiss" class="btn btn-ghost">Закрыть</button>
-        <button type="button" id="mc-btn-save" class="btn btn-verdict">Сохранить настройки</button>
-      </div>
-    </div>
-  </div>
 
   <script src="settings.js"></script>
 </body>

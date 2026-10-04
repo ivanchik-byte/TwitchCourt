@@ -25,10 +25,6 @@
       </div>
       <div class="masthead-status">
         <p class="docket-line"><span id="ws-dot" class="dot" aria-hidden="true"></span> <span id="ws-label">Подключение...</span></p>
-        <div class="meter-wrap">
-          <div class="meter-head"><span>Терпение трибунала</span><span id="meter-num">0%</span></div>
-          <div class="meter-bar"><div id="meter-fill"></div></div>
-        </div>
         <div class="masthead-keys">
           <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
           <button type="button" id="btn-panic" class="btn btn-seal">Мьют (F12)</button>
@@ -54,15 +50,6 @@
         <p class="overline">Идет заседание</p>
         <h2 id="trial-heading">Активный суд</h2>
         <p id="active-case-title" class="case-line">Нет активного дела</p>
-        <p class="trial-timer"><span id="vote-timer">--</span></p>
-        <div class="trial-gauge">
-          <div class="trial-bar guilty" id="vote-guilty-bar"><span id="vote-guilty-n">0</span></div>
-          <div class="trial-bar innocent" id="vote-innocent-bar"><span id="vote-innocent-n">0</span></div>
-        </div>
-        <div class="trial-verdict-row">
-          <button type="button" id="btn-force-guilty" class="btn btn-danger">Виновен</button>
-          <button type="button" id="btn-force-innocent" class="btn btn-success">Оправдать</button>
-        </div>
         <p id="trial-status" class="footnote" aria-live="polite"></p>
       </section>
 

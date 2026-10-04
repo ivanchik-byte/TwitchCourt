@@ -423,22 +423,12 @@ var Desk;
     }
     const wsDot = el("ws-dot");
     const wsLabel = el("ws-label");
-    const meterFill = el("meter-fill");
-    const meterNum = el("meter-num");
     const secretInput = el("secret-input");
     const btnPanic = el("btn-panic");
     const btnGavel = el("btn-gavel");
     const deckStatus = el("deck-status");
     const trialBox = el("trial-box");
     const activeCaseTitle = el("active-case-title");
-    const voteTimer = el("vote-timer");
-    const voteGuiltyN = el("vote-guilty-n");
-    const voteInnocentN = el("vote-innocent-n");
-    const voteGuiltyBar = el("vote-guilty-bar");
-    const voteInnocentBar = el("vote-innocent-bar");
-    const btnForceGuilty = el("btn-force-guilty");
-    const btnForceInnocent = el("btn-force-innocent");
-    const trialStatus = el("trial-status");
     const eventFeed = el("event-feed");
     let ws = null;
     function secret() {
@@ -488,21 +478,6 @@ var Desk;
                 break;
         }
     }
-    function renderMeter(meter) {
-        const clamped = Math.max(0, Math.min(100, meter));
-        meterFill.style.width = clamped + "%";
-        meterNum.textContent = clamped + "%";
-        meterFill.classList.toggle("hot", clamped >= 60);
-    }
-    function pollStatus() {
-        fetch("/api/status")
-            .then((res) => res.json())
-            .then((status) => {
-            if (typeof status.meter === "number")
-                renderMeter(status.meter);
-        })
-            .catch(() => undefined);
-    }
     function showTrial(title) {
         Desk.say(activeCaseTitle, title);
         trialBox.classList.remove("hidden");
@@ -515,7 +490,6 @@ var Desk;
         ws.onopen = () => {
             wsDot.className = "dot connected";
             Desk.say(wsLabel, "На связи");
-            pollStatus();
         };
         ws.onclose = () => {
             wsDot.className = "dot disconnected";
@@ -532,9 +506,6 @@ var Desk;
                     if (state === "idle") {
                         hideTrial();
                     }
-                    else if (state === "voting") {
-                        showTrial(String(msg.payload.case_title || "Идет голосование"));
-                    }
                     else {
                         const caseTitle = String(msg.payload.case_title || "");
                         const defendant = String(msg.payload.defendant || "");
@@ -550,24 +521,6 @@ var Desk;
                     const currency = String(msg.payload.currency || "");
                     const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
                     feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в копилку", "donation");
-                    break;
-                }
-                case "suspicion": {
-                    const meter = Number(msg.payload.meter || 0);
-                    renderMeter(meter);
-                    feed("Шкала дела: " + meter + "%", "trial");
-                    break;
-                }
-                case "voting_update": {
-                    const guilty = Number(msg.payload.guilty_count || 0);
-                    const innocent = Number(msg.payload.innocent_count || 0);
-                    Desk.say(voteTimer, String(msg.payload.time_left_sec));
-                    Desk.say(voteGuiltyN, String(guilty));
-                    Desk.say(voteInnocentN, String(innocent));
-                    const total = guilty + innocent;
-                    const share = total > 0 ? Math.round((guilty / total) * 100) : 50;
-                    voteGuiltyBar.style.width = share + "%";
-                    voteInnocentBar.style.width = 100 - share + "%";
                     break;
                 }
                 case "verdict": {
@@ -616,13 +569,6 @@ var Desk;
             sendAction("panic", {});
         }
     });
-    function forceVerdict(guilty) {
-        post("/api/verdict", { guilty }).then((ok) => {
-            Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет активного голосования или связи.");
-        });
-    }
-    btnForceGuilty.addEventListener("click", () => forceVerdict(true));
-    btnForceInnocent.addEventListener("click", () => forceVerdict(false));
     const backdrop = document.getElementById("bg-canvas");
     if (backdrop)
         Backdrop.mount(backdrop);
@@ -630,7 +576,6 @@ var Desk;
     if (gooey)
         GooeyNav.mount(gooey);
     connect();
-    window.setInterval(pollStatus, 2000);
 })();
 "use strict";
 // Invisible defense mic: while the court is in the defense window,

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"log"
-	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,27 +24,25 @@ import (
 type State string
 
 const (
-	StateIdle       State = "idle"
-	StateIndictment State = "indictment"
-	StateDefense    State = "defense"
-	StateObjection  State = "objection"
-	StateVoting     State = "voting"
-	StateVerdict    State = "verdict"
+	StateIdle         State = "idle"
+	StateIndictment   State = "indictment"
+	StateTestimony    State = "testimony"
+	StateDefense      State = "defense"
+	StateObjection    State = "objection"
+	StateDeliberation State = "deliberation"
+	StateVerdict      State = "verdict"
 )
 
 type TrialCase struct {
-	Defendant     string
-	Crime         string
-	ChatContext   string
-	GuiltyVotes   int
-	InnocentVotes int
-	Voters        map[string]bool
-	Witnesses     []Witness
-	Archetype     ai.Archetype
-	Defense       string
-	Viewer        string
-	Bribed        bool
-	forceVerdict  *bool
+	Defendant   string
+	Crime       string
+	ChatContext string
+	Witnesses   []Witness
+	Judge       ai.JudgeStyle
+	Defense     string
+	Viewer      string
+	Testimony   []string
+	Bribed      bool
 }
 
 // Witness represents a donation queued as trial testimony.
@@ -55,10 +52,6 @@ type Witness struct {
 	Currency string
 	Message  string
 }
-
-// maxWitnessWeight caps how many guilty points testimony can add,
-// so a single whale cannot decide the verdict alone.
-const maxWitnessWeight = 3
 
 const maxWitnessMessageRunes = 140
 
@@ -74,24 +67,27 @@ type Engine struct {
 	recall      *memory.Store
 	deck        *bot.Deck
 	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
-	// TimeoutHook jails a convicted viewer; wired to Twitch chat in main
-	TimeoutHook func(user string, secs int, reason string)
-	mu          sync.RWMutex
-	speakMu     sync.Mutex
-	state       State
-	currCase    *TrialCase
-	cancelFn    context.CancelFunc
+	// TimeoutHook jails or bans a convicted viewer; wired to Twitch chat in main
+	TimeoutHook       func(user string, secs int, ban bool, reason string)
+	mu                sync.RWMutex
+	speakMu           sync.Mutex
+	state             State
+	currCase          *TrialCase
+	pool              []PoolSeat
+	pendingPunishment Punishment
+	cancelFn          context.CancelFunc
 }
 
 func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
 	return &Engine{
-		cfg:      cfg,
-		hub:      hub,
-		aiClient: aiClient,
-		voice:    voice,
-		filter:   filter,
-		recall:   memory.NewStore(""),
-		state:    StateIdle,
+		cfg:               cfg,
+		hub:               hub,
+		aiClient:          aiClient,
+		voice:             voice,
+		filter:            filter,
+		recall:            memory.NewStore(""),
+		state:             StateIdle,
+		pendingPunishment: Punishment{Kind: "timeout", Secs: 90},
 	}
 }
 
@@ -108,17 +104,6 @@ func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLas
 	defer e.speakMu.Unlock()
 	e.applyVoiceProfile(voice, rate)
 	return e.dispatchSpeechChunk(ctx, s, index, isLast, speaker)
-}
-
-func (e *Engine) juryVoice() string {
-	pool := e.cfg.TTS.JuryVoices
-	if e.cfg.TTS.Engine == "silero" {
-		pool = e.cfg.TTS.SileroJury
-	}
-	if len(pool) == 0 {
-		return e.cfg.TTS.Voice
-	}
-	return pool[rand.Intn(len(pool))]
 }
 
 // castVoice maps an Edge voice name to the Silero speaker when the
@@ -200,13 +185,11 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancelFn = cancel
 	e.state = StateIndictment
-	archetype := ai.DrawArchetype()
 	e.currCase = &TrialCase{
 		Defendant:   e.filter.Sanitize(defendant),
 		Crime:       e.filter.Sanitize(crime),
 		ChatContext: e.filter.Sanitize(chatContext),
-		Voters:      make(map[string]bool),
-		Archetype:   archetype,
+		Judge:       ai.JudgeFor(e.cfg.Courtroom.JudgeStyle),
 		Viewer:      e.filter.Sanitize(viewer),
 	}
 	currentCase := e.currCase
@@ -230,7 +213,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	}
 	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart)
 	messages := []ai.ChatMessage{
-		{Role: "system", Content: c.Archetype.System},
+		{Role: "system", Content: c.Judge.System},
 		{Role: "user", Content: prompt},
 	}
 
@@ -246,7 +229,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		defer close(speechDone)
 		for item := range speechQueue {
 			if err := e.speak(ctx, item.chunk, item.index, item.last,
-				e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate); err != nil {
+				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
 				return
 			}
 		}
@@ -283,6 +266,10 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	case <-speechDone:
 	}
 
+	e.runTestimonyWindow(ctx, c)
+	if ctx.Err() != nil {
+		return
+	}
 	defense := e.runDefenseWindow(ctx, c)
 	if ctx.Err() != nil {
 		return
@@ -292,19 +279,18 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		return
 	}
 
-	// read queued testimony before voting starts
+	// read queued testimony before the bench retires
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
 		_ = e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
-			"Присяжные", e.juryVoice(), "+0%")
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
 	}
 
-	select {
-	case <-ctx.Done():
+	guilty, decided := e.deliberate(ctx, c, chunkIndex+1)
+	if ctx.Err() != nil {
 		return
-	case <-time.After(2 * time.Second):
 	}
 
-	e.startVoting(ctx, c)
+	e.finalizeVerdict(ctx, c, guilty, decided)
 	e.clearTrial()
 }
 
@@ -317,6 +303,91 @@ func (e *Engine) clearTrial() {
 	}
 }
 
+// deliberate retires the bench: the judge speaks the ruling aloud,
+// and its first word decides the verdict
+func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (guilty, decided bool) {
+	e.mu.Lock()
+	if e.currCase != c {
+		e.mu.Unlock()
+		return false, false
+	}
+	e.state = StateDeliberation
+	e.mu.Unlock()
+
+	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateDeliberation)})
+
+	testimony := e.caseTestimony(c)
+	messages := []ai.ChatMessage{
+		{Role: "system", Content: c.Judge.System},
+		{Role: "user", Content: ai.BuildDeliberationPrompt(c.Defendant, c.Crime, testimony)},
+	}
+	var ruling strings.Builder
+	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
+	index := startIndex
+	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
+		ruling.WriteString(delta)
+		for _, s := range chunker.Feed(delta) {
+			if err := e.speak(ctx, s, index, false,
+				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
+				return err
+			}
+			index++
+		}
+		return nil
+	})
+	if last := chunker.Flush(); last != nil {
+		_ = e.speak(ctx, *last, index, false,
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
+	}
+	return ai.ParseVerdict(ruling.String())
+}
+
+// caseTestimony bundles everything the bench must weigh
+func (e *Engine) caseTestimony(c *TrialCase) string {
+	parts := []string{}
+	for _, t := range c.Testimony {
+		if t = strings.TrimSpace(t); t != "" {
+			parts = append(parts, "Подсудимый: "+t)
+		}
+	}
+	if d := strings.TrimSpace(html.UnescapeString(c.Defense)); d != "" {
+		parts = append(parts, "Защита: "+d)
+	}
+	if w := e.drainWitnessInterlude(c); w != "" {
+		parts = append(parts, w)
+	}
+	if len(parts) == 0 {
+		return "Подсудимый молчал, зал шумел."
+	}
+	return strings.Join(parts, "\n")
+}
+
+// runTestimonyWindow gives the defendant the floor in chat
+func (e *Engine) runTestimonyWindow(ctx context.Context, c *TrialCase) {
+	dur := e.cfg.Courtroom.TestimonySec
+	if dur <= 0 {
+		dur = 25
+	}
+	e.mu.Lock()
+	if e.state != StateIndictment || e.currCase != c {
+		e.mu.Unlock()
+		return
+	}
+	e.state = StateTestimony
+	e.mu.Unlock()
+
+	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
+		State:       string(StateTestimony),
+		Defendant:   c.Defendant,
+		TimeLeftSec: dur,
+	})
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Duration(dur) * time.Second):
+	}
+}
+
 // runDefenseWindow opens the floor to the streamer and returns what was said
 func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
 	dur := e.cfg.Courtroom.DefenseSec
@@ -324,7 +395,7 @@ func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
 		dur = 20
 	}
 	e.mu.Lock()
-	if e.state != StateIndictment || e.currCase != c {
+	if e.currCase != c || (e.state != StateIndictment && e.state != StateTestimony) {
 		e.mu.Unlock()
 		return ""
 	}
@@ -363,7 +434,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 		defense = e.fallbackDefense()
 	}
 	messages := []ai.ChatMessage{
-		{Role: "system", Content: c.Archetype.System},
+		{Role: "system", Content: c.Judge.System},
 		{Role: "user", Content: ai.BuildCounterArgumentPrompt(defense)},
 	}
 	chunker := ai.NewSentenceChunker()
@@ -371,7 +442,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
-				e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate); err != nil {
+				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
 				return err
 			}
 			index++
@@ -380,7 +451,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	})
 	if last := chunker.Flush(); last != nil {
 		_ = e.speak(ctx, *last, index, false,
-			e.cfg.Courtroom.ProsecutorName, e.castVoice(c.Archetype.Voice, c.Archetype.Silero), c.Archetype.Rate)
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
 	}
 }
 
@@ -437,7 +508,7 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 	}
 
 	if speaker == "" {
-		speaker = e.cfg.Courtroom.ProsecutorName
+		speaker = e.cfg.Courtroom.JudgeName
 	}
 
 	if s.Animation != "" {
@@ -479,93 +550,6 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 	})
 
 	return nil
-}
-
-func (e *Engine) startVoting(ctx context.Context, c *TrialCase) {
-	e.mu.Lock()
-	e.state = StateVoting
-	duration := e.cfg.Courtroom.VotingDurationSec
-	if duration <= 0 {
-		duration = 30
-	}
-	e.mu.Unlock()
-
-	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
-		State:       string(StateVoting),
-		TimeLeftSec: duration,
-	})
-
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-voting:
-	for remaining := duration; remaining >= 0; remaining-- {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			e.mu.Lock()
-			if c.forceVerdict != nil {
-				if *c.forceVerdict {
-					c.GuiltyVotes = 1
-					c.InnocentVotes = 0
-				} else {
-					c.GuiltyVotes = 0
-					c.InnocentVotes = 1
-				}
-				e.mu.Unlock()
-				break voting
-			}
-			guilty := c.GuiltyVotes
-			innocent := c.InnocentVotes
-			e.mu.Unlock()
-
-			e.hub.BroadcastEvent(obs.EventVotingUpdate, obs.VotingUpdatePayload{
-				GuiltyCount:   guilty,
-				InnocentCount: innocent,
-				TimeLeftSec:   remaining,
-			})
-		}
-	}
-
-	e.finalizeVerdict(ctx, c)
-}
-
-func (e *Engine) CastVote(voter string, isGuilty bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.state != StateVoting || e.currCase == nil {
-		return
-	}
-
-	if e.currCase.Voters[voter] {
-		return
-	}
-
-	e.currCase.Voters[voter] = true
-	if isGuilty {
-		e.currCase.GuiltyVotes++
-	} else {
-		e.currCase.InnocentVotes++
-	}
-
-	if e.recall != nil {
-		e.recall.AddVote(voter)
-	}
-}
-
-// ForceVerdict ends voting early with the streamer's own ruling.
-// Returns false when no voting is in progress.
-func (e *Engine) ForceVerdict(guilty bool) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.state != StateVoting || e.currCase == nil {
-		return false
-	}
-	e.currCase.forceVerdict = &guilty
-	return true
 }
 
 // Say speaks immediately using the judge voice (gavel interjections)
@@ -618,13 +602,6 @@ func (e *Engine) AddWitness(donor string, amount float64, currency, message stri
 	return true
 }
 
-func witnessWeight(witnesses []Witness) int {
-	if len(witnesses) > maxWitnessWeight {
-		return maxWitnessWeight
-	}
-	return len(witnesses)
-}
-
 func buildWitnessInterlude(witnesses []Witness) string {
 	if len(witnesses) == 0 {
 		return ""
@@ -672,75 +649,57 @@ func (e *Engine) AddBribe(donor string, amount float64, currency string) bool {
 	return true
 }
 
-// voice final ruling with the judge voice
-func (e *Engine) speakVerdict(ctx context.Context, verdict string, guilty, innocent int, penalty, twist string) {
-	prompt := ai.BuildVerdictSpeechPrompt(verdict, guilty, innocent)
+// verdictSentence packs the penalty and the twist into one gavel line
+func verdictSentence(verdict, penalty, twist string) string {
+	parts := []string{}
 	if penalty != "" {
-		prompt += "\nНаказание суда: " + penalty + "."
+		parts = append(parts, "Наказание суда: "+penalty+".")
 	}
 	if twist != "" {
-		prompt += "\nОбстоятельство: " + twist
+		parts = append(parts, twist)
 	}
-	messages := []ai.ChatMessage{
-		{Role: "system", Content: ai.JudgeSystemPrompt},
-		{Role: "user", Content: prompt},
-	}
-	// the gavel knock and the splash already sound here: no tags from the judge
-	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
-	index := 0
-	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
-		for _, s := range chunker.Feed(delta) {
-			if err := e.speak(ctx, s, index, false,
-				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
-				return err
-			}
-			index++
-		}
-		return nil
-	})
-	if last := chunker.Flush(); last != nil {
-		_ = e.speak(ctx, *last, index, true,
-			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
-	}
+	return strings.Join(parts, " ")
 }
 
-func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
+func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, decided bool) {
 	e.mu.Lock()
 	e.state = StateVerdict
-	weight := witnessWeight(c.Witnesses)
-	effectiveGuilty := c.GuiltyVotes + weight
-	effectiveInnocent := c.InnocentVotes
-	if c.Bribed {
-		effectiveInnocent += 2
-	}
-	isGuilty := effectiveGuilty > effectiveInnocent
-	if c.forceVerdict != nil {
-		isGuilty = *c.forceVerdict
-	}
+	isGuilty := guilty
 	twist := ""
 	if c.Bribed {
 		twist = "Судья переобулся прямо в зале: взятка принята, весы качнулись к оправданию!"
 	}
-	if isGuilty && c.forceVerdict == nil && c.GuiltyVotes+c.InnocentVotes >= 5 &&
-		float64(c.GuiltyVotes)/float64(c.GuiltyVotes+c.InnocentVotes) >= 0.9 &&
-		rand.Intn(100) < 15 {
+	if !decided {
 		isGuilty = false
-		twist = "Суд усмотрел сговор присяжных и оправдал подсудимого назло чату!"
+		if twist != "" {
+			twist += " "
+		}
+		twist += "Судья не решился и отпустил подсудимого."
 	}
 	verdictStr := "НЕВИНОВЕН"
+	guiltyVotes := 0
+	innocentVotes := 1
 	if isGuilty {
 		verdictStr = "ВИНОВЕН"
+		guiltyVotes = 1
+		innocentVotes = 0
 	}
-	totalVotes := c.GuiltyVotes + c.InnocentVotes
-	guiltyVotes := c.GuiltyVotes
-	innocentVotes := c.InnocentVotes
+	totalVotes := 1
 	witnessCount := len(c.Witnesses)
 	defendant := c.Defendant
 	crime := c.Crime
 	viewer := html.UnescapeString(c.Viewer)
 	penalty := ""
+	punish := e.pendingPunishment
 	if isGuilty && viewer != "" {
-		penalty = "одиночная камера: мут на 90 секунд"
+		switch punish.Kind {
+		case "pardon":
+			penalty = "помилован лично стримером"
+		case "ban":
+			penalty = "изгнан из чата навсегда"
+		default:
+			penalty = "одиночная камера: мут на " + strconv.Itoa(punish.Secs) + " секунд"
+		}
 	} else if isGuilty && e.deck != nil {
 		penalty = e.deck.Draw()
 	}
@@ -770,7 +729,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		e.recall.ClearTranscript()
 	}
 
-	e.speakVerdict(ctx, verdictStr, guiltyVotes, innocentVotes, penalty, twist)
+	// the ruling itself was spoken during deliberation: only the penalty lands now
+	if sentence := verdictSentence(verdictStr, penalty, twist); sentence != "" {
+		_ = e.speak(ctx, ai.SentenceChunk{Text: sentence, Animation: "slam"}, 0, true,
+			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
+	}
 
 	e.hub.BroadcastEvent(obs.EventVerdict, obs.VerdictPayload{
 		Verdict:     verdictStr,
@@ -785,7 +748,13 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase) {
 		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes, twist)
 	}
 	if isGuilty && viewer != "" && e.TimeoutHook != nil {
-		e.TimeoutHook(viewer, 90, "Решение суда: "+penalty)
+		switch punish.Kind {
+		case "pardon":
+		case "ban":
+			e.TimeoutHook(viewer, 0, true, "Решение суда: "+penalty)
+		default:
+			e.TimeoutHook(viewer, punish.Secs, false, "Решение суда: "+penalty)
+		}
 	}
 
 	select {

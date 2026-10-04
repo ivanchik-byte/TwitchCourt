@@ -34,36 +34,31 @@ type AIConfig struct {
 }
 
 type TTSConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Engine       string   `yaml:"engine"`
-	Voice        string   `yaml:"voice"`
-	Rate         string   `yaml:"rate"`
-	Volume       string   `yaml:"volume"`
-	Pitch        string   `yaml:"pitch"`
-	AutoFallback bool     `yaml:"auto_fallback"`
-	JudgeVoice   string   `yaml:"judge_voice"`
-	JudgeRate    string   `yaml:"judge_rate"`
-	JuryVoices   []string `yaml:"jury_voices"`
-	SileroURL    string   `yaml:"silero_url"`
-	SileroJudge  string   `yaml:"silero_judge"`
-	SileroJury   []string `yaml:"silero_jury"`
-	PiperBinary  string   `yaml:"piper_binary"`
-	ModelPath    string   `yaml:"model_path"`
-	ConfigPath   string   `yaml:"config_path"`
-	SpeakerID    int      `yaml:"speaker_id"`
-	Speed        float64  `yaml:"speed"`
+	Enabled      bool    `yaml:"enabled"`
+	Engine       string  `yaml:"engine"`
+	Voice        string  `yaml:"voice"`
+	Rate         string  `yaml:"rate"`
+	Volume       string  `yaml:"volume"`
+	Pitch        string  `yaml:"pitch"`
+	AutoFallback bool    `yaml:"auto_fallback"`
+	JudgeVoice   string  `yaml:"judge_voice"`
+	JudgeRate    string  `yaml:"judge_rate"`
+	SileroURL    string  `yaml:"silero_url"`
+	SileroJudge  string  `yaml:"silero_judge"`
+	PiperBinary  string  `yaml:"piper_binary"`
+	ModelPath    string  `yaml:"model_path"`
+	ConfigPath   string  `yaml:"config_path"`
+	SpeakerID    int     `yaml:"speaker_id"`
+	Speed        float64 `yaml:"speed"`
 }
 
 type CourtroomConfig struct {
-	Theme             string   `yaml:"theme"`
-	ProsecutorName    string   `yaml:"prosecutor_name"`
-	JudgeName         string   `yaml:"judge_name"`
-	Title             string   `yaml:"title"`
-	SueThreshold      int      `yaml:"sue_threshold"`
-	VotingDurationSec int      `yaml:"voting_duration_sec"`
-	DefenseSec        int      `yaml:"defense_sec"`
-	CooldownMin       int      `yaml:"cooldown_min"`
-	Punishments       []string `yaml:"punishments"`
+	Theme        string   `yaml:"theme"`
+	JudgeName    string   `yaml:"judge_name"`
+	JudgeStyle   string   `yaml:"judge_style"`
+	DefenseSec   int      `yaml:"defense_sec"`
+	TestimonySec int      `yaml:"testimony_sec"`
+	Punishments  []string `yaml:"punishments"`
 }
 
 type DonationsConfig struct {
@@ -97,11 +92,9 @@ type SafetyConfig struct {
 }
 
 type GameConfig struct {
-	MinecraftLog   string   `yaml:"minecraft_log"`
-	MinecraftNicks []string `yaml:"minecraft_nicks"`
-	StreamerName   string   `yaml:"streamer_name"`
-	MemoryPath     string   `yaml:"memory_path"`
-	DonateToken    string   `yaml:"donate_token"`
+	StreamerName string `yaml:"streamer_name"`
+	MemoryPath   string `yaml:"memory_path"`
+	DonateToken  string `yaml:"donate_token"`
 }
 
 type TwitchConfig struct {
@@ -141,10 +134,8 @@ func DefaultConfig() *Config {
 			AutoFallback: true,
 			JudgeVoice:   "ru-RU-DmitryNeural",
 			JudgeRate:    "-10%",
-			JuryVoices:   []string{"ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"},
 			SileroURL:    "http://127.0.0.1:7892",
 			SileroJudge:  "kseniya",
-			SileroJury:   []string{"aidar", "baya", "ruslan", "natasha"},
 			PiperBinary:  binaryName,
 			ModelPath:    filepath.Join("models", "ru_dmitri.onnx"),
 			ConfigPath:   filepath.Join("models", "ru_dmitri.onnx.json"),
@@ -152,14 +143,11 @@ func DefaultConfig() *Config {
 			Speed:        1.15,
 		},
 		Courtroom: CourtroomConfig{
-			Theme:             "ace_attorney",
-			ProsecutorName:    "Прокурор Карлов",
-			JudgeName:         "Судья",
-			Title:             "Инквизитор Твича",
-			SueThreshold:      5,
-			VotingDurationSec: 25,
-			DefenseSec:        20,
-			CooldownMin:       10,
+			Theme:        "ace_attorney",
+			JudgeName:    "Судья",
+			JudgeStyle:   "strict",
+			DefenseSec:   20,
+			TestimonySec: 25,
 			Punishments: []string{
 				"10 приседаний в прямом эфире",
 				"Минута молчания с рукой на сердце",
@@ -172,7 +160,6 @@ func DefaultConfig() *Config {
 			PanicHotkey:     "F12",
 		},
 		Game: GameConfig{
-			MinecraftLog: "",
 			StreamerName: "Стример",
 			MemoryPath:   "data/memory.json",
 			DonateToken:  "",
@@ -257,9 +244,6 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.TTS.SileroJudge == "" {
 		cfg.TTS.SileroJudge = "kseniya"
 	}
-	if len(cfg.TTS.SileroJury) == 0 {
-		cfg.TTS.SileroJury = []string{"aidar", "baya", "ruslan", "natasha"}
-	}
 	if cfg.TTS.Voice == "" {
 		cfg.TTS.Voice = "ru-RU-DmitryNeural"
 	}
@@ -269,11 +253,11 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.TTS.JudgeRate == "" {
 		cfg.TTS.JudgeRate = "-10%"
 	}
-	if len(cfg.TTS.JuryVoices) == 0 {
-		cfg.TTS.JuryVoices = []string{"ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"}
-	}
 	if cfg.Courtroom.JudgeName == "" {
 		cfg.Courtroom.JudgeName = "Судья"
+	}
+	if cfg.Courtroom.JudgeStyle != "cynical" {
+		cfg.Courtroom.JudgeStyle = "strict"
 	}
 	if cfg.Courtroom.DefenseSec <= 0 {
 		cfg.Courtroom.DefenseSec = 20

@@ -1,10 +1,8 @@
 namespace Desk {
   export type ServerEvent =
     | { type: "state_change"; payload: StateChange }
-    | { type: "voting_update"; payload: VotingUpdate }
     | { type: "verdict"; payload: Verdict }
     | { type: "donation"; payload: Donation }
-    | { type: "suspicion"; payload: Suspicion }
     | { type: "panic"; payload: Record<string, unknown> }
     | { type: string; payload: Record<string, unknown> };
 
@@ -16,23 +14,12 @@ namespace Desk {
     opens_trial: boolean;
   }
 
-  export interface Suspicion {
-    meter: number;
-    milestone: number;
-  }
-
   export interface StateChange {
     state: string;
     case_title?: string;
     defendant?: string;
     charge?: string;
     time_left_sec?: number;
-  }
-
-  export interface VotingUpdate {
-    guilty_count: number;
-    innocent_count: number;
-    time_left_sec: number;
   }
 
   export interface Verdict {
@@ -71,22 +58,12 @@ namespace Desk {
 
   const wsDot = el("ws-dot");
   const wsLabel = el("ws-label");
-  const meterFill = el("meter-fill");
-  const meterNum = el("meter-num");
   const secretInput = el("secret-input") as HTMLInputElement;
   const btnPanic = el("btn-panic");
   const btnGavel = el("btn-gavel");
   const deckStatus = el("deck-status");
   const trialBox = el("trial-box");
   const activeCaseTitle = el("active-case-title");
-  const voteTimer = el("vote-timer");
-  const voteGuiltyN = el("vote-guilty-n");
-  const voteInnocentN = el("vote-innocent-n");
-  const voteGuiltyBar = el("vote-guilty-bar");
-  const voteInnocentBar = el("vote-innocent-bar");
-  const btnForceGuilty = el("btn-force-guilty");
-  const btnForceInnocent = el("btn-force-innocent");
-  const trialStatus = el("trial-status");
   const eventFeed = el("event-feed");
 
   let ws: WebSocket | null = null;
@@ -139,22 +116,6 @@ namespace Desk {
     }
   }
 
-  function renderMeter(meter: number): void {
-    const clamped = Math.max(0, Math.min(100, meter));
-    meterFill.style.width = clamped + "%";
-    meterNum.textContent = clamped + "%";
-    meterFill.classList.toggle("hot", clamped >= 60);
-  }
-
-  function pollStatus(): void {
-    fetch("/api/status")
-      .then((res) => res.json())
-      .then((status: { meter?: number }) => {
-        if (typeof status.meter === "number") renderMeter(status.meter);
-      })
-      .catch(() => undefined);
-  }
-
   function showTrial(title: string): void {
     Desk.say(activeCaseTitle, title);
     trialBox.classList.remove("hidden");
@@ -169,7 +130,6 @@ namespace Desk {
     ws.onopen = () => {
       wsDot.className = "dot connected";
       Desk.say(wsLabel, "На связи");
-      pollStatus();
     };
     ws.onclose = () => {
       wsDot.className = "dot disconnected";
@@ -184,8 +144,6 @@ namespace Desk {
           const state = String(msg.payload.state || "idle");
           if (state === "idle") {
             hideTrial();
-          } else if (state === "voting") {
-            showTrial(String(msg.payload.case_title || "Идет голосование"));
           } else {
             const caseTitle = String(msg.payload.case_title || "");
             const defendant = String(msg.payload.defendant || "");
@@ -200,24 +158,6 @@ namespace Desk {
           const currency = String(msg.payload.currency || "");
           const line = "Донат " + donor + " · " + amount + (currency ? " " + currency : "");
           feed(msg.payload.opens_trial ? line + " — суд открыт" : line + " — в копилку", "donation");
-          break;
-        }
-        case "suspicion": {
-          const meter = Number(msg.payload.meter || 0);
-          renderMeter(meter);
-          feed("Шкала дела: " + meter + "%", "trial");
-          break;
-        }
-        case "voting_update": {
-          const guilty = Number(msg.payload.guilty_count || 0);
-          const innocent = Number(msg.payload.innocent_count || 0);
-          Desk.say(voteTimer, String(msg.payload.time_left_sec));
-          Desk.say(voteGuiltyN, String(guilty));
-          Desk.say(voteInnocentN, String(innocent));
-          const total = guilty + innocent;
-          const share = total > 0 ? Math.round((guilty / total) * 100) : 50;
-          voteGuiltyBar.style.width = share + "%";
-          voteInnocentBar.style.width = 100 - share + "%";
           break;
         }
         case "verdict": {
@@ -267,19 +207,9 @@ namespace Desk {
     }
   });
 
-  function forceVerdict(guilty: boolean): void {
-    post("/api/verdict", { guilty }).then((ok) => {
-      Desk.say(trialStatus, ok ? "Вердикт вынесен." : "Нет активного голосования или связи.");
-    });
-  }
-
-  btnForceGuilty.addEventListener("click", () => forceVerdict(true));
-  btnForceInnocent.addEventListener("click", () => forceVerdict(false));
-
   const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
   if (backdrop) Backdrop.mount(backdrop);
   const gooey = document.getElementById("gooey-nav");
   if (gooey) GooeyNav.mount(gooey);
   connect();
-  window.setInterval(pollStatus, 2000);
 })();

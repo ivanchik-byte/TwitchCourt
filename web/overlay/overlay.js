@@ -8,24 +8,17 @@
     }
     const stage = el("stage");
     const court = el("court");
-    const caseTeaser = el("case-teaser");
-    const teaserNum = el("teaser-num");
-    const teaserFill = el("teaser-fill");
     const prosecutor = el("prosecutor");
     const mouth = el("mouth");
     const caseNo = el("case-no");
     const charge = el("charge");
     const subtitles = el("subtitles");
-    const gauge = el("gauge");
-    const gaugeGuilty = el("gauge-guilty");
-    const gaugeGuiltyN = el("gauge-guilty-n");
-    const gaugeInnocent = el("gauge-innocent");
-    const gaugeInnocentN = el("gauge-innocent-n");
-    const gaugeTimer = el("gauge-timer");
+    const testimony = el("testimony");
+    const testimonyAuthor = el("testimony-author");
+    const testimonyText = el("testimony-text");
     const objection = el("objection");
     const verdict = el("verdict");
     const verdictText = el("verdict-text");
-    let teaserTimer = 0;
     let objectionTimer = 0;
     let briefCourtTimer = 0;
     let currentStageState = "idle";
@@ -177,13 +170,6 @@
         window.clearTimeout(objectionTimer);
         objectionTimer = window.setTimeout(() => objection.classList.add("hidden"), 1250);
     }
-    function showTeaser(meter) {
-        teaserNum.textContent = "404";
-        teaserFill.style.width = meter + "%";
-        caseTeaser.classList.remove("hidden");
-        window.clearTimeout(teaserTimer);
-        teaserTimer = window.setTimeout(() => caseTeaser.classList.add("hidden"), 2000);
-    }
     function showVerdict(payload) {
         const guilty = payload.verdict === "ВИНОВЕН";
         verdictText.textContent = payload.verdict;
@@ -268,10 +254,9 @@
         stopAudio();
         stopCrowd();
         court.classList.add("hidden");
-        gauge.classList.add("hidden");
+        testimony.classList.add("hidden");
         hideVerdict();
         objection.classList.add("hidden");
-        caseTeaser.classList.add("hidden");
     }
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -310,10 +295,6 @@
                         caseNo.textContent = msg.payload.case_title;
                     if (msg.payload.charge)
                         charge.textContent = "Обвинение: " + msg.payload.charge;
-                    if (state === "voting")
-                        gauge.classList.remove("hidden");
-                    else
-                        gauge.classList.add("hidden");
                 }
                 break;
             }
@@ -338,24 +319,16 @@
                     showObjection();
                 }
                 break;
-            case "voting_update": {
-                const total = msg.payload.guilty_count + msg.payload.innocent_count;
-                const share = total > 0 ? Math.round((msg.payload.guilty_count / total) * 100) : 50;
-                gaugeGuilty.style.width = share + "%";
-                gaugeGuiltyN.textContent = String(msg.payload.guilty_count);
-                gaugeInnocentN.textContent = String(msg.payload.innocent_count);
-                gaugeTimer.textContent = String(msg.payload.time_left_sec);
-                break;
-            }
             case "verdict":
-                gauge.classList.add("hidden");
                 showVerdict(msg.payload);
                 break;
             case "donation":
                 coinPing();
                 break;
-            case "suspicion":
-                showTeaser(msg.payload.meter);
+            case "testimony":
+                testimonyAuthor.textContent = msg.payload.author || "Подсудимый";
+                testimonyText.textContent = msg.payload.text;
+                testimony.classList.remove("hidden");
                 break;
             case "panic":
                 stopBgm();

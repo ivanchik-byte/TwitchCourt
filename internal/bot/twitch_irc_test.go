@@ -2,7 +2,6 @@ package bot
 
 import (
 	"testing"
-	"time"
 )
 
 func TestParseChatLine(t *testing.T) {
@@ -12,11 +11,10 @@ func TestParseChatLine(t *testing.T) {
 		kind   string
 		arg    string
 	}{
-		{"ivan", "!sue", CommandSue, ""},
-		{"ivan", "!SUE", CommandSue, ""},
-		{"ivan", "!guilty", CommandGuilty, ""},
-		{"ivan", "!innocent", CommandInnocent, ""},
 		{"ivan", "!crime украл алмазы", CommandCrime, "украл алмазы"},
+		{"ivan", "!court", CommandCourt, ""},
+		{"ivan", "!court смотрю с работы", CommandCourt, "смотрю с работы"},
+		{"ivan", "!leave", CommandLeave, ""},
 		{"ivan", "!snitch он сидит на другом стриме", CommandSnitch, "он сидит на другом стриме"},
 		{"ivan", "просто коммент", CommandChat, "просто коммент"},
 	}
@@ -57,25 +55,29 @@ func TestTimeoutCommand(t *testing.T) {
 	default:
 		t.Fatal("timeout must queue a message")
 	}
+	irc.Ban("troll")
+	select {
+	case msg := <-irc.sendCh:
+		if msg != "/ban troll" {
+			t.Fatalf("bad ban command: %q", msg)
+		}
+	default:
+		t.Fatal("ban must queue a message")
+	}
 }
 
-func TestSueTracker(t *testing.T) {
-	base := time.Now()
-	tr := NewSueTracker(3, time.Minute, 5*time.Minute)
-	if tr.Hit(base) || tr.Hit(base.Add(10*time.Second)) {
-		t.Fatal("must not fire before threshold")
+func TestModErrorTracking(t *testing.T) {
+	irc := NewTwitchIRC("channel", "bot", "token", func(ChatCommand) {})
+	if _, bad := irc.LastModError(); bad {
+		t.Fatal("fresh client must be clean")
 	}
-	if !tr.Hit(base.Add(20 * time.Second)) {
-		t.Fatal("must fire on third call in window")
+	irc.noteModError("@msg-id=timeout_no_permission :tmi.twitch.tv NOTICE #channel :You don't have permission to timeout users.")
+	got, bad := irc.LastModError()
+	if !bad || got == "" {
+		t.Fatal("refusal must be remembered")
 	}
-	if tr.Hit(base.Add(30 * time.Second)) {
-		t.Fatal("cooldown must block right after trial")
-	}
-	late := base.Add(6 * time.Minute)
-	if tr.Hit(late) || tr.Hit(late.Add(10*time.Second)) {
-		t.Fatal("fresh window needs 3 calls")
-	}
-	if !tr.Hit(late.Add(20 * time.Second)) {
-		t.Fatal("must fire on third fresh call")
+	irc.noteModError(":someone!someone@host PRIVMSG #channel :hello")
+	if _, bad := irc.LastModError(); !bad {
+		t.Fatal("chat lines must not clear the refusal")
 	}
 }

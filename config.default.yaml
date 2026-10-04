@@ -19,10 +19,8 @@ tts:
   auto_fallback: true
   judge_voice: "ru-RU-DmitryNeural"
   judge_rate: "-10%"
-  jury_voices: ["ru-RU-DmitryNeural", "ru-RU-SvetlanaNeural"]
   silero_url: "http://127.0.0.1:7892"
   silero_judge: "kseniya"
-  silero_jury: ["aidar", "baya", "ruslan", "natasha"]
   piper_binary: ""
   model_path: "models/ru_dmitri.onnx"
   config_path: "models/ru_dmitri.onnx.json"
@@ -31,12 +29,9 @@ tts:
 
 courtroom:
   theme: "ace_attorney"
-  prosecutor_name: "Прокурор Карлов"
-  title: "Инквизитор Твича"
-  sue_threshold: 5
-  voting_duration_sec: 25
+  judge_style: "strict"
   defense_sec: 20
-  cooldown_min: 10
+  testimony_sec: 25
   punishments:
     - "10 приседаний в прямом эфире"
     - "Минута молчания с рукой на сердце"
@@ -66,7 +61,6 @@ safety:
   panic_hotkey: "F12"
 
 game:
-  minecraft_log: ""
   streamer_name: "Стример"
   memory_path: "data/memory.json"
   donate_token: ""

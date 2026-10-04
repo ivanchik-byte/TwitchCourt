@@ -3,15 +3,14 @@ package obs
 type EventType string
 
 const (
-	EventStateChange  EventType = "state_change"
-	EventAudioChunk   EventType = "audio_chunk"
-	EventAnimation    EventType = "animation"
-	EventSubtitles    EventType = "subtitles"
-	EventVotingUpdate EventType = "voting_update"
-	EventVerdict      EventType = "verdict"
-	EventPanic        EventType = "panic"
-	EventDonation     EventType = "donation"
-	EventSuspicion    EventType = "suspicion"
+	EventStateChange EventType = "state_change"
+	EventAudioChunk  EventType = "audio_chunk"
+	EventAnimation   EventType = "animation"
+	EventSubtitles   EventType = "subtitles"
+	EventVerdict     EventType = "verdict"
+	EventPanic       EventType = "panic"
+	EventDonation    EventType = "donation"
+	EventTestimony   EventType = "testimony"
 )
 
 type EventMessage struct {
@@ -44,10 +43,9 @@ type SubtitlesPayload struct {
 	Text    string `json:"text"`
 }
 
-type VotingUpdatePayload struct {
-	GuiltyCount   int `json:"guilty_count"`
-	InnocentCount int `json:"innocent_count"`
-	TimeLeftSec   int `json:"time_left_sec"`
+type TestimonyPayload struct {
+	Author string `json:"author"`
+	Text   string `json:"text"`
 }
 
 type DonationPayload struct {
@@ -56,11 +54,6 @@ type DonationPayload struct {
 	Currency   string  `json:"currency"`
 	Message    string  `json:"message,omitempty"`
 	OpensTrial bool    `json:"opens_trial"`
-}
-
-type SuspicionPayload struct {
-	Meter     int `json:"meter"`
-	Milestone int `json:"milestone"`
 }
 
 type VerdictPayload struct {

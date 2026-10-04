@@ -39,15 +39,15 @@
         <div class="mode-cards">
           <article class="mode-card active">
             <p class="mode-tag">Режим 01</p>
-            <h3>Суд над стримером</h3>
-            <p>Подсудимый всегда стример. Донаты, !sue и смерти в игре открывают дело.</p>
+            <h3>Суд над зрителем</h3>
+            <p>Зрители пишут !court, одного выбираешь ты. Отвечает в чате, ты защищаешь, судья решает.</p>
             <p class="mode-badge">Активен</p>
           </article>
-          <article class="mode-card active">
+          <article class="mode-card">
             <p class="mode-tag">Режим 02</p>
-            <h3>Суд над зрителем</h3>
-            <p>Зритель пишет !crime &lt;проступок&gt;, чат доносит через !snitch. Виновного ждёт мут на 90 секунд.</p>
-            <p class="mode-badge">Активен</p>
+            <h3>Суд над стримером</h3>
+            <p>Редкое событие: платина-донат или кнопка ниже. Подсудимый всегда стример.</p>
+            <p class="mode-badge">По вызову</p>
           </article>
           <article class="mode-card active">
             <p class="mode-tag">Режим 03</p>
@@ -109,6 +109,29 @@
           <button type="submit" class="btn">Отправить тестовый донат</button>
         </form>
         <p id="donate-status" class="footnote" aria-live="polite"></p>
+      </section>
+
+      <section class="article article-wide" id="article-dock" aria-labelledby="dock-heading">
+        <p class="overline">Режим 01 · скамья</p>
+        <h2 id="dock-heading">Очередь на скамью</h2>
+        <p class="guide">Зрители пишут !court &lt;за что&gt; в чат. Выбери одного, скипай спящих.</p>
+        <ul id="dock-list" class="event-feed" aria-live="polite">
+          <li class="feed-empty">Очередь пуста. Ждём !court.</li>
+        </ul>
+        <div class="presets">
+          <button type="button" id="btn-dock-random" class="btn">Случайный на скамью</button>
+          <button type="button" id="btn-dock-skip" class="btn btn-seal">Подсудимый спит (Скип)</button>
+        </div>
+        <p id="dock-status" class="footnote" aria-live="polite"></p>
+
+        <h3>Кара за виновность</h3>
+        <div class="presets" id="punish-row">
+          <button type="button" class="chip" data-kind="pardon">Помиловать</button>
+          <button type="button" class="chip" data-kind="timeout" data-secs="60">Мут 60</button>
+          <button type="button" class="chip" data-kind="timeout" data-secs="300">Мут 300</button>
+          <button type="button" class="chip" data-kind="ban">Бан</button>
+        </div>
+        <p id="punish-status" class="footnote" aria-live="polite"></p>
       </section>
 
       <section class="article article-wide" id="article-unban" aria-labelledby="unban-heading">
