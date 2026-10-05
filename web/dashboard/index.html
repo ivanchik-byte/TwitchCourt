@@ -1,99 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stream Tribunal · Пульт</title>
-  <link rel="stylesheet" href="dashboard.css">
-  <link rel="stylesheet" href="gooey.css">
-</head>
-<body>
-  <canvas id="bg-canvas" aria-hidden="true"></canvas>
-  <nav class="gooey-nav" id="gooey-nav" aria-label="Разделы">
-    <ul>
-      <li class="active"><a href="/" data-page="desk">Пульт</a></li>
-      <li><a href="/settings" data-page="settings">Настройки</a></li>
-      <li><a href="/modes" data-page="modes">Режимы</a></li>
-    </ul>
-  </nav>
-  <div class="ledger cockpit">
-    <header class="cockpit-bar">
-      <div class="cockpit-title">
-        <span class="overline">Трибунал · пульт</span>
-        <span id="phase-pill" class="phase-pill">Зал пуст</span>
-      </div>
-      <div class="cockpit-status">
-        <p class="docket-line"><span id="ws-dot" class="dot" aria-hidden="true"></span> <span id="ws-label">Подключение...</span></p>
-        <span id="tele-llm" class="tele" title="Мозг">…</span>
-        <span id="tele-tts" class="tele" title="Голос">…</span>
-        <span id="tele-rtt" class="tele" title="Пинг сервера">…</span>
-        <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
-        <button type="button" id="btn-panic" class="btn btn-seal">⚡ Паника (F12)</button>
-      </div>
-    </header>
-
-    <main class="cockpit-grid">
-      <section class="cell cell-dock" aria-labelledby="dock-heading">
-        <p class="overline">Скамья · !court</p>
-        <h2 id="dock-heading">Очередь</h2>
-        <p id="dock-current" class="case-line">Никого на скамье</p>
-        <ul id="dock-list" class="event-feed" aria-live="polite">
-          <li class="feed-empty">Очередь пуста. Ждём !court.</li>
-        </ul>
-        <div class="btn-row">
-          <button type="button" id="btn-dock-random" class="btn">Случайный <span class="key">R</span></button>
-          <button type="button" id="btn-dock-skip" class="btn btn-seal">Скип <span class="key">Tab</span></button>
-        </div>
-        <p id="dock-status" class="footnote" aria-live="polite"></p>
-      </section>
-
-      <section class="cell cell-gavel" aria-labelledby="phase-heading">
-        <p class="overline">Ход суда</p>
-        <h2 id="phase-heading"><span id="phase-name">Зал пуст</span> <span id="phase-timer" class="phase-timer"></span></h2>
-        <button type="button" id="btn-gavel" class="btn btn-gavel">🔨 УДАРИТЬ МОЛОТКОМ <span class="key">Space</span></button>
-        <p id="deck-status" class="footnote" aria-live="polite"></p>
-        <p id="judge-line" class="judge-line" aria-live="off"></p>
-        <div id="mic-panel" class="mic-panel">
-          <div id="mic-meter" class="mic-meter" aria-hidden="true"></div>
-          <p id="mic-transcript" class="mic-transcript" aria-live="off"></p>
-        </div>
-        <h3>Стенограмма</h3>
-        <ul id="stenogram" class="event-feed feed-compact" aria-live="polite">
-          <li class="feed-empty">Заседание не идёт.</li>
-        </ul>
-        <h3>Быстрые статьи</h3>
-        <div class="row">
-          <label class="field"><span>Ник зрителя</span><input type="text" id="manual-nick" placeholder="ник" autocomplete="off"></label>
-          <label class="field"><span>Статья</span><input type="text" id="manual-crime" placeholder="за что судим" autocomplete="off"></label>
-        </div>
-        <div class="presets" id="article-row">
-          <button type="button" class="chip" data-crime="Слив катки на 20 минуте">Слив катки</button>
-          <button type="button" class="chip" data-crime="Токсичность в чате">Токсичность</button>
-          <button type="button" class="chip" data-crime="Опоздание на стрим">Опоздание</button>
-          <button type="button" class="chip" data-crime="Байт на бан">Байт на бан</button>
-          <button type="button" class="chip" data-crime="Духота в голосовом">Духота</button>
-        </div>
-        <button type="button" id="btn-manual-trial" class="btn">Открыть дело</button>
-      </section>
-
-      <section class="cell cell-punish" aria-labelledby="punish-heading">
-        <p class="overline">Кара · вердикт в 1 клик</p>
-        <h2 id="punish-heading">Наказание</h2>
-        <div class="punish-grid" id="punish-row">
-          <button type="button" class="chip punish-pardon" data-kind="pardon">Помиловать <span class="key">1</span></button>
-          <button type="button" class="chip punish-mute" data-kind="timeout" data-secs="60">Мут 60 <span class="key">2</span></button>
-          <button type="button" class="chip punish-mute-long" data-kind="timeout" data-secs="300">Мут 300 <span class="key">3</span></button>
-          <button type="button" class="chip punish-ban" data-kind="ban">Бан <span class="key">4</span></button>
-        </div>
-        <p id="punish-status" class="footnote" aria-live="polite"></p>
-        <h3>Протокол</h3>
-        <ul id="verdict-log" class="event-feed" aria-live="polite">
-          <li class="feed-empty">Приговоров пока нет.</li>
-        </ul>
-      </section>
-    </main>
-  </div>
-
-  <script src="app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stream Tribunal · Пульт</title>
+    <script type="module" crossorigin src="./assets/index-Dnt3owl_.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Cy-b-DYh.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

@@ -4,7 +4,7 @@ DIST := dist
 .PHONY: run test vet build build-win package-win frontend clean
 
 frontend:
-	cd web && sh build.sh
+	cd web/frontend && npm install --no-audit --no-fund && npm run build
 
 run:
 	go run ./cmd/server

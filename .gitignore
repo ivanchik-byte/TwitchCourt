@@ -1,3 +1,7 @@
+# Frontend toolchain (rebuilt via `make frontend`)
+web/frontend/node_modules/
+web/frontend/dist/
+
 # Documentation & notes
 MoneyPrinter.md
 draft.md
