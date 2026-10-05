@@ -21,6 +21,9 @@ export function ModesView() {
   const [sueThreshold, setSueThreshold] = useState('5')
   const [sueWindow, setSueWindow] = useState('600')
   const [judgeStyle, setJudgeStyle] = useState('strict')
+  const [judgeName, setJudgeName] = useState('Судья')
+  const [theme, setTheme] = useState('ace_attorney')
+  const [platinumMin, setPlatinumMin] = useState('500')
   const [articles, setArticles] = useState('')
   const [presets, setPresets] = useState<number[]>([])
 
@@ -41,6 +44,7 @@ export function ModesView() {
     void apiGet<{
       defense_sec: number; testimony_sec: number; streamer_trial_min: number
       sue_threshold: number; sue_window_sec: number; judge_style: string; articles?: string[]
+      platinum_min: number; judge_name: string; theme: string
     }>('/api/settings')
       .then((d) => {
         if (typeof d.defense_sec === 'number') setDefenseSec(d.defense_sec)
@@ -49,6 +53,9 @@ export function ModesView() {
         if (typeof d.sue_threshold === 'number') setSueThreshold(String(d.sue_threshold))
         if (typeof d.sue_window_sec === 'number') setSueWindow(String(d.sue_window_sec))
         if (typeof d.judge_style === 'string') setJudgeStyle(d.judge_style)
+        if (typeof d.platinum_min === 'number') setPlatinumMin(String(d.platinum_min))
+        if (typeof d.judge_name === 'string') setJudgeName(d.judge_name)
+        if (typeof d.theme === 'string') setTheme(d.theme)
         if (Array.isArray(d.articles)) setArticles(d.articles.join('\n'))
       })
       .catch(() => undefined)
@@ -119,6 +126,9 @@ export function ModesView() {
         sue_threshold: Number(sueThreshold) || 0,
         sue_window_sec: Number(sueWindow) || 600,
         judge_style: judgeStyle,
+        platinum_min: Number(platinumMin) || 0,
+        judge_name: judgeName.trim() || undefined,
+        theme: theme.trim() || undefined,
         articles: listed,
       })
       if (r.ok) toast.success('Параметры суда сохранены')
@@ -346,9 +356,25 @@ export function ModesView() {
             />
           </label>
           <label className="block text-xs text-zinc-400">
+            Имя судьи
+            <input
+              value={judgeName} onChange={(e) => setJudgeName(e.target.value)}
+              autoComplete="off"
+              className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+            />
+          </label>
+          <label className="block text-xs text-zinc-400">
             Донат для суда над стримером, ₽ (0 — выкл)
             <input
               value={streamerMin} onChange={(e) => setStreamerMin(e.target.value.replace(/[^0-9.]/g, ''))}
+              inputMode="decimal"
+              className="tabular mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+            />
+          </label>
+          <label className="block text-xs text-zinc-400">
+            Платиновый донат (суд по требованию), ₽
+            <input
+              value={platinumMin} onChange={(e) => setPlatinumMin(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
               className="tabular mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
             />
@@ -362,6 +388,14 @@ export function ModesView() {
               <option value="strict">Строгий</option>
               <option value="cynical">Циничный</option>
             </select>
+          </label>
+          <label className="block text-xs text-zinc-400">
+            Тема оформления
+            <input
+              value={theme} onChange={(e) => setTheme(e.target.value)}
+              autoComplete="off"
+              className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+            />
           </label>
           <div className="grid grid-cols-2 gap-1.5">
             <label className="block text-xs text-zinc-400">

@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useHotkeys } from '../hooks/useHotkeys'
+import { apiGet } from '../lib/api'
 import { useTribunalActions } from '../tribunal/TribunalContext'
 import { BenchQueue } from '../components/cockpit/BenchQueue'
 import { GavelStage } from '../components/cockpit/GavelStage'
@@ -9,17 +11,30 @@ import { MobileActionBar } from '../components/cockpit/MobileActionBar'
 
 export function CockpitView() {
   const { gavel, punish, pick, skip, panic } = useTribunalActions()
+  const [panicCode, setPanicCode] = useState('Escape')
 
-  useHotkeys({
-    onGavel: gavel,
-    onPardon: () => void punish('pardon'),
-    onMute60: () => void punish('timeout', 60),
-    onMute300: () => void punish('timeout', 300),
-    onBan: () => void punish('ban'),
-    onRandom: () => void pick(),
-    onSkip: () => void skip(),
-    onPanic: panic,
-  })
+  useEffect(() => {
+    void apiGet<{ panic_hotkey?: string }>('/api/safety')
+      .then((d) => {
+        const codes: Record<string, string> = { escape: 'Escape', f9: 'F9', f12: 'F12', p: 'KeyP' }
+        if (d.panic_hotkey && codes[d.panic_hotkey]) setPanicCode(codes[d.panic_hotkey])
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useHotkeys(
+    {
+      onGavel: gavel,
+      onPardon: () => void punish('pardon'),
+      onMute60: () => void punish('timeout', 60),
+      onMute300: () => void punish('timeout', 300),
+      onBan: () => void punish('ban'),
+      onRandom: () => void pick(),
+      onSkip: () => void skip(),
+      onPanic: panic,
+    },
+    panicCode,
+  )
 
   return (
     <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-3 p-3 lg:h-[calc(100dvh-3rem)] lg:grid-cols-[300px_minmax(0,1fr)_320px] lg:overflow-hidden">

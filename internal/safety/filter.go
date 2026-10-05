@@ -24,21 +24,41 @@ type Filter struct {
 	customBlacklist []string
 	compiledRegexes []*regexp.Regexp
 	replacement     string
+	enabled         bool
 	mu              sync.RWMutex
 }
 
 func NewFilter(blacklist []string) *Filter {
 	f := &Filter{
 		customBlacklist: blacklist,
+		enabled:         true,
 	}
 	f.compile()
 	return f
 }
 
+// SetEnabled toggles sanitizing at runtime.
+func (f *Filter) SetEnabled(enabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.enabled = enabled
+}
+
+// SetBlacklist replaces the custom patterns and recompiles.
+func (f *Filter) SetBlacklist(list []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.customBlacklist = append([]string(nil), list...)
+	f.compileLocked()
+}
+
 func (f *Filter) compile() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.compileLocked()
+}
 
+func (f *Filter) compileLocked() {
 	var patterns []string
 	patterns = append(patterns, f.customBlacklist...)
 
@@ -78,6 +98,9 @@ func (f *Filter) Sanitize(input string) string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
+	if !f.enabled {
+		return html.EscapeString(cleaned)
+	}
 	for _, re := range f.compiledRegexes {
 		// single pass per pattern: f.replacement cannot re-trigger anything
 		cleaned = re.ReplaceAllString(cleaned, "${1}"+f.replacement+"${3}")

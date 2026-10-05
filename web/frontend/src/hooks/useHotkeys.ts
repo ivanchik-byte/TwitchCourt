@@ -16,15 +16,22 @@ function inField(e: KeyboardEvent): boolean {
   return !!t?.closest?.('input, textarea, select, [contenteditable]')
 }
 
-export function useHotkeys(map: HotkeyMap) {
+export function useHotkeys(map: HotkeyMap, panicCode = 'Escape') {
   const ref = useRef(map)
   ref.current = map
+  const panicRef = useRef(panicCode)
+  panicRef.current = panicCode
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (inField(e)) return
       const el = e.target as HTMLElement | null
       const m = ref.current
+      if (e.code === panicRef.current) {
+        e.preventDefault()
+        m.onPanic?.()
+        return
+      }
       switch (e.code) {
         case 'Space':
           // a focused button already fires on Space — don't double-fire the gavel
@@ -49,9 +56,6 @@ export function useHotkeys(map: HotkeyMap) {
           break
         case 'KeyN':
           m.onSkip?.()
-          break
-        case 'Escape':
-          m.onPanic?.()
           break
       }
     }

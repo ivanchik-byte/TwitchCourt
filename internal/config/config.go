@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -284,6 +285,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Donations.StreamerTrialMin < 0 {
 		cfg.Donations.StreamerTrialMin = 0
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.Safety.PanicHotkey)) {
+	case "escape", "f9", "f12", "p":
+		cfg.Safety.PanicHotkey = strings.ToLower(strings.TrimSpace(cfg.Safety.PanicHotkey))
+	default:
+		cfg.Safety.PanicHotkey = "escape"
 	}
 
 	return cfg, nil

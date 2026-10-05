@@ -52,6 +52,13 @@ export function SettingsView() {
     judgeVoice: '',
     judgeRate: '',
     sileroUrl: '',
+    enabled: true,
+    autoFallback: true,
+    piperBinary: '',
+    modelPath: '',
+    configPath: '',
+    speakerId: '0',
+    speed: '1.15',
   })
 
   const [twitch, setTwitch] = useState({
@@ -60,8 +67,12 @@ export function SettingsView() {
     token: '',
     clientId: '',
     broadcasterId: '',
+    moderatorId: '',
     daToken: '',
     dpKey: '',
+    daEnabled: true,
+    dpEnabled: true,
+    bitsEnabled: true,
   })
   const [twitchHas, setTwitchHas] = useState<Record<string, boolean>>({})
 
@@ -78,6 +89,9 @@ export function SettingsView() {
   const [photoTick, setPhotoTick] = useState(0)
   const [courtTick, setCourtTick] = useState(0)
   const [voices, setVoices] = useState<VoiceLists>({ edge: [], silero: [] })
+  const [safety, setSafety] = useState({ filterEnabled: true, blacklist: '', panicHotkey: 'escape' })
+  const [streamerName, setStreamerName] = useState('')
+  const [server, setServer] = useState({ host: '', port: 0, secretSet: false })
 
   useEffect(() => {
     void apiGet<{ provider: string; model: string; temperature: number; base_url: string; has_key: boolean; live: boolean }>('/api/ai')
@@ -94,6 +108,8 @@ export function SettingsView() {
     void apiGet<{
       engine: string; voice: string; rate: string; volume: string; pitch: string
       judge_voice: string; judge_rate: string; silero_url: string; silero_judge: string
+      enabled: boolean; auto_fallback: boolean; piper_binary: string; model_path: string
+      config_path: string; speaker_id: number; speed: number
       voices?: { edge?: string[]; silero?: string[] }
     }>('/api/tts')
       .then((d) => {
@@ -112,12 +128,26 @@ export function SettingsView() {
           judgeVoice: d.judge_voice ?? '',
           judgeRate: d.judge_rate ?? '',
           sileroUrl: d.silero_url ?? '',
+          enabled: d.enabled ?? true,
+          autoFallback: d.auto_fallback ?? true,
+          piperBinary: d.piper_binary ?? '',
+          modelPath: d.model_path ?? '',
+          configPath: d.config_path ?? '',
+          speakerId: String(d.speaker_id ?? 0),
+          speed: String(d.speed ?? 1.15),
         }))
       })
       .catch(() => undefined)
     void apiGet<Record<string, string | boolean>>('/api/integrations')
       .then((d) => {
-        setTwitch((t) => ({ ...t, channel: String(d.channel ?? ''), nick: String(d.nick ?? '') }))
+        setTwitch((t) => ({
+          ...t,
+          channel: String(d.channel ?? ''),
+          nick: String(d.nick ?? ''),
+          daEnabled: d.donationalerts_enabled !== false,
+          dpEnabled: d.donatepay_enabled !== false,
+          bitsEnabled: d.twitch_bits_enabled !== false,
+        }))
         setTwitchHas({
           twitch_token: d.twitch === true,
           donationalerts_token: d.donationalerts === true,
@@ -139,6 +169,19 @@ export function SettingsView() {
       .catch(() => undefined)
     void apiGet<{ sfx: { name: string; size: number }[] }>('/api/sfx')
       .then((d) => setSfx(d.sfx ?? []))
+      .catch(() => undefined)
+    void apiGet<{ filter_enabled: boolean; custom_blacklist: string[]; panic_hotkey: string }>('/api/safety')
+      .then((d) => setSafety({
+        filterEnabled: d.filter_enabled !== false,
+        blacklist: (d.custom_blacklist ?? []).join('\n'),
+        panicHotkey: d.panic_hotkey || 'escape',
+      }))
+      .catch(() => undefined)
+    void apiGet<{ streamer_name: string }>('/api/game')
+      .then((d) => setStreamerName(d.streamer_name ?? ''))
+      .catch(() => undefined)
+    void apiGet<{ host: string; port: number; secret_set: boolean }>('/api/server')
+      .then((d) => setServer({ host: d.host ?? '', port: d.port ?? 0, secretSet: !!d.secret_set }))
       .catch(() => undefined)
   }, [])
 
@@ -341,6 +384,45 @@ export function SettingsView() {
               <input value={tts.sileroUrl} onChange={(e) => setTts({ ...tts, sileroUrl: e.target.value })} className={inputCls} />
             </label>
           )}
+          {tts.engine === 'piper' && (
+            <details className="rounded-lg border border-white/10 p-2.5">
+              <summary className="cursor-pointer text-xs text-zinc-300">Piper локально (требует рестарта бинарника при смене путей)</summary>
+              <div className="mt-2 space-y-2">
+                <label className={labelCls}>
+                  Путь к бинарнику
+                  <input value={tts.piperBinary} onChange={(e) => setTts({ ...tts, piperBinary: e.target.value })} placeholder="bin/piper" className={inputCls} />
+                </label>
+                <label className={labelCls}>
+                  Модель (.onnx, irina — женский)
+                  <input value={tts.modelPath} onChange={(e) => setTts({ ...tts, modelPath: e.target.value })} className={inputCls} />
+                </label>
+                <label className={labelCls}>
+                  Конфиг модели (.json)
+                  <input value={tts.configPath} onChange={(e) => setTts({ ...tts, configPath: e.target.value })} className={inputCls} />
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className={labelCls}>
+                    Speaker ID
+                    <input value={tts.speakerId} onChange={(e) => setTts({ ...tts, speakerId: e.target.value.replace(/[^0-9]/g, '') })} inputMode="numeric" className={inputCls} />
+                  </label>
+                  <label className={labelCls}>
+                    Скорость
+                    <input value={tts.speed} onChange={(e) => setTts({ ...tts, speed: e.target.value.replace(/[^0-9.]/g, '') })} inputMode="decimal" className={inputCls} />
+                  </label>
+                </div>
+              </div>
+            </details>
+          )}
+          <div className="flex flex-wrap gap-3 text-xs text-zinc-300">
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={tts.enabled} onChange={(e) => setTts({ ...tts, enabled: e.target.checked })} />
+              Озвучка включена
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={tts.autoFallback} onChange={(e) => setTts({ ...tts, autoFallback: e.target.checked })} />
+              Авто-фолбэк
+            </label>
+          </div>
           <div className="flex gap-1.5">
             <button
               onClick={() =>
@@ -355,6 +437,13 @@ export function SettingsView() {
                     judge_rate: tts.judgeRate,
                     silero_url: tts.sileroUrl,
                     silero_judge: tts.sileroJudge,
+                    enabled: tts.enabled,
+                    auto_fallback: tts.autoFallback,
+                    ...(tts.piperBinary ? { piper_binary: tts.piperBinary } : {}),
+                    ...(tts.modelPath ? { model_path: tts.modelPath } : {}),
+                    ...(tts.configPath ? { config_path: tts.configPath } : {}),
+                    speaker_id: Number(tts.speakerId) || 0,
+                    speed: Number(tts.speed) || 1.15,
                   })
                 )
               }
@@ -386,8 +475,23 @@ export function SettingsView() {
           <SecretField label={`Twitch OAuth${twitchHas.twitch_token ? ' ● задан' : ''}`} value={twitch.token} onChange={(v) => setTwitch({ ...twitch, token: v })} />
           <SecretField label="Twitch Client ID" value={twitch.clientId} onChange={(v) => setTwitch({ ...twitch, clientId: v })} />
           <SecretField label="Broadcaster ID (для Unban-суда)" value={twitch.broadcasterId} onChange={(v) => setTwitch({ ...twitch, broadcasterId: v })} />
+          <SecretField label="Moderator ID (пусто = как broadcaster)" value={twitch.moderatorId} onChange={(v) => setTwitch({ ...twitch, moderatorId: v })} />
           <SecretField label={`DonationAlerts токен${twitchHas.donationalerts_token ? ' ● задан' : ''}`} value={twitch.daToken} onChange={(v) => setTwitch({ ...twitch, daToken: v })} />
           <SecretField label={`DonatePay ключ${twitchHas.donatepay_key ? ' ● задан' : ''}`} value={twitch.dpKey} onChange={(v) => setTwitch({ ...twitch, dpKey: v })} />
+          <div className="flex flex-wrap gap-3 text-xs text-zinc-300">
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={twitch.daEnabled} onChange={(e) => setTwitch({ ...twitch, daEnabled: e.target.checked })} />
+              DonationAlerts
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={twitch.dpEnabled} onChange={(e) => setTwitch({ ...twitch, dpEnabled: e.target.checked })} />
+              DonatePay
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={twitch.bitsEnabled} onChange={(e) => setTwitch({ ...twitch, bitsEnabled: e.target.checked })} />
+              Twitch Bits
+            </label>
+          </div>
           <div>
             <button
               onClick={() =>
@@ -398,10 +502,14 @@ export function SettingsView() {
                     ...(twitch.token ? { twitch_token: twitch.token } : {}),
                     ...(twitch.clientId ? { client_id: twitch.clientId } : {}),
                     ...(twitch.broadcasterId ? { broadcaster_id: twitch.broadcasterId } : {}),
+                    ...(twitch.moderatorId ? { moderator_id: twitch.moderatorId } : {}),
                     ...(twitch.daToken ? { donationalerts_token: twitch.daToken } : {}),
                     ...(twitch.dpKey ? { donatepay_key: twitch.dpKey } : {}),
+                    donationalerts_enabled: twitch.daEnabled,
+                    donatepay_enabled: twitch.dpEnabled,
+                    twitch_bits_enabled: twitch.bitsEnabled,
                   }).then((r) => {
-                    if (r.ok) setTwitch((t) => ({ ...t, token: '', clientId: '', broadcasterId: '', daToken: '', dpKey: '' }))
+                    if (r.ok) setTwitch((t) => ({ ...t, token: '', clientId: '', broadcasterId: '', moderatorId: '', daToken: '', dpKey: '' }))
                     return r
                   })
                 )
@@ -534,6 +642,96 @@ export function SettingsView() {
               className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
             >
               Стандартный
+            </button>
+          </div>
+        </section>
+
+        <section className="card space-y-2 p-4">
+          <h2 className="font-semibold">Безопасность</h2>
+          <label className="flex items-center gap-1.5 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={safety.filterEnabled}
+              onChange={(e) => setSafety({ ...safety, filterEnabled: e.target.checked })}
+            />
+            Фильтр токсичности в суде
+          </label>
+          <label className={labelCls}>
+            Чёрный список (по строке)
+            <textarea
+              value={safety.blacklist} onChange={(e) => setSafety({ ...safety, blacklist: e.target.value })}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-sm text-white outline-none"
+            />
+          </label>
+          <label className={labelCls}>
+            Хоткей паники
+            <select
+              value={safety.panicHotkey}
+              onChange={(e) => setSafety({ ...safety, panicHotkey: e.target.value })}
+              className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
+            >
+              <option value="escape">Escape</option>
+              <option value="f9">F9</option>
+              <option value="f12">F12</option>
+              <option value="p">P</option>
+            </select>
+          </label>
+          <div>
+            <button
+              onClick={() =>
+                saveSection('Безопасность', () =>
+                  apiPut('/api/safety', {
+                    filter_enabled: safety.filterEnabled,
+                    custom_blacklist: lines(safety.blacklist),
+                    panic_hotkey: safety.panicHotkey,
+                  })
+                )
+              }
+              className="pressable rounded-lg bg-amber-400/90 px-4 py-1.5 text-sm font-bold text-black"
+            >
+              Сохранить
+            </button>
+          </div>
+        </section>
+
+        <section className="card space-y-2 p-4">
+          <h2 className="font-semibold">Стример</h2>
+          <label className={labelCls}>
+            Имя стримера (подсудимый по донатам и !sue)
+            <input value={streamerName} onChange={(e) => setStreamerName(e.target.value)} className={inputCls} />
+          </label>
+          <div>
+            <button
+              onClick={() =>
+                saveSection('Стример', () => apiPut('/api/game', { streamer_name: streamerName }))
+              }
+              className="pressable rounded-lg bg-amber-400/90 px-4 py-1.5 text-sm font-bold text-black"
+            >
+              Сохранить
+            </button>
+          </div>
+        </section>
+
+        <section className="card space-y-2 p-4">
+          <h2 className="font-semibold">Сервер</h2>
+          <p className="tabular font-mono text-sm text-zinc-300">
+            {server.host || '—'}:{server.port || '—'} · секрет {server.secretSet ? 'задан' : 'не задан'}
+          </p>
+          <p className="text-xs text-zinc-500">
+            Смена host/port/secret — только через config.yaml, нужен рестарт.
+          </p>
+          <div>
+            <button
+              onClick={async () => {
+                if (!window.confirm('Перезапустить сервер? Пульт отключится на несколько секунд. Без процесс-менеджера сервер не поднимется сам!')) return
+                const r = await apiPost('/api/restart', {})
+                if (r.ok) toast.success('Сервер перезапускается… обнови страницу через 5 секунд')
+                else toast.error(`Не вышло: ${apiNote(r.status)}`)
+              }}
+              className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-sm"
+            >
+              Перезапустить сервер
             </button>
           </div>
         </section>
