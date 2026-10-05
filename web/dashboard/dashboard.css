@@ -2,12 +2,12 @@
    системный гротеск, один синий акцент. На весь экран, адаптивно. */
 
 :root {
-  --black: #030407;
-  --surface: rgba(16, 19, 24, 0.92);
-  --sunken: rgba(3, 4, 7, 0.85);
-  --line: #2f3336;
-  --ink: #e7e9ea;
-  --dim: #71767b;
+  --black: oklch(0.12 0.005 260);
+  --surface: oklch(0.15 0.006 260 / 0.92);
+  --sunken: oklch(0.12 0.005 260 / 0.85);
+  --line: oklch(0.28 0.008 260);
+  --ink: oklch(0.92 0.004 260);
+  --dim: oklch(0.55 0.01 260);
   --accent: #1d9bf0;
   --accent-deep: #1a8cd8;
   --seal: #f4212e;
@@ -825,4 +825,65 @@ body {
   .cell .chip:active {
     transform: none;
   }
+}
+
+/* Telemetry capsules in the cockpit bar. */
+.tele {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lawyer mic panel: VU meter plus live transcript. */
+.mic-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mic-meter {
+  display: flex;
+  gap: 4px;
+  height: 18px;
+  align-items: flex-end;
+}
+
+.mic-meter .seg {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mic-meter .seg.on {
+  background: #10b981;
+}
+
+.mic-meter .seg.on.warn {
+  background: #f59e0b;
+}
+
+.mic-meter .seg.on.hot {
+  background: #ef4444;
+}
+
+.mic-transcript {
+  font-size: 0.88rem;
+  color: var(--ink);
+  margin-top: 8px;
+  min-height: 1.4em;
+}
+
+.unban-text {
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin: 4px 0 6px;
 }

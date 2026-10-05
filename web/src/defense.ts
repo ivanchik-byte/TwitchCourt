@@ -10,10 +10,100 @@
   let rec: any = null;
   let defending = false;
   let pending = "";
+  let meterCtx: AudioContext | null = null;
+  let meterAnalyser: AnalyserNode | null = null;
+  let meterStream: MediaStream | null = null;
+  let meterRaf = 0;
 
   function status(text: string): void {
     const node = document.getElementById("trial-status");
     if (node) node.textContent = text;
+  }
+
+  function transcript(text: string): void {
+    const node = document.getElementById("mic-transcript");
+    if (node) node.textContent = text;
+  }
+
+  function buildMeter(): void {
+    const box = document.getElementById("mic-meter");
+    if (!box || box.children.length > 0) return;
+    for (let i = 0; i < 12; i++) {
+      const seg = document.createElement("span");
+      seg.className = "seg";
+      box.appendChild(seg);
+    }
+  }
+
+  function paintMeter(level: number): void {
+    const box = document.getElementById("mic-meter");
+    if (!box) return;
+    const lit = Math.round(level * 12);
+    const segs = box.children;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i] as HTMLElement;
+      seg.className = "seg" + (i < lit ? " on" + (i >= 9 ? " hot" : i >= 6 ? " warn" : "") : "");
+    }
+  }
+
+  function meterTick(): void {
+    if (!defending || !meterAnalyser) return;
+    const data = new Uint8Array(meterAnalyser.frequencyBinCount);
+    meterAnalyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    paintMeter(Math.min(1, Math.sqrt(sum / data.length) * 4));
+    meterRaf = requestAnimationFrame(meterTick);
+  }
+
+  function startLevel(): void {
+    try {
+      const media = (navigator as any).mediaDevices;
+      if (!media || !media.getUserMedia) return;
+      media.getUserMedia({ audio: true }).then(
+        (stream: MediaStream) => {
+          if (!defending) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          try {
+            const Impl =
+              window.AudioContext ||
+              (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            meterCtx = new Impl();
+            meterStream = stream;
+            const source = meterCtx.createMediaStreamSource(stream);
+            meterAnalyser = meterCtx.createAnalyser();
+            meterAnalyser.fftSize = 512;
+            source.connect(meterAnalyser);
+            cancelAnimationFrame(meterRaf);
+            meterRaf = requestAnimationFrame(meterTick);
+          } catch {
+            /* level meter unavailable, speech still works */
+          }
+        },
+        () => undefined
+      );
+    } catch {
+      /* no mic for levels */
+    }
+  }
+
+  function stopLevel(): void {
+    cancelAnimationFrame(meterRaf);
+    paintMeter(0);
+    if (meterStream) {
+      meterStream.getTracks().forEach((t) => t.stop());
+      meterStream = null;
+    }
+    if (meterCtx) {
+      void meterCtx.close().catch(() => undefined);
+      meterCtx = null;
+    }
+    meterAnalyser = null;
   }
 
   function sendChunk(): void {
@@ -25,6 +115,8 @@
 
   function startMic(): void {
     pending = "";
+    transcript("");
+    startLevel();
     if (!Impl) return;
     try {
       rec = new Impl();
@@ -38,7 +130,9 @@
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i];
         if (res.isFinal) {
-          pending += String(res[0].transcript) + " ";
+          const line = String(res[0].transcript);
+          pending += line + " ";
+          transcript(line);
           sendChunk();
         }
       }
@@ -64,6 +158,7 @@
 
   function stopMic(): void {
     defending = false;
+    stopLevel();
     if (rec) {
       try {
         rec.onend = null;
@@ -100,5 +195,6 @@
     };
   }
 
+  buildMeter();
   connect();
 })();

@@ -542,7 +542,17 @@ var GooeyNav;
                 const name = document.createElement("strong");
                 name.textContent = req.UserName || req.UserLogin || req.UserID;
                 item.appendChild(name);
-                item.appendChild(document.createTextNode(": " + (req.Text || "без текста")));
+                if (req.CreatedAt) {
+                    const when = document.createElement("span");
+                    when.className = "feed-time";
+                    const day = String(req.CreatedAt).slice(0, 10);
+                    when.textContent = " · " + day;
+                    item.appendChild(when);
+                }
+                const appeal = document.createElement("p");
+                appeal.className = "unban-text";
+                appeal.textContent = req.Text || "без текста";
+                item.appendChild(appeal);
                 const row = document.createElement("div");
                 row.className = "presets";
                 const pardon = document.createElement("button");
@@ -684,10 +694,97 @@ var GooeyNav;
     let rec = null;
     let defending = false;
     let pending = "";
+    let meterCtx = null;
+    let meterAnalyser = null;
+    let meterStream = null;
+    let meterRaf = 0;
     function status(text) {
         const node = document.getElementById("trial-status");
         if (node)
             node.textContent = text;
+    }
+    function transcript(text) {
+        const node = document.getElementById("mic-transcript");
+        if (node)
+            node.textContent = text;
+    }
+    function buildMeter() {
+        const box = document.getElementById("mic-meter");
+        if (!box || box.children.length > 0)
+            return;
+        for (let i = 0; i < 12; i++) {
+            const seg = document.createElement("span");
+            seg.className = "seg";
+            box.appendChild(seg);
+        }
+    }
+    function paintMeter(level) {
+        const box = document.getElementById("mic-meter");
+        if (!box)
+            return;
+        const lit = Math.round(level * 12);
+        const segs = box.children;
+        for (let i = 0; i < segs.length; i++) {
+            const seg = segs[i];
+            seg.className = "seg" + (i < lit ? " on" + (i >= 9 ? " hot" : i >= 6 ? " warn" : "") : "");
+        }
+    }
+    function meterTick() {
+        if (!defending || !meterAnalyser)
+            return;
+        const data = new Uint8Array(meterAnalyser.frequencyBinCount);
+        meterAnalyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+        }
+        paintMeter(Math.min(1, Math.sqrt(sum / data.length) * 4));
+        meterRaf = requestAnimationFrame(meterTick);
+    }
+    function startLevel() {
+        try {
+            const media = navigator.mediaDevices;
+            if (!media || !media.getUserMedia)
+                return;
+            media.getUserMedia({ audio: true }).then((stream) => {
+                if (!defending) {
+                    stream.getTracks().forEach((t) => t.stop());
+                    return;
+                }
+                try {
+                    const Impl = window.AudioContext ||
+                        window.webkitAudioContext;
+                    meterCtx = new Impl();
+                    meterStream = stream;
+                    const source = meterCtx.createMediaStreamSource(stream);
+                    meterAnalyser = meterCtx.createAnalyser();
+                    meterAnalyser.fftSize = 512;
+                    source.connect(meterAnalyser);
+                    cancelAnimationFrame(meterRaf);
+                    meterRaf = requestAnimationFrame(meterTick);
+                }
+                catch {
+                    /* level meter unavailable, speech still works */
+                }
+            }, () => undefined);
+        }
+        catch {
+            /* no mic for levels */
+        }
+    }
+    function stopLevel() {
+        cancelAnimationFrame(meterRaf);
+        paintMeter(0);
+        if (meterStream) {
+            meterStream.getTracks().forEach((t) => t.stop());
+            meterStream = null;
+        }
+        if (meterCtx) {
+            void meterCtx.close().catch(() => undefined);
+            meterCtx = null;
+        }
+        meterAnalyser = null;
     }
     function sendChunk() {
         const text = pending.trim();
@@ -698,6 +795,8 @@ var GooeyNav;
     }
     function startMic() {
         pending = "";
+        transcript("");
+        startLevel();
         if (!Impl)
             return;
         try {
@@ -713,7 +812,9 @@ var GooeyNav;
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const res = event.results[i];
                 if (res.isFinal) {
-                    pending += String(res[0].transcript) + " ";
+                    const line = String(res[0].transcript);
+                    pending += line + " ";
+                    transcript(line);
                     sendChunk();
                 }
             }
@@ -740,6 +841,7 @@ var GooeyNav;
     }
     function stopMic() {
         defending = false;
+        stopLevel();
         if (rec) {
             try {
                 rec.onend = null;
@@ -778,5 +880,6 @@ var GooeyNav;
             window.setTimeout(connect, 2000);
         };
     }
+    buildMeter();
     connect();
 })();

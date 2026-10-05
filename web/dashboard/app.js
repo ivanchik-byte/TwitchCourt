@@ -688,6 +688,36 @@ var Desk;
     const gooey = document.getElementById("gooey-nav");
     if (gooey)
         GooeyNav.mount(gooey);
+    const teleLlm = document.getElementById("tele-llm");
+    const teleTts = document.getElementById("tele-tts");
+    const teleRtt = document.getElementById("tele-rtt");
+    function loadTelemetry() {
+        const t0 = performance.now();
+        fetch("/api/status")
+            .then(() => {
+            if (teleRtt)
+                teleRtt.textContent = Math.round(performance.now() - t0) + "ms";
+        })
+            .catch(() => undefined);
+        fetch("/api/ai")
+            .then((res) => res.json())
+            .then((data) => {
+            if (!teleLlm)
+                return;
+            const short = String(data.model || "").split("/").pop()?.split("-").slice(0, 2).join(" ") || "";
+            teleLlm.textContent = data.live ? String(data.provider || "?") + " " + short : "mock";
+        })
+            .catch(() => undefined);
+        fetch("/api/tts")
+            .then((res) => res.json())
+            .then((data) => {
+            if (teleTts)
+                teleTts.textContent = String(data.engine || "?");
+        })
+            .catch(() => undefined);
+    }
+    loadTelemetry();
+    window.setInterval(loadTelemetry, 60000);
     connect();
     const poolList = document.getElementById("dock-list");
     const dockStatus = document.getElementById("dock-status");
@@ -808,10 +838,97 @@ var Desk;
     let rec = null;
     let defending = false;
     let pending = "";
+    let meterCtx = null;
+    let meterAnalyser = null;
+    let meterStream = null;
+    let meterRaf = 0;
     function status(text) {
         const node = document.getElementById("trial-status");
         if (node)
             node.textContent = text;
+    }
+    function transcript(text) {
+        const node = document.getElementById("mic-transcript");
+        if (node)
+            node.textContent = text;
+    }
+    function buildMeter() {
+        const box = document.getElementById("mic-meter");
+        if (!box || box.children.length > 0)
+            return;
+        for (let i = 0; i < 12; i++) {
+            const seg = document.createElement("span");
+            seg.className = "seg";
+            box.appendChild(seg);
+        }
+    }
+    function paintMeter(level) {
+        const box = document.getElementById("mic-meter");
+        if (!box)
+            return;
+        const lit = Math.round(level * 12);
+        const segs = box.children;
+        for (let i = 0; i < segs.length; i++) {
+            const seg = segs[i];
+            seg.className = "seg" + (i < lit ? " on" + (i >= 9 ? " hot" : i >= 6 ? " warn" : "") : "");
+        }
+    }
+    function meterTick() {
+        if (!defending || !meterAnalyser)
+            return;
+        const data = new Uint8Array(meterAnalyser.frequencyBinCount);
+        meterAnalyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            const v = (data[i] - 128) / 128;
+            sum += v * v;
+        }
+        paintMeter(Math.min(1, Math.sqrt(sum / data.length) * 4));
+        meterRaf = requestAnimationFrame(meterTick);
+    }
+    function startLevel() {
+        try {
+            const media = navigator.mediaDevices;
+            if (!media || !media.getUserMedia)
+                return;
+            media.getUserMedia({ audio: true }).then((stream) => {
+                if (!defending) {
+                    stream.getTracks().forEach((t) => t.stop());
+                    return;
+                }
+                try {
+                    const Impl = window.AudioContext ||
+                        window.webkitAudioContext;
+                    meterCtx = new Impl();
+                    meterStream = stream;
+                    const source = meterCtx.createMediaStreamSource(stream);
+                    meterAnalyser = meterCtx.createAnalyser();
+                    meterAnalyser.fftSize = 512;
+                    source.connect(meterAnalyser);
+                    cancelAnimationFrame(meterRaf);
+                    meterRaf = requestAnimationFrame(meterTick);
+                }
+                catch {
+                    /* level meter unavailable, speech still works */
+                }
+            }, () => undefined);
+        }
+        catch {
+            /* no mic for levels */
+        }
+    }
+    function stopLevel() {
+        cancelAnimationFrame(meterRaf);
+        paintMeter(0);
+        if (meterStream) {
+            meterStream.getTracks().forEach((t) => t.stop());
+            meterStream = null;
+        }
+        if (meterCtx) {
+            void meterCtx.close().catch(() => undefined);
+            meterCtx = null;
+        }
+        meterAnalyser = null;
     }
     function sendChunk() {
         const text = pending.trim();
@@ -822,6 +939,8 @@ var Desk;
     }
     function startMic() {
         pending = "";
+        transcript("");
+        startLevel();
         if (!Impl)
             return;
         try {
@@ -837,7 +956,9 @@ var Desk;
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const res = event.results[i];
                 if (res.isFinal) {
-                    pending += String(res[0].transcript) + " ";
+                    const line = String(res[0].transcript);
+                    pending += line + " ";
+                    transcript(line);
                     sendChunk();
                 }
             }
@@ -864,6 +985,7 @@ var Desk;
     }
     function stopMic() {
         defending = false;
+        stopLevel();
         if (rec) {
             try {
                 rec.onend = null;
@@ -902,5 +1024,6 @@ var Desk;
             window.setTimeout(connect, 2000);
         };
     }
+    buildMeter();
     connect();
 })();

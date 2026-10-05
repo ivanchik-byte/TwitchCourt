@@ -326,6 +326,35 @@ namespace Desk {
   if (backdrop) Backdrop.mount(backdrop);
   const gooey = document.getElementById("gooey-nav");
   if (gooey) GooeyNav.mount(gooey);
+  const teleLlm = document.getElementById("tele-llm");
+  const teleTts = document.getElementById("tele-tts");
+  const teleRtt = document.getElementById("tele-rtt");
+
+  function loadTelemetry(): void {
+    const t0 = performance.now();
+    fetch("/api/status")
+      .then(() => {
+        if (teleRtt) teleRtt.textContent = Math.round(performance.now() - t0) + "ms";
+      })
+      .catch(() => undefined);
+    fetch("/api/ai")
+      .then((res) => res.json())
+      .then((data: { provider?: string; model?: string; live?: boolean }) => {
+        if (!teleLlm) return;
+        const short = String(data.model || "").split("/").pop()?.split("-").slice(0, 2).join(" ") || "";
+        teleLlm.textContent = data.live ? String(data.provider || "?") + " " + short : "mock";
+      })
+      .catch(() => undefined);
+    fetch("/api/tts")
+      .then((res) => res.json())
+      .then((data: { engine?: string }) => {
+        if (teleTts) teleTts.textContent = String(data.engine || "?");
+      })
+      .catch(() => undefined);
+  }
+
+  loadTelemetry();
+  window.setInterval(loadTelemetry, 60000);
   connect();
 
   interface PoolSeat {

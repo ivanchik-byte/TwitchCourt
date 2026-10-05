@@ -167,7 +167,17 @@
           const name = document.createElement("strong");
           name.textContent = req.UserName || req.UserLogin || req.UserID;
           item.appendChild(name);
-          item.appendChild(document.createTextNode(": " + (req.Text || "без текста")));
+          if (req.CreatedAt) {
+            const when = document.createElement("span");
+            when.className = "feed-time";
+            const day = String(req.CreatedAt).slice(0, 10);
+            when.textContent = " · " + day;
+            item.appendChild(when);
+          }
+          const appeal = document.createElement("p");
+          appeal.className = "unban-text";
+          appeal.textContent = req.Text || "без текста";
+          item.appendChild(appeal);
           const row = document.createElement("div");
           row.className = "presets";
           const pardon = document.createElement("button");

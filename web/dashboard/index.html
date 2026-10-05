@@ -24,6 +24,9 @@
       </div>
       <div class="cockpit-status">
         <p class="docket-line"><span id="ws-dot" class="dot" aria-hidden="true"></span> <span id="ws-label">Подключение...</span></p>
+        <span id="tele-llm" class="tele" title="Мозг">…</span>
+        <span id="tele-tts" class="tele" title="Голос">…</span>
+        <span id="tele-rtt" class="tele" title="Пинг сервера">…</span>
         <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
         <button type="button" id="btn-panic" class="btn btn-seal">⚡ Паника (F12)</button>
       </div>
@@ -50,6 +53,10 @@
         <button type="button" id="btn-gavel" class="btn btn-gavel">🔨 УДАРИТЬ МОЛОТКОМ <span class="key">Space</span></button>
         <p id="deck-status" class="footnote" aria-live="polite"></p>
         <p id="judge-line" class="judge-line" aria-live="off"></p>
+        <div id="mic-panel" class="mic-panel">
+          <div id="mic-meter" class="mic-meter" aria-hidden="true"></div>
+          <p id="mic-transcript" class="mic-transcript" aria-live="off"></p>
+        </div>
         <h3>Быстрые статьи</h3>
         <div class="row">
           <label class="field"><span>Ник зрителя</span><input type="text" id="manual-nick" placeholder="ник" autocomplete="off"></label>
