@@ -194,7 +194,7 @@ namespace Desk {
   btnGavel.addEventListener("click", () => {
     sendAction("animation", { name: "slam" });
     post("/api/say", { text: "Суд слушает!" }).then((ok) => {
-      if (!ok) Desk.say(deckStatus, "Команда отклонена: проверьте секретный ключ.");
+      Desk.say(deckStatus, ok ? "Суд слушает!" : "Команда отклонена: проверьте секретный ключ.");
     });
   });
 

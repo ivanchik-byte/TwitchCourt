@@ -3,6 +3,9 @@ namespace Settings {
     min_amounts: Record<string, number>;
     default_min: number;
     punishments: string[];
+    judge_style?: string;
+    defense_sec?: number;
+    testimony_sec?: number;
   }
 
   export interface StreamerProfile {
@@ -59,6 +62,9 @@ namespace Settings {
   const minBits = el("min-bits") as HTMLInputElement;
   const minDefault = el("min-default") as HTMLInputElement;
   const punishmentsInput = el("punishments-input") as HTMLTextAreaElement;
+  const judgeStyle = el("judge-style") as HTMLSelectElement;
+  const defenseSec = el("defense-sec") as HTMLInputElement;
+  const testimonySec = el("testimony-sec") as HTMLInputElement;
   const settingsStatus = el("settings-status");
 
   const profileForm = el("profile-form") as HTMLFormElement;
@@ -102,6 +108,9 @@ namespace Settings {
       minBits.value = String(mins["BITS"] ?? fallback ?? "");
       minDefault.value = String(fallback ?? "");
       punishmentsInput.value = (settings.punishments || []).join("\n");
+      if (settings.judge_style) judgeStyle.value = settings.judge_style;
+      if (typeof settings.defense_sec === "number") defenseSec.value = String(settings.defense_sec);
+      if (typeof settings.testimony_sec === "number") testimonySec.value = String(settings.testimony_sec);
     })
     .catch(() => undefined);
 
@@ -133,6 +142,11 @@ namespace Settings {
       punishments: Settings.splitLines(punishmentsInput.value),
     };
     if (fallback !== null) body["default_min"] = fallback;
+    const defenseSecs = num(defenseSec);
+    const testimonySecs = num(testimonySec);
+    body["judge_style"] = judgeStyle.value;
+    if (defenseSecs !== null) body["defense_sec"] = defenseSecs;
+    if (testimonySecs !== null) body["testimony_sec"] = testimonySecs;
     fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -292,8 +306,192 @@ namespace Settings {
       });
   });
 
+  const ttsForm = el("tts-form") as HTMLFormElement;
+  const ttsEngine = el("tts-engine") as HTMLSelectElement;
+  const ttsJudgeVoice = el("tts-judge-voice") as HTMLInputElement;
+  const ttsJudgeRate = el("tts-judge-rate") as HTMLInputElement;
+  const ttsVoice = el("tts-voice") as HTMLInputElement;
+  const ttsSileroURL = el("tts-silero-url") as HTMLInputElement;
+  const ttsSileroJudge = el("tts-silero-judge") as HTMLInputElement;
+  const ttsStatus = el("tts-status");
+
+  interface TTSStatus {
+    engine?: string;
+    voice?: string;
+    rate?: string;
+    volume?: string;
+    pitch?: string;
+    judge_voice?: string;
+    judge_rate?: string;
+    silero_url?: string;
+    silero_judge?: string;
+  }
+
+  function renderTTS(data: TTSStatus): void {
+    if (data.engine) ttsEngine.value = data.engine;
+    if (data.judge_voice) ttsJudgeVoice.value = data.judge_voice;
+    if (data.judge_rate) ttsJudgeRate.value = data.judge_rate;
+    if (data.voice) ttsVoice.value = data.voice;
+    if (data.silero_url) ttsSileroURL.value = data.silero_url;
+    if (data.silero_judge) ttsSileroJudge.value = data.silero_judge;
+  }
+
+  fetch("/api/tts")
+    .then((res) => res.json())
+    .then((data: TTSStatus) => renderTTS(data))
+    .catch(() => undefined);
+
+  ttsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const body: Record<string, unknown> = { engine: ttsEngine.value };
+    const put = (key: string, input: HTMLInputElement): void => {
+      if (input.value.trim() !== "") body[key] = input.value.trim();
+    };
+    put("judge_voice", ttsJudgeVoice);
+    put("judge_rate", ttsJudgeRate);
+    put("voice", ttsVoice);
+    put("silero_url", ttsSileroURL);
+    put("silero_judge", ttsSileroJudge);
+    fetch("/api/tts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          say(ttsStatus, "Ошибка: проверьте секретный ключ и движок.");
+          return null;
+        }
+        return res.json() as Promise<TTSStatus>;
+      })
+      .then((data) => {
+        if (data) {
+          renderTTS(data);
+          say(ttsStatus, "Голос переключён на " + (data.engine || "?") + ".");
+        }
+      })
+      .catch(() => {
+        say(ttsStatus, "Нет связи с сервером.");
+      });
+  });
+
+  const intForm = el("integrations-form") as HTMLFormElement;
+  const intDA = el("int-da") as HTMLInputElement;
+  const intDP = el("int-dp") as HTMLInputElement;
+  const intTwToken = el("int-tw-token") as HTMLInputElement;
+  const intTwChannel = el("int-tw-channel") as HTMLInputElement;
+  const intTwClient = el("int-tw-client") as HTMLInputElement;
+  const intTwBroadcaster = el("int-tw-broadcaster") as HTMLInputElement;
+  const intStatus = el("integrations-status");
+
+  interface IntegrationsStatus {
+    donationalerts?: boolean;
+    donatepay?: boolean;
+    twitch?: boolean;
+    channel?: string;
+    nick?: string;
+    client_id?: string;
+    broadcaster_id?: string;
+  }
+
+  function renderIntegrations(data: IntegrationsStatus): void {
+    if (data.channel) intTwChannel.value = data.channel;
+    if (data.client_id) intTwClient.value = data.client_id;
+    if (data.broadcaster_id) intTwBroadcaster.value = data.broadcaster_id;
+    const on = (v?: boolean): string => (v ? "да" : "нет");
+    say(
+      intStatus,
+      "Подключено — DA: " + on(data.donationalerts) + ", DP: " + on(data.donatepay) + ", Twitch: " + on(data.twitch) + "."
+    );
+  }
+
+  fetch("/api/integrations")
+    .then((res) => res.json())
+    .then((data: IntegrationsStatus) => renderIntegrations(data))
+    .catch(() => undefined);
+
+  intForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const body: Record<string, unknown> = {};
+    const put = (key: string, input: HTMLInputElement): void => {
+      if (input.value.trim() !== "") body[key] = input.value.trim();
+    };
+    put("donationalerts_token", intDA);
+    put("donatepay_key", intDP);
+    put("twitch_token", intTwToken);
+    put("channel", intTwChannel);
+    put("client_id", intTwClient);
+    put("broadcaster_id", intTwBroadcaster);
+    fetch("/api/integrations", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          say(intStatus, "Ошибка: проверьте секретный ключ.");
+          return null;
+        }
+        return res.json() as Promise<IntegrationsStatus>;
+      })
+      .then((data) => {
+        if (data) {
+          renderIntegrations(data);
+          intDA.value = "";
+          intDP.value = "";
+          intTwToken.value = "";
+        }
+      })
+      .catch(() => {
+        say(intStatus, "Нет связи с сервером.");
+      });
+  });
+
   const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
   if (backdrop && typeof Backdrop !== "undefined") Backdrop.mount(backdrop);
   const gooey = document.getElementById("gooey-nav");
   if (gooey && typeof GooeyNav !== "undefined") GooeyNav.mount(gooey);
+
+  const sfxList = document.getElementById("sfx-list");
+  const judgeStates = document.getElementById("judge-states");
+
+  interface SFXStatus {
+    sfx?: Array<{ name: string; size: number }>;
+    judge?: Record<string, boolean>;
+  }
+
+  function loadOverlayStatus(): void {
+    fetch("/api/sfx")
+      .then((res) => res.json())
+      .then((data: SFXStatus) => {
+        if (sfxList) {
+          while (sfxList.firstChild) sfxList.firstChild.remove();
+          const files = (data && data.sfx) || [];
+          if (files.length === 0) {
+            const empty = document.createElement("li");
+            empty.className = "feed-empty";
+            empty.textContent = "Сэмплов нет.";
+            sfxList.appendChild(empty);
+          }
+          files.forEach((file) => {
+            const item = document.createElement("li");
+            item.textContent = file.name + " · " + Math.round(file.size / 1024) + " КБ";
+            sfxList.appendChild(item);
+          });
+        }
+        if (judgeStates) {
+          while (judgeStates.firstChild) judgeStates.firstChild.remove();
+          const states = ["normal", "angry", "gavel"];
+          states.forEach((state) => {
+            const item = document.createElement("li");
+            const has = data && data.judge && data.judge[state];
+            item.textContent = state + (has ? " · загружено" : " · базовый портрет");
+            judgeStates.appendChild(item);
+          });
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  loadOverlayStatus();
 })();

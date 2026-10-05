@@ -67,7 +67,7 @@ func (c *Client) StreamCompletion(ctx context.Context, messages []ChatMessage, o
 	}
 
 	// bound every completion: caller cancel (panic button) still wins
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	reqBody := ChatCompletionRequest{

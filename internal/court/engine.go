@@ -93,9 +93,24 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 
 func (e *Engine) applyVoiceProfile(voice, rate string) {
 	type profiler interface{ SetVoiceProfile(string, string) }
-	if p, ok := e.voice.(profiler); ok {
+	if p, ok := e.currentVoice().(profiler); ok {
 		p.SetVoiceProfile(voice, rate)
 	}
+}
+
+// SetVoice hot-swaps the speech synthesizer from the settings desk
+func (e *Engine) SetVoice(voice audio.Synthesizer) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if voice != nil {
+		e.voice = voice
+	}
+}
+
+func (e *Engine) currentVoice() audio.Synthesizer {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.voice
 }
 
 // speak serializes voice profile switch and audio synthesis
@@ -250,12 +265,21 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		return nil
 	})
 
-	if err == nil {
-		if last := chunker.Flush(); last != nil {
+	// the show goes on even when the model chokes: a standby line keeps the timing
+	if err != nil {
+		log.Printf("indictment stream failed, using standby: %v", err)
+		for _, s := range chunker.Feed("Суд отклоняет возню и продолжает заседание! ") {
 			select {
 			case <-ctx.Done():
-			case speechQueue <- queued{chunk: *last, index: chunkIndex, last: true}:
+			case speechQueue <- queued{chunk: s, index: chunkIndex}:
+				chunkIndex++
 			}
+		}
+	}
+	if last := chunker.Flush(); last != nil {
+		select {
+		case <-ctx.Done():
+		case speechQueue <- queued{chunk: *last, index: chunkIndex, last: true}:
 		}
 	}
 	close(speechQueue)
@@ -324,7 +348,7 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 	var ruling strings.Builder
 	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
 	index := startIndex
-	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
+	if err := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		ruling.WriteString(delta)
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
@@ -334,7 +358,18 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 			index++
 		}
 		return nil
-	})
+	}); err != nil {
+		log.Printf("deliberation stream failed, bench acquits: %v", err)
+		standby := "Судья не решился. НЕВИНОВЕН. Суд окончен."
+		ruling.WriteString(standby)
+		if ctx.Err() == nil {
+			for _, s := range chunker.Feed(standby + " ") {
+				_ = e.speak(ctx, s, index, false,
+					e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
+				index++
+			}
+		}
+	}
 	if last := chunker.Flush(); last != nil {
 		_ = e.speak(ctx, *last, index, false,
 			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
@@ -439,7 +474,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}
 	chunker := ai.NewSentenceChunker()
 	index := startIndex
-	_ = e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
+	if err := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
 				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate); err != nil {
@@ -448,7 +483,13 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 			index++
 		}
 		return nil
-	})
+	}); err != nil {
+		log.Printf("objection stream failed, using standby: %v", err)
+		if ctx.Err() == nil {
+			_ = e.speak(ctx, ai.SentenceChunk{Text: "Суд не расслышал оправданий и продолжает!", Animation: "objection"}, index, false,
+				e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
+		}
+	}
 	if last := chunker.Flush(); last != nil {
 		_ = e.speak(ctx, *last, index, false,
 			e.cfg.Courtroom.JudgeName, e.castVoice(e.cfg.TTS.JudgeVoice, e.cfg.TTS.SileroJudge), e.cfg.TTS.JudgeRate)
@@ -532,7 +573,7 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 
 	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	rawBytes, err := e.voice.Synthesize(synthCtx, speechText)
+	rawBytes, err := e.currentVoice().Synthesize(synthCtx, speechText)
 	if err != nil {
 		log.Printf("tts synthesis error: %v", err)
 		return nil

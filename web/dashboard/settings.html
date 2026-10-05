@@ -57,6 +57,17 @@
               <span class="visually-hidden">Наказания</span>
               <textarea id="punishments-input" rows="5"></textarea>
             </label>
+            <h3>Судья и темп</h3>
+            <div class="row">
+              <label class="field"><span>Характер судьи</span>
+                <select id="judge-style">
+                  <option value="strict">Сухой</option>
+                  <option value="cynical">Продажный</option>
+                </select>
+              </label>
+              <label class="field"><span>Защита, сек</span><input type="number" id="defense-sec" min="5" max="120" step="1"></label>
+              <label class="field"><span>Показания, сек</span><input type="number" id="testimony-sec" min="5" max="120" step="1"></label>
+            </div>
             <button type="submit" class="btn btn-verdict">Сохранить</button>
           </form>
           <p id="settings-status" class="footnote" aria-live="polite"></p>
@@ -82,6 +93,34 @@
             <button type="submit" class="btn btn-verdict">Подключить мозг</button>
           </form>
           <p id="ai-status" class="footnote" aria-live="polite"></p>
+        </section>
+
+        <section class="article" aria-labelledby="tts-heading">
+          <p class="overline">Суд · голос</p>
+          <h2 id="tts-heading">Синтез речи</h2>
+          <p class="guide">Edge работает из коробки без ключей. Silero — живой локальный голос через sidecar.</p>
+          <form id="tts-form">
+            <div class="row">
+              <label class="field"><span>Движок</span>
+                <select id="tts-engine">
+                  <option value="edge">Edge (облако)</option>
+                  <option value="silero">Silero (локально)</option>
+                  <option value="piper">Piper (оффлайн)</option>
+                </select>
+              </label>
+              <label class="field"><span>Голос судьи</span><input type="text" id="tts-judge-voice" placeholder="ru-RU-DmitryNeural"></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>Темп судьи</span><input type="text" id="tts-judge-rate" placeholder="-10%"></label>
+              <label class="field"><span>Запасной голос</span><input type="text" id="tts-voice" placeholder="ru-RU-DmitryNeural"></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>Silero URL</span><input type="text" id="tts-silero-url" placeholder="http://127.0.0.1:7892"></label>
+              <label class="field"><span>Silero спикер</span><input type="text" id="tts-silero-judge" placeholder="kseniya"></label>
+            </div>
+            <button type="submit" class="btn btn-verdict">Переключить голос</button>
+          </form>
+          <p id="tts-status" class="footnote" aria-live="polite"></p>
         </section>
 
         <section class="article" aria-labelledby="portrait-heading">
@@ -133,23 +172,52 @@
         <section class="article article-wide" aria-labelledby="keys-heading">
           <p class="overline">Донаты · ключи</p>
           <h2 id="keys-heading">Ключи интеграций</h2>
-          <p class="guide">Ключи настраиваются в <code>config.yaml</code> или переменных окружения. Поля ниже доступны только для чтения.</p>
-          <div class="row">
-            <label class="field"><span>DonationAlerts · токен виджета</span><input type="password" value="" placeholder="DONATE_TOKEN" disabled></label>
-            <label class="field"><span>DonatePay · API-ключ</span><input type="password" value="" placeholder="DONATEPAY_API_KEY" disabled></label>
-          </div>
-          <div class="row">
-            <label class="field"><span>Twitch · токен</span><input type="password" value="" placeholder="TWITCH_TOKEN" disabled></label>
-            <label class="field"><span>Twitch · канал</span><input type="text" value="" placeholder="настраивается в config.yaml" disabled></label>
-          </div>
+          <p class="guide">Сохраняются в <code>config.yaml</code>, вотчеры перезапускаются сами. Пустое поле ключа не затирает сохранённый.</p>
+          <form id="integrations-form">
+            <div class="row">
+              <label class="field"><span>DonationAlerts · токен виджета</span><input type="password" id="int-da" placeholder="DONATE_TOKEN" autocomplete="off"></label>
+              <label class="field"><span>DonatePay · API-ключ</span><input type="password" id="int-dp" placeholder="DONATEPAY_API_KEY" autocomplete="off"></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>Twitch · токен</span><input type="password" id="int-tw-token" placeholder="TWITCH_TOKEN" autocomplete="off"></label>
+              <label class="field"><span>Twitch · канал</span><input type="text" id="int-tw-channel" placeholder="ваш_канал"></label>
+            </div>
+            <div class="row">
+              <label class="field"><span>Twitch · client_id</span><input type="text" id="int-tw-client" placeholder="для Bits и Unban"></label>
+              <label class="field"><span>Twitch · broadcaster_id</span><input type="text" id="int-tw-broadcaster" placeholder="ID канала"></label>
+            </div>
+            <button type="submit" class="btn btn-verdict">Сохранить ключи</button>
+          </form>
+          <p id="integrations-status" class="footnote" aria-live="polite"></p>
         </section>
       </div>
 
       <div class="settings-view hidden" id="view-overlay">
         <section class="article" aria-labelledby="overlay-heading">
           <p class="overline">Оверлей · статус</p>
-          <h2 id="overlay-heading">Оверлей в разработке</h2>
-          <p class="guide">Для вывода судьи в OBS используйте отдельный браузерный источник <code>/overlay/judge.html</code>.</p>
+          <h2 id="overlay-heading">Источники для OBS</h2>
+          <p class="guide">Добавляйте как источник «Браузер», 1920×1080, с управлением звуком через OBS.</p>
+          <ul class="source-list">
+            <li><strong>Зал суда</strong><span><code>/overlay/</code></span></li>
+            <li><strong>Судья отдельно</strong><span><code>/overlay/judge.html</code></span></li>
+          </ul>
+        </section>
+
+        <section class="article" aria-labelledby="sfx-heading">
+          <p class="overline">Оверлей · звук</p>
+          <h2 id="sfx-heading">Сэмплы в сборке</h2>
+          <ul id="sfx-list" class="event-feed" aria-live="polite">
+            <li class="feed-empty">Загрузка…</li>
+          </ul>
+        </section>
+
+        <section class="article" aria-labelledby="judge-states-heading">
+          <p class="overline">Оверлей · судья</p>
+          <h2 id="judge-states-heading">Фото судьи</h2>
+          <p class="guide">Состояния подхватываются из загрузок на вкладке «Суд». Пусто — показывается базовый портрет.</p>
+          <ul id="judge-states" class="event-feed" aria-live="polite">
+            <li class="feed-empty">Загрузка…</li>
+          </ul>
         </section>
       </div>
     </main>

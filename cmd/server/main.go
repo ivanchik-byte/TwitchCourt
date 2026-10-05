@@ -50,6 +50,8 @@ func main() {
 	unbanCourt := bot.NewUnbanClient(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, cfg.Twitch.ModeratorID)
 	unbanBoard := newUnbanBoard()
 
+	var startWatchers func()
+
 	var engine *court.Engine
 
 	limiter := newActionLimiter(500 * time.Millisecond)
@@ -354,6 +356,91 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/api/tts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ttsStatus := func() map[string]any {
+			return map[string]any{
+				"engine":       cfg.TTS.Engine,
+				"voice":        cfg.TTS.Voice,
+				"rate":         cfg.TTS.Rate,
+				"volume":       cfg.TTS.Volume,
+				"pitch":        cfg.TTS.Pitch,
+				"judge_voice":  cfg.TTS.JudgeVoice,
+				"judge_rate":   cfg.TTS.JudgeRate,
+				"silero_url":   cfg.TTS.SileroURL,
+				"silero_judge": cfg.TTS.SileroJudge,
+			}
+		}
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(ttsStatus())
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				Engine      *string `json:"engine"`
+				Voice       *string `json:"voice"`
+				Rate        *string `json:"rate"`
+				Volume      *string `json:"volume"`
+				Pitch       *string `json:"pitch"`
+				JudgeVoice  *string `json:"judge_voice"`
+				JudgeRate   *string `json:"judge_rate"`
+				SileroURL   *string `json:"silero_url"`
+				SileroJudge *string `json:"silero_judge"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if req.Engine != nil {
+				switch *req.Engine {
+				case "edge", "silero", "piper", "mock":
+					cfg.TTS.Engine = *req.Engine
+				default:
+					http.Error(w, "want engine edge, silero, piper or mock", http.StatusBadRequest)
+					return
+				}
+			}
+			if req.Voice != nil && *req.Voice != "" {
+				cfg.TTS.Voice = *req.Voice
+			}
+			if req.Rate != nil && *req.Rate != "" {
+				cfg.TTS.Rate = *req.Rate
+			}
+			if req.Volume != nil && *req.Volume != "" {
+				cfg.TTS.Volume = *req.Volume
+			}
+			if req.Pitch != nil && *req.Pitch != "" {
+				cfg.TTS.Pitch = *req.Pitch
+			}
+			if req.JudgeVoice != nil && *req.JudgeVoice != "" {
+				cfg.TTS.JudgeVoice = *req.JudgeVoice
+			}
+			if req.JudgeRate != nil && *req.JudgeRate != "" {
+				cfg.TTS.JudgeRate = *req.JudgeRate
+			}
+			if req.SileroURL != nil && *req.SileroURL != "" {
+				cfg.TTS.SileroURL = *req.SileroURL
+			}
+			if req.SileroJudge != nil && *req.SileroJudge != "" {
+				cfg.TTS.SileroJudge = *req.SileroJudge
+			}
+			if err := cfg.Save("config.yaml"); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			old := voice
+			voice = buildSynthesizer(cfg)
+			engine.SetVoice(voice)
+			_ = old.Close()
+			json.NewEncoder(w).Encode(ttsStatus())
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
@@ -496,6 +583,78 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"punishment": engine.SetPunishment(req.Kind, req.Secs)})
 	})
 
+	mux.HandleFunc("/api/integrations", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		integrationsStatus := func() map[string]any {
+			return map[string]any{
+				"donationalerts": cfg.Donations.DonationAlerts.Token != "",
+				"donatepay":      cfg.Donations.DonatePay.APIKey != "",
+				"twitch":         cfg.Twitch.Token != "",
+				"channel":        cfg.Twitch.Channel,
+				"nick":           cfg.Twitch.Nick,
+				"client_id":      cfg.Twitch.ClientID,
+				"broadcaster_id": cfg.Twitch.BroadcasterID,
+			}
+		}
+		switch r.Method {
+		case http.MethodGet:
+			json.NewEncoder(w).Encode(integrationsStatus())
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				DonationAlerts *string `json:"donationalerts_token"`
+				DonatePay      *string `json:"donatepay_key"`
+				TwitchToken    *string `json:"twitch_token"`
+				Channel        *string `json:"channel"`
+				Nick           *string `json:"nick"`
+				ClientID       *string `json:"client_id"`
+				BroadcasterID  *string `json:"broadcaster_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if req.DonationAlerts != nil {
+				cfg.Donations.Token = *req.DonationAlerts
+				cfg.Donations.DonationAlerts.Token = *req.DonationAlerts
+			}
+			if req.DonatePay != nil {
+				cfg.Donations.DonatePay.APIKey = *req.DonatePay
+			}
+			if req.TwitchToken != nil {
+				cfg.Twitch.Token = *req.TwitchToken
+			}
+			if req.Channel != nil && *req.Channel != "" {
+				cfg.Twitch.Channel = *req.Channel
+			}
+			if req.Nick != nil && *req.Nick != "" {
+				cfg.Twitch.Nick = *req.Nick
+			}
+			if req.ClientID != nil {
+				cfg.Twitch.ClientID = *req.ClientID
+			}
+			if req.BroadcasterID != nil {
+				cfg.Twitch.BroadcasterID = *req.BroadcasterID
+				if cfg.Twitch.ModeratorID == "" {
+					cfg.Twitch.ModeratorID = *req.BroadcasterID
+				}
+			}
+			if err := cfg.Save("config.yaml"); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			donateGate.SetMinimums(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
+			unbanCourt = bot.NewUnbanClient(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, cfg.Twitch.ModeratorID)
+			startWatchers()
+			json.NewEncoder(w).Encode(integrationsStatus())
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/judge/photo", func(w http.ResponseWriter, r *http.Request) {
 		state := r.URL.Query().Get("state")
 		if !validJudgeState(state) {
@@ -518,6 +677,34 @@ func main() {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	mux.HandleFunc("/api/sfx", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		files := []map[string]any{}
+		if entries, err := fs.ReadDir(web.StaticFS, "overlay/sfx"); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".mp3") {
+					continue
+				}
+				size := int64(0)
+				if info, err := entry.Info(); err == nil {
+					size = info.Size()
+				}
+				files = append(files, map[string]any{"name": entry.Name(), "size": size})
+			}
+		}
+		judge := map[string]bool{}
+		for _, state := range []string{"normal", "angry", "gavel"} {
+			if fi, err := os.Stat(judgePhotoPath(state)); err == nil && !fi.IsDir() {
+				judge[state] = true
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"sfx": files, "judge": judge})
 	})
 
 	mux.HandleFunc("/api/donate", func(w http.ResponseWriter, r *http.Request) {
@@ -551,9 +738,12 @@ func main() {
 		switch r.Method {
 		case http.MethodGet:
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts": cfg.Donations.MinAmounts,
-				"default_min": cfg.Donations.DefaultMin,
-				"punishments": cfg.Courtroom.Punishments,
+				"min_amounts":   cfg.Donations.MinAmounts,
+				"default_min":   cfg.Donations.DefaultMin,
+				"punishments":   cfg.Courtroom.Punishments,
+				"judge_style":   cfg.Courtroom.JudgeStyle,
+				"defense_sec":   cfg.Courtroom.DefenseSec,
+				"testimony_sec": cfg.Courtroom.TestimonySec,
 			})
 		case http.MethodPut:
 			if !checkHTTPAuth(cfg, r) {
@@ -561,9 +751,12 @@ func main() {
 				return
 			}
 			var req struct {
-				MinAmounts  map[string]float64 `json:"min_amounts"`
-				DefaultMin  *float64           `json:"default_min"`
-				Punishments []string           `json:"punishments"`
+				MinAmounts   map[string]float64 `json:"min_amounts"`
+				DefaultMin   *float64           `json:"default_min"`
+				Punishments  []string           `json:"punishments"`
+				JudgeStyle   *string            `json:"judge_style"`
+				DefenseSec   *int               `json:"defense_sec"`
+				TestimonySec *int               `json:"testimony_sec"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -579,45 +772,39 @@ func main() {
 				cfg.Courtroom.Punishments = req.Punishments
 				engine.SetPunishments(req.Punishments)
 			}
+			if req.JudgeStyle != nil {
+				if *req.JudgeStyle == "cynical" {
+					cfg.Courtroom.JudgeStyle = "cynical"
+				} else {
+					cfg.Courtroom.JudgeStyle = "strict"
+				}
+			}
+			if req.DefenseSec != nil && *req.DefenseSec >= 5 && *req.DefenseSec <= 120 {
+				cfg.Courtroom.DefenseSec = *req.DefenseSec
+			}
+			if req.TestimonySec != nil && *req.TestimonySec >= 5 && *req.TestimonySec <= 120 {
+				cfg.Courtroom.TestimonySec = *req.TestimonySec
+			}
+			if err := cfg.Save("config.yaml"); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			donateGate.SetMinimums(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts": cfg.Donations.MinAmounts,
-				"default_min": cfg.Donations.DefaultMin,
-				"punishments": cfg.Courtroom.Punishments,
+				"min_amounts":   cfg.Donations.MinAmounts,
+				"default_min":   cfg.Donations.DefaultMin,
+				"punishments":   cfg.Courtroom.Punishments,
+				"judge_style":   cfg.Courtroom.JudgeStyle,
+				"defense_sec":   cfg.Courtroom.DefenseSec,
+				"testimony_sec": cfg.Courtroom.TestimonySec,
 			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
-	if cfg.Donations.DonationAlerts.Enabled && cfg.Donations.DonationAlerts.Token != "" {
-		daWatcher := bot.NewDonationsWatcher(cfg.Donations.DonationAlerts.Token, handleDonation)
-		go daWatcher.Run(gameCtx)
-		log.Println("donationalerts watcher started")
-	}
-	if cfg.Donations.DonatePay.Enabled && cfg.Donations.DonatePay.APIKey != "" {
-		dpWatcher := bot.NewDonatePayWatcher(cfg.Donations.DonatePay.APIKey, handleDonation)
-		go dpWatcher.Run(gameCtx)
-		log.Println("donatepay watcher started")
-	}
-	if cfg.Donations.TwitchBits.Enabled {
-		bitsWatcher := bot.NewEventSubWatcher(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, func(event bot.DonationEvent) {
-			handleDonation(bot.Donation{
-				Donor:    event.Donor,
-				Amount:   event.Amount,
-				Currency: event.Currency,
-				Message:  event.Message,
-			})
-		})
-		go bitsWatcher.Run(gameCtx)
-		log.Println("twitch bits watcher started")
-	}
-	if cfg.Twitch.Token != "" && cfg.Twitch.ClientID != "" && cfg.Twitch.BroadcasterID != "" {
-		go unbanBoard.watch(gameCtx, unbanCourt)
-		log.Println("unban court watcher started")
-	}
-
-	chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, func(cmd bot.ChatCommand) {
+	// chatHandler routes every chat line; chat itself is rebuilt on token change
+	chatHandler := func(cmd bot.ChatCommand) {
 		switch cmd.Kind {
 		case bot.CommandCourt:
 			if joined, pos := engine.JoinPool(cmd.Author, cmd.Argument); joined {
@@ -643,11 +830,47 @@ func main() {
 				engine.AddChatComment(cmd.Author, cmd.Argument)
 			}
 		}
-	})
-	go chat.Run(gameCtx)
-	if cfg.Twitch.Token != "" && cfg.Twitch.Channel != "" {
-		log.Printf("twitch chat on #%s as %s", cfg.Twitch.Channel, cfg.Twitch.Nick)
 	}
+
+	// watchers restart as one unit when integration tokens change in the desk
+	var stopWatchers = func() {}
+	startWatchers = func() {
+		stopWatchers()
+		wctx, cancel := context.WithCancel(gameCtx)
+		stopWatchers = cancel
+		if cfg.Donations.DonationAlerts.Enabled && cfg.Donations.DonationAlerts.Token != "" {
+			daWatcher := bot.NewDonationsWatcher(cfg.Donations.DonationAlerts.Token, handleDonation)
+			go daWatcher.Run(wctx)
+			log.Println("donationalerts watcher started")
+		}
+		if cfg.Donations.DonatePay.Enabled && cfg.Donations.DonatePay.APIKey != "" {
+			dpWatcher := bot.NewDonatePayWatcher(cfg.Donations.DonatePay.APIKey, handleDonation)
+			go dpWatcher.Run(wctx)
+			log.Println("donatepay watcher started")
+		}
+		if cfg.Donations.TwitchBits.Enabled {
+			bitsWatcher := bot.NewEventSubWatcher(cfg.Twitch.Token, cfg.Twitch.ClientID, cfg.Twitch.BroadcasterID, func(event bot.DonationEvent) {
+				handleDonation(bot.Donation{
+					Donor:    event.Donor,
+					Amount:   event.Amount,
+					Currency: event.Currency,
+					Message:  event.Message,
+				})
+			})
+			go bitsWatcher.Run(wctx)
+			log.Println("twitch bits watcher started")
+		}
+		if cfg.Twitch.Token != "" && cfg.Twitch.ClientID != "" && cfg.Twitch.BroadcasterID != "" {
+			go unbanBoard.watch(wctx, unbanCourt)
+			log.Println("unban court watcher started")
+		}
+		chat = bot.NewTwitchIRC(cfg.Twitch.Channel, cfg.Twitch.Nick, cfg.Twitch.Token, chatHandler)
+		go chat.Run(wctx)
+		if cfg.Twitch.Token != "" && cfg.Twitch.Channel != "" {
+			log.Printf("twitch chat on #%s as %s", cfg.Twitch.Channel, cfg.Twitch.Nick)
+		}
+	}
+	startWatchers()
 
 	engine.VerdictHook = func(verdict, penalty string, guilty, innocent int, twist string) {
 		text := "Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")"
@@ -670,6 +893,10 @@ func main() {
 
 	engine.SetPunishments(cfg.Courtroom.Punishments)
 
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	server := &http.Server{
 		Addr:         addr,
@@ -679,8 +906,8 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Stream Tribunal MVP server running at http://%s", addr)
-		log.Printf("Overlay disabled for now, control desk at http://%s", addr)
+		log.Printf("Stream Tribunal server running at http://%s", addr)
+		log.Printf("OBS overlays: http://%s/overlay/ and http://%s/overlay/judge.html", addr, addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("http server error: %v", err)
 		}

@@ -438,6 +438,9 @@ var Settings;
     const minBits = el("min-bits");
     const minDefault = el("min-default");
     const punishmentsInput = el("punishments-input");
+    const judgeStyle = el("judge-style");
+    const defenseSec = el("defense-sec");
+    const testimonySec = el("testimony-sec");
     const settingsStatus = el("settings-status");
     const profileForm = el("profile-form");
     const profileName = el("profile-name");
@@ -478,6 +481,12 @@ var Settings;
         minBits.value = String(mins["BITS"] ?? fallback ?? "");
         minDefault.value = String(fallback ?? "");
         punishmentsInput.value = (settings.punishments || []).join("\n");
+        if (settings.judge_style)
+            judgeStyle.value = settings.judge_style;
+        if (typeof settings.defense_sec === "number")
+            defenseSec.value = String(settings.defense_sec);
+        if (typeof settings.testimony_sec === "number")
+            testimonySec.value = String(settings.testimony_sec);
     })
         .catch(() => undefined);
     fetch("/api/profile")
@@ -512,6 +521,13 @@ var Settings;
         };
         if (fallback !== null)
             body["default_min"] = fallback;
+        const defenseSecs = num(defenseSec);
+        const testimonySecs = num(testimonySec);
+        body["judge_style"] = judgeStyle.value;
+        if (defenseSecs !== null)
+            body["defense_sec"] = defenseSecs;
+        if (testimonySecs !== null)
+            body["testimony_sec"] = testimonySecs;
         fetch("/api/settings", {
             method: "PUT",
             headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -656,10 +672,166 @@ var Settings;
             say(aiStatus, "Нет связи с сервером.");
         });
     });
+    const ttsForm = el("tts-form");
+    const ttsEngine = el("tts-engine");
+    const ttsJudgeVoice = el("tts-judge-voice");
+    const ttsJudgeRate = el("tts-judge-rate");
+    const ttsVoice = el("tts-voice");
+    const ttsSileroURL = el("tts-silero-url");
+    const ttsSileroJudge = el("tts-silero-judge");
+    const ttsStatus = el("tts-status");
+    function renderTTS(data) {
+        if (data.engine)
+            ttsEngine.value = data.engine;
+        if (data.judge_voice)
+            ttsJudgeVoice.value = data.judge_voice;
+        if (data.judge_rate)
+            ttsJudgeRate.value = data.judge_rate;
+        if (data.voice)
+            ttsVoice.value = data.voice;
+        if (data.silero_url)
+            ttsSileroURL.value = data.silero_url;
+        if (data.silero_judge)
+            ttsSileroJudge.value = data.silero_judge;
+    }
+    fetch("/api/tts")
+        .then((res) => res.json())
+        .then((data) => renderTTS(data))
+        .catch(() => undefined);
+    ttsForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const body = { engine: ttsEngine.value };
+        const put = (key, input) => {
+            if (input.value.trim() !== "")
+                body[key] = input.value.trim();
+        };
+        put("judge_voice", ttsJudgeVoice);
+        put("judge_rate", ttsJudgeRate);
+        put("voice", ttsVoice);
+        put("silero_url", ttsSileroURL);
+        put("silero_judge", ttsSileroJudge);
+        fetch("/api/tts", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(body),
+        })
+            .then((res) => {
+            if (!res.ok) {
+                say(ttsStatus, "Ошибка: проверьте секретный ключ и движок.");
+                return null;
+            }
+            return res.json();
+        })
+            .then((data) => {
+            if (data) {
+                renderTTS(data);
+                say(ttsStatus, "Голос переключён на " + (data.engine || "?") + ".");
+            }
+        })
+            .catch(() => {
+            say(ttsStatus, "Нет связи с сервером.");
+        });
+    });
+    const intForm = el("integrations-form");
+    const intDA = el("int-da");
+    const intDP = el("int-dp");
+    const intTwToken = el("int-tw-token");
+    const intTwChannel = el("int-tw-channel");
+    const intTwClient = el("int-tw-client");
+    const intTwBroadcaster = el("int-tw-broadcaster");
+    const intStatus = el("integrations-status");
+    function renderIntegrations(data) {
+        if (data.channel)
+            intTwChannel.value = data.channel;
+        if (data.client_id)
+            intTwClient.value = data.client_id;
+        if (data.broadcaster_id)
+            intTwBroadcaster.value = data.broadcaster_id;
+        const on = (v) => (v ? "да" : "нет");
+        say(intStatus, "Подключено — DA: " + on(data.donationalerts) + ", DP: " + on(data.donatepay) + ", Twitch: " + on(data.twitch) + ".");
+    }
+    fetch("/api/integrations")
+        .then((res) => res.json())
+        .then((data) => renderIntegrations(data))
+        .catch(() => undefined);
+    intForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const body = {};
+        const put = (key, input) => {
+            if (input.value.trim() !== "")
+                body[key] = input.value.trim();
+        };
+        put("donationalerts_token", intDA);
+        put("donatepay_key", intDP);
+        put("twitch_token", intTwToken);
+        put("channel", intTwChannel);
+        put("client_id", intTwClient);
+        put("broadcaster_id", intTwBroadcaster);
+        fetch("/api/integrations", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(body),
+        })
+            .then((res) => {
+            if (!res.ok) {
+                say(intStatus, "Ошибка: проверьте секретный ключ.");
+                return null;
+            }
+            return res.json();
+        })
+            .then((data) => {
+            if (data) {
+                renderIntegrations(data);
+                intDA.value = "";
+                intDP.value = "";
+                intTwToken.value = "";
+            }
+        })
+            .catch(() => {
+            say(intStatus, "Нет связи с сервером.");
+        });
+    });
     const backdrop = document.getElementById("bg-canvas");
     if (backdrop && typeof Backdrop !== "undefined")
         Backdrop.mount(backdrop);
     const gooey = document.getElementById("gooey-nav");
     if (gooey && typeof GooeyNav !== "undefined")
         GooeyNav.mount(gooey);
+    const sfxList = document.getElementById("sfx-list");
+    const judgeStates = document.getElementById("judge-states");
+    function loadOverlayStatus() {
+        fetch("/api/sfx")
+            .then((res) => res.json())
+            .then((data) => {
+            if (sfxList) {
+                while (sfxList.firstChild)
+                    sfxList.firstChild.remove();
+                const files = (data && data.sfx) || [];
+                if (files.length === 0) {
+                    const empty = document.createElement("li");
+                    empty.className = "feed-empty";
+                    empty.textContent = "Сэмплов нет.";
+                    sfxList.appendChild(empty);
+                }
+                files.forEach((file) => {
+                    const item = document.createElement("li");
+                    item.textContent = file.name + " · " + Math.round(file.size / 1024) + " КБ";
+                    sfxList.appendChild(item);
+                });
+            }
+            if (judgeStates) {
+                while (judgeStates.firstChild)
+                    judgeStates.firstChild.remove();
+                const states = ["normal", "angry", "gavel"];
+                states.forEach((state) => {
+                    const item = document.createElement("li");
+                    const has = data && data.judge && data.judge[state];
+                    item.textContent = state + (has ? " · загружено" : " · базовый портрет");
+                    judgeStates.appendChild(item);
+                });
+            }
+        })
+            .catch(() => undefined);
+    }
+    loadOverlayStatus();
 })();
