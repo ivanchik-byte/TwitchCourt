@@ -7,20 +7,24 @@
         return node;
     }
     const img = el("judge");
-    let timer = 0;
-    function setJudge(state, flashMs = 0) {
-        img.src = "/api/judge/photo?state=" + state + "&t=" + Date.now();
+    let bangTimer = 0;
+    let talkTimer = 0;
+    function startTalking() {
+        img.classList.add("talking");
+        window.clearTimeout(talkTimer);
+        // no speech-end event on the socket: stop bouncing after 6s of silence
+        talkTimer = window.setTimeout(stopTalking, 6000);
+    }
+    function stopTalking() {
+        window.clearTimeout(talkTimer);
+        img.classList.remove("talking");
+    }
+    function slam() {
         img.classList.remove("bang");
         void img.offsetWidth;
-        if (state === "gavel")
-            img.classList.add("bang");
-        window.clearTimeout(timer);
-        if (flashMs > 0) {
-            timer = window.setTimeout(() => {
-                img.classList.remove("bang");
-                img.src = "/api/judge/photo?state=normal&t=" + Date.now();
-            }, flashMs);
-        }
+        img.classList.add("bang");
+        window.clearTimeout(bangTimer);
+        bangTimer = window.setTimeout(() => img.classList.remove("bang"), 700);
     }
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -33,16 +37,18 @@
             catch {
                 return;
             }
-            if (msg.type === "animation") {
+            if (msg.type === "subtitles" || msg.type === "audio_chunk") {
+                startTalking();
+            }
+            else if (msg.type === "animation") {
                 const name = (msg.payload && msg.payload.name) || "";
                 if (name === "slam" || name === "desk_slam")
-                    setJudge("gavel", 900);
+                    slam();
             }
-            else if (msg.type === "verdict") {
-                setJudge("angry", 2500);
-            }
-            else if (msg.type === "state_change" || msg.type === "panic") {
-                setJudge("normal");
+            else if (msg.type === "verdict" ||
+                msg.type === "panic" ||
+                (msg.type === "state_change" && msg.payload?.state === "idle")) {
+                stopTalking();
             }
         };
         ws.onclose = () => {

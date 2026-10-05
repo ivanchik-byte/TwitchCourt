@@ -190,6 +190,20 @@ func (e *Engine) StartViewerTrial(viewer, crime string) error {
 	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
 }
 
+// StartUnbanTrial opens a variant-B pardon trial: the AI defends the banned
+// user from their appeal text, the streamer attacks over the mic, the judge
+// verdicts. Executing the pardon stays manual via /api/unban/resolve.
+// NOTE(discord): a third format (streamer + discord opponent as second voice)
+// needs per-speaker audio capture and is parked until then.
+func (e *Engine) StartUnbanTrial(user, appeal string) error {
+	crime := "Апелляция на разбан: " + appeal
+	chatContext := "UNBAN-ТРИБУНАЛ. Подсудимого нет в чате. " +
+		"ИИ — адвокат: защищает " + user + " и требует разбана. " +
+		"Стример в микрофон — обвинитель: его реплики это атака, а не защита. " +
+		"Судья выслушивает обе стороны и выносит вердикт."
+	return e.startTrialWith(user, crime, chatContext, "")
+}
+
 func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) error {
 	e.mu.Lock()
 	if e.state != StateIdle {

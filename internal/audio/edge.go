@@ -19,7 +19,7 @@ type EdgeSynthesizer struct {
 
 func NewEdgeSynthesizer(voice, rate, volume, pitch string) *EdgeSynthesizer {
 	if voice == "" {
-		voice = "ru-RU-DmitryNeural"
+		voice = "ru-RU-SvetlanaNeural"
 	}
 	if rate == "" {
 		rate = "+0%"

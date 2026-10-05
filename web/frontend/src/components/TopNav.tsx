@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { Gavel, SlidersHorizontal, Settings } from 'lucide-react'
+import { Gavel, SlidersHorizontal, Settings, Video } from 'lucide-react'
 import { cn } from '../lib/cn'
 
 const tabs = [
   { to: '/', label: 'Пульт', icon: Gavel, end: true },
   { to: '/modes', label: 'Режимы', icon: SlidersHorizontal, end: false },
+  { to: '/obs', label: 'OBS', icon: Video, end: false },
   { to: '/settings', label: 'Настройки', icon: Settings, end: false },
 ]
 

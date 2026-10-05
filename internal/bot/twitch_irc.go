@@ -23,6 +23,7 @@ const (
 	CommandCrime  = "crime"
 	CommandSnitch = "snitch"
 	CommandCourt  = "court"
+	CommandSue    = "sue"
 	CommandLeave  = "leave"
 )
 
@@ -36,6 +37,8 @@ func ParseChatLine(author, text string) ChatCommand {
 		return ChatCommand{Author: author, Kind: CommandSnitch, Argument: strings.TrimSpace(trimmed[len("!snitch"):])}
 	case strings.HasPrefix(lower, "!court"):
 		return ChatCommand{Author: author, Kind: CommandCourt, Argument: strings.TrimSpace(trimmed[len("!court"):])}
+	case strings.HasPrefix(lower, "!sue"):
+		return ChatCommand{Author: author, Kind: CommandSue, Argument: strings.TrimSpace(trimmed[len("!sue"):])}
 	case lower == "!leave":
 		return ChatCommand{Author: author, Kind: CommandLeave}
 	default:

@@ -12,18 +12,18 @@ ai:
 tts:
   enabled: true
   engine: "edge"
-  voice: "ru-RU-DmitryNeural"
+  voice: "ru-RU-SvetlanaNeural"
   rate: "+0%"
   volume: "+0%"
   pitch: "+0Hz"
   auto_fallback: true
-  judge_voice: "ru-RU-DmitryNeural"
+  judge_voice: "ru-RU-SvetlanaNeural"
   judge_rate: "-10%"
   silero_url: "http://127.0.0.1:7892"
-  silero_judge: "kseniya"
+  silero_judge: "xenia"
   piper_binary: ""
-  model_path: "models/ru_dmitri.onnx"
-  config_path: "models/ru_dmitri.onnx.json"
+  model_path: "models/ru_irina.onnx"
+  config_path: "models/ru_irina.onnx.json"
   speaker_id: 0
   speed: 1.15
 
@@ -32,6 +32,8 @@ courtroom:
   judge_style: "strict"
   defense_sec: 20
   testimony_sec: 25
+  sue_threshold: 5
+  sue_window_sec: 600
   punishments:
     - "10 приседаний в прямом эфире"
     - "Минута молчания с рукой на сердце"
@@ -41,6 +43,7 @@ donations:
   token: ""
   default_min: 100
   platinum_min: 500
+  streamer_trial_min: 0
   min_amounts:
     RUB: 100
     USD: 2
@@ -73,3 +76,5 @@ twitch:
   broadcaster_id: ""
   # moderator_id defaults to broadcaster_id; token needs
   # moderator:read:unban_requests + moderator:manage:unban_requests for Unban Court
+  # NOTE(discord): a third unban format (streamer + discord opponent as second
+  # voice) needs per-speaker audio capture and is parked until then.

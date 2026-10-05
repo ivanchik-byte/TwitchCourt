@@ -1,14 +1,12 @@
 #!/bin/sh
-# Compile desk TypeScript into plain single-file JS bundles.
-# Output stays dependency-free so the Go embed needs no toolchain.
+# Compile OBS overlay TypeScript into plain single-file JS bundles.
+# The dashboard is a Vite + React SPA built from web/frontend
+# (`make frontend`); this script only rebuilds the overlay files.
 set -e
 cd "$(dirname "$0")"
 rm -rf compiled
-tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/particles.ts src/gooey.ts src/desk.ts src/settings.ts src/modes.ts src/overlay.ts src/judge.ts src/defense.ts
-cat compiled/particles.js compiled/gooey.js compiled/desk.js compiled/defense.js > dashboard/app.js
-cat compiled/particles.js compiled/gooey.js compiled/settings.js > dashboard/settings.js
-cat compiled/particles.js compiled/gooey.js compiled/modes.js compiled/defense.js > dashboard/modes.js
+tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/overlay.ts src/judge.ts
 cat compiled/overlay.js > overlay/overlay.js
 cat compiled/judge.js > overlay/judge.js
 rm -rf compiled
-echo "frontend built: dashboard/app.js dashboard/settings.js dashboard/modes.js overlay/overlay.js overlay/judge.js"
+echo "overlay built: overlay/overlay.js overlay/judge.js"

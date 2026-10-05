@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { apiGet, apiPut, apiPost, apiUpload } from '../lib/api'
+import { apiGet, apiPut, apiPost, apiUpload, apiFetch } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
 import { SecretField } from '../components/SecretField'
 
@@ -15,12 +15,8 @@ function lines(v: string): string[] {
     .filter(Boolean)
 }
 
-const VOICE_PRESETS = ['ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural', 'custom']
-const JUDGE_STATES = [
-  { state: 'normal', label: 'Спокойный' },
-  { state: 'angry', label: 'Злой' },
-  { state: 'gavel', label: 'С молотком' },
-] as const
+const VOICE_PRESETS = ['ru-RU-SvetlanaNeural', 'ru-RU-DmitryNeural', 'custom']
+const SILERO_VOICES = ['xenia', 'kseniya', 'baya', 'aidar', 'eugene']
 
 const inputCls =
   'mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none focus:border-amber-400/50'
@@ -44,8 +40,9 @@ export function SettingsView() {
 
   const [tts, setTts] = useState({
     engine: 'edge',
-    voice: 'ru-RU-DmitryNeural',
+    voice: 'ru-RU-SvetlanaNeural',
     customVoice: '',
+    sileroJudge: 'xenia',
     rate: '-10%',
     volume: '',
     pitch: '',
@@ -76,6 +73,7 @@ export function SettingsView() {
 
   const [sfx, setSfx] = useState<{ name: string; size: number }[]>([])
   const [photoTick, setPhotoTick] = useState(0)
+  const [courtTick, setCourtTick] = useState(0)
 
   useEffect(() => {
     setSecret(secret)
@@ -92,7 +90,7 @@ export function SettingsView() {
       .catch(() => undefined)
     void apiGet<{
       engine: string; voice: string; rate: string; volume: string; pitch: string
-      judge_voice: string; judge_rate: string; silero_url: string
+      judge_voice: string; judge_rate: string; silero_url: string; silero_judge: string
     }>('/api/tts')
       .then((d) =>
         setTts((t) => ({
@@ -100,6 +98,7 @@ export function SettingsView() {
           engine: d.engine,
           voice: VOICE_PRESETS.includes(d.voice) ? d.voice : 'custom',
           customVoice: VOICE_PRESETS.includes(d.voice) ? '' : (d.voice ?? ''),
+          sileroJudge: d.silero_judge || 'xenia',
           rate: d.rate ?? '-10%',
           volume: d.volume ?? '',
           pitch: d.pitch ?? '',
@@ -138,11 +137,11 @@ export function SettingsView() {
 
   const effectiveVoice = tts.voice === 'custom' ? tts.customVoice : tts.voice
 
-  const uploadPhoto = async (state: string, file: File | undefined) => {
+  const uploadPhoto = async (file: File | undefined) => {
     if (!file) return
     const form = new FormData()
     form.append('photo', file)
-    const ok = await apiUpload(`/api/judge/photo?state=${encodeURIComponent(state)}`, form)
+    const ok = await apiUpload('/api/judge/photo', form)
     if (ok) {
       toast.success('Фото судьи обновлено')
       setPhotoTick((n) => n + 1)
@@ -249,6 +248,11 @@ export function SettingsView() {
 
         <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Синтез речи</h2>
+          <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-2.5 text-xs text-zinc-300">
+            <span className="font-semibold text-emerald-200">Локальный ♀:</span> движок Silero + голос{' '}
+            <span className="font-mono text-emerald-200">xenia</span> — самый человеческий русский голос,
+            работает офлайн и грузит ПК только в момент озвучки.
+          </div>
           <label className={labelCls}>
             Движок
             <select
@@ -269,8 +273,8 @@ export function SettingsView() {
               onChange={(e) => setTts({ ...tts, voice: e.target.value })}
               className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
             >
+              <option value="ru-RU-SvetlanaNeural">ru-RU-SvetlanaNeural ♀</option>
               <option value="ru-RU-DmitryNeural">ru-RU-DmitryNeural</option>
-              <option value="ru-RU-SvetlanaNeural">ru-RU-SvetlanaNeural</option>
               <option value="custom">Свой…</option>
             </select>
           </label>
@@ -311,6 +315,20 @@ export function SettingsView() {
           </div>
           {tts.engine === 'silero' && (
             <label className={labelCls}>
+              Голос Silero (женские — xenia, kseniya, baya)
+              <select
+                value={SILERO_VOICES.includes(tts.sileroJudge) ? tts.sileroJudge : 'xenia'}
+                onChange={(e) => setTts({ ...tts, sileroJudge: e.target.value })}
+                className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
+              >
+                {SILERO_VOICES.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {tts.engine === 'silero' && (
+            <label className={labelCls}>
               Silero URL
               <input value={tts.sileroUrl} onChange={(e) => setTts({ ...tts, sileroUrl: e.target.value })} className={inputCls} />
             </label>
@@ -328,6 +346,7 @@ export function SettingsView() {
                     judge_voice: tts.judgeVoice,
                     judge_rate: tts.judgeRate,
                     silero_url: tts.sileroUrl,
+                    silero_judge: tts.sileroJudge,
                   })
                 )
               }
@@ -436,27 +455,72 @@ export function SettingsView() {
         </section>
 
         <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">Лица судьи для оверлея</h2>
-          <div className="grid grid-cols-3 gap-1.5">
-            {JUDGE_STATES.map(({ state, label }) => (
-              <label key={state} className="block cursor-pointer text-center text-xs text-zinc-400">
-                <img
-                  src={`/api/judge/photo?state=${state}&t=${photoTick}`}
-                  alt={label}
-                  className="mb-1 aspect-square w-full rounded-lg border border-white/10 bg-black/40 object-cover"
-                  onError={(e) => {
-                    ;(e.target as HTMLImageElement).style.opacity = '0.25'
-                  }}
-                />
-                {label}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => void uploadPhoto(state, e.target.files?.[0])}
-                />
-              </label>
-            ))}
+          <h2 className="font-semibold">Фото судьи для оверлея</h2>
+          <p className="text-xs text-zinc-500">Одно фото на весь трибунал. Подпрыгивает, пока судья говорит.</p>
+          <label className="block cursor-pointer text-center text-xs text-zinc-400">
+            <img
+              src={`/api/judge/photo?t=${photoTick}`}
+              alt="Судья"
+              className="mx-auto mb-1 aspect-square w-40 rounded-lg border border-white/10 bg-black/40 object-cover"
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).style.opacity = '0.25'
+              }}
+            />
+            Нажми, чтобы заменить
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void uploadPhoto(e.target.files?.[0])}
+            />
+          </label>
+        </section>
+
+        <section className="card space-y-2 p-4">
+          <h2 className="font-semibold">Фон зала суда</h2>
+          <img
+            src={`/api/court/photo?t=${courtTick}`}
+            alt="Фон суда"
+            className="aspect-video w-full rounded-lg border border-white/10 bg-black/40 object-cover"
+            onError={(e) => {
+              ;(e.target as HTMLImageElement).style.opacity = '0.25'
+            }}
+          />
+          <div className="flex gap-1.5">
+            <label className="pressable cursor-pointer rounded-lg border border-white/10 px-3 py-1.5 text-sm">
+              Заменить
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const form = new FormData()
+                  form.append('photo', file)
+                  if (await apiUpload('/api/court/photo', form)) {
+                    toast.success('Фон суда обновлён')
+                    setCourtTick((n) => n + 1)
+                  } else {
+                    toast.error('Загрузка не удалась — проверь секретный ключ')
+                  }
+                }}
+              />
+            </label>
+            <button
+              onClick={async () => {
+                const res = await apiFetch('/api/court/photo', { method: 'DELETE' })
+                if (res.ok) {
+                  toast.success('Вернули стандартный фон')
+                  setCourtTick((n) => n + 1)
+                } else {
+                  toast.error('Не вышло — проверь секретный ключ')
+                }
+              }}
+              className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
+            >
+              Стандартный
+            </button>
           </div>
         </section>
 

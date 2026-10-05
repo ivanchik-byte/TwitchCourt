@@ -26,7 +26,7 @@ func NewSileroSynthesizer(url, voice string) *SileroSynthesizer {
 		url = "http://127.0.0.1:7892"
 	}
 	if voice == "" {
-		voice = "aidar"
+		voice = "xenia"
 	}
 	return &SileroSynthesizer{
 		url:   strings.TrimRight(url, "/"),

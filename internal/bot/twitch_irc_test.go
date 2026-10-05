@@ -14,6 +14,8 @@ func TestParseChatLine(t *testing.T) {
 		{"ivan", "!crime украл алмазы", CommandCrime, "украл алмазы"},
 		{"ivan", "!court", CommandCourt, ""},
 		{"ivan", "!court смотрю с работы", CommandCourt, "смотрю с работы"},
+		{"ivan", "!sue слив катки", CommandSue, "слив катки"},
+		{"ivan", "!sue", CommandSue, ""},
 		{"ivan", "!leave", CommandLeave, ""},
 		{"ivan", "!snitch он сидит на другом стриме", CommandSnitch, "он сидит на другом стриме"},
 		{"ivan", "просто коммент", CommandChat, "просто коммент"},

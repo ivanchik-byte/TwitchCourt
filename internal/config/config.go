@@ -59,14 +59,17 @@ type CourtroomConfig struct {
 	JudgeStyle   string   `yaml:"judge_style"`
 	DefenseSec   int      `yaml:"defense_sec"`
 	TestimonySec int      `yaml:"testimony_sec"`
+	SueThreshold int      `yaml:"sue_threshold"`
+	SueWindowSec int      `yaml:"sue_window_sec"`
 	Punishments  []string `yaml:"punishments"`
 }
 
 type DonationsConfig struct {
-	Token          string             `yaml:"token"`
-	DefaultMin     float64            `yaml:"default_min"`
-	PlatinumMin    float64            `yaml:"platinum_min"`
-	MinAmounts     map[string]float64 `yaml:"min_amounts"`
+	Token            string             `yaml:"token"`
+	DefaultMin       float64            `yaml:"default_min"`
+	PlatinumMin      float64            `yaml:"platinum_min"`
+	StreamerTrialMin float64            `yaml:"streamer_trial_min"`
+	MinAmounts       map[string]float64 `yaml:"min_amounts"`
 	DonationAlerts WidgetSource       `yaml:"donationalerts"`
 	DonatePay      KeySource          `yaml:"donatepay"`
 	TwitchBits     ToggleSource       `yaml:"twitch_bits"`
@@ -128,18 +131,18 @@ func DefaultConfig() *Config {
 		TTS: TTSConfig{
 			Enabled:      true,
 			Engine:       "edge",
-			Voice:        "ru-RU-DmitryNeural",
+			Voice:        "ru-RU-SvetlanaNeural",
 			Rate:         "+0%",
 			Volume:       "+0%",
 			Pitch:        "+0Hz",
 			AutoFallback: true,
-			JudgeVoice:   "ru-RU-DmitryNeural",
+			JudgeVoice:   "ru-RU-SvetlanaNeural",
 			JudgeRate:    "-10%",
 			SileroURL:    "http://127.0.0.1:7892",
-			SileroJudge:  "kseniya",
+			SileroJudge:  "xenia",
 			PiperBinary:  binaryName,
-			ModelPath:    filepath.Join("models", "ru_dmitri.onnx"),
-			ConfigPath:   filepath.Join("models", "ru_dmitri.onnx.json"),
+			ModelPath:    filepath.Join("models", "ru_irina.onnx"),
+			ConfigPath:   filepath.Join("models", "ru_irina.onnx.json"),
 			SpeakerID:    0,
 			Speed:        1.15,
 		},
@@ -149,6 +152,8 @@ func DefaultConfig() *Config {
 			JudgeStyle:   "strict",
 			DefenseSec:   20,
 			TestimonySec: 25,
+			SueThreshold: 5,
+			SueWindowSec: 600,
 			Punishments: []string{
 				"10 приседаний в прямом эфире",
 				"Минута молчания с рукой на сердце",
@@ -243,13 +248,13 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.TTS.SileroURL = "http://127.0.0.1:7892"
 	}
 	if cfg.TTS.SileroJudge == "" {
-		cfg.TTS.SileroJudge = "kseniya"
+		cfg.TTS.SileroJudge = "xenia"
 	}
 	if cfg.TTS.Voice == "" {
-		cfg.TTS.Voice = "ru-RU-DmitryNeural"
+		cfg.TTS.Voice = "ru-RU-SvetlanaNeural"
 	}
 	if cfg.TTS.JudgeVoice == "" {
-		cfg.TTS.JudgeVoice = "ru-RU-DmitryNeural"
+		cfg.TTS.JudgeVoice = "ru-RU-SvetlanaNeural"
 	}
 	if cfg.TTS.JudgeRate == "" {
 		cfg.TTS.JudgeRate = "-10%"
@@ -262,6 +267,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Courtroom.DefenseSec <= 0 {
 		cfg.Courtroom.DefenseSec = 20
+	}
+	if cfg.Courtroom.SueThreshold < 0 {
+		cfg.Courtroom.SueThreshold = 5
+	}
+	if cfg.Courtroom.SueWindowSec <= 0 {
+		cfg.Courtroom.SueWindowSec = 600
 	}
 
 	return cfg, nil

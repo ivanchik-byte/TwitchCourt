@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { apiGet, apiPost } from '../lib/api'
+import { apiGet, apiPost, apiPut } from '../lib/api'
 import type { UnbanRequest } from '../lib/types'
 
 const PRESETS = [100, 300, 500, 1000]
@@ -16,6 +16,11 @@ export function ModesView() {
   const [amount, setAmount] = useState('500')
   const [currency, setCurrency] = useState('RUB')
   const [message, setMessage] = useState('')
+  const [defenseSec, setDefenseSec] = useState(20)
+  const [testimonySec, setTestimonySec] = useState(25)
+  const [streamerMin, setStreamerMin] = useState('0')
+  const [sueThreshold, setSueThreshold] = useState('5')
+  const [sueWindow, setSueWindow] = useState('600')
 
   const loadUnbans = async () => {
     try {
@@ -29,6 +34,18 @@ export function ModesView() {
   useEffect(() => {
     if (mode === 'unban') void loadUnbans()
   }, [mode])
+
+  useEffect(() => {
+    void apiGet<{ defense_sec: number; testimony_sec: number; streamer_trial_min: number; sue_threshold: number; sue_window_sec: number }>('/api/settings')
+      .then((d) => {
+        if (typeof d.defense_sec === 'number') setDefenseSec(d.defense_sec)
+        if (typeof d.testimony_sec === 'number') setTestimonySec(d.testimony_sec)
+        if (typeof d.streamer_trial_min === 'number') setStreamerMin(String(d.streamer_trial_min))
+        if (typeof d.sue_threshold === 'number') setSueThreshold(String(d.sue_threshold))
+        if (typeof d.sue_window_sec === 'number') setSueWindow(String(d.sue_window_sec))
+      })
+      .catch(() => undefined)
+  }, [])
 
   const openTrial = async () => {
     const ok = await apiPost('/api/trial', {
@@ -231,6 +248,20 @@ export function ModesView() {
                     <td className="tabular py-2 pr-2 font-mono text-xs text-zinc-500">{u.created_at}</td>
                     <td className="whitespace-nowrap py-2">
                       <button
+                        onClick={async () => {
+                          try {
+                            const ok = await apiPost('/api/unban/trial', { id: u.id })
+                            if (ok) toast.success(`Unban-суд открыт: ${u.user}. Ты — обвинитель, микрофон твой`)
+                            else toast.error('Зал занят — дождись конца дела')
+                          } catch {
+                            toast.error('Не вышло — проверь секретный ключ')
+                          }
+                        }}
+                        className="pressable mr-1 rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-xs"
+                      >
+                        Судить
+                      </button>
+                      <button
                         onClick={() => void resolve(u.id, true)}
                         className="pressable mr-1 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs"
                       >
@@ -250,6 +281,76 @@ export function ModesView() {
           )}
         </div>
       )}
+      <div className="card space-y-2.5 p-4">
+        <h2 className="font-semibold">Параметры суда</h2>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <label className="block text-xs text-zinc-400">
+            Время защиты стримера: {defenseSec}с
+            <input
+              type="range" min={5} max={120} step={5} value={defenseSec}
+              onChange={(e) => setDefenseSec(Number(e.target.value))}
+              className="mt-1 w-full"
+            />
+          </label>
+          <label className="block text-xs text-zinc-400">
+            Время показаний: {testimonySec}с
+            <input
+              type="range" min={5} max={120} step={5} value={testimonySec}
+              onChange={(e) => setTestimonySec(Number(e.target.value))}
+              className="mt-1 w-full"
+            />
+          </label>
+          <label className="block text-xs text-zinc-400">
+            Донат для суда над стримером, ₽ (0 — выкл)
+            <input
+              value={streamerMin}
+              onChange={(e) => setStreamerMin(e.target.value.replace(/[^0-9.]/g, ''))}
+              inputMode="decimal"
+              className="tabular mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="block text-xs text-zinc-400">
+              !sue: людей (0 — выкл)
+              <input
+                value={sueThreshold}
+                onChange={(e) => setSueThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                className="tabular mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+              />
+            </label>
+            <label className="block text-xs text-zinc-400">
+              !sue: окно, сек
+              <input
+                value={sueWindow}
+                onChange={(e) => setSueWindow(e.target.value.replace(/[^0-9]/g, ''))}
+                inputMode="numeric"
+                className="tabular mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
+              />
+            </label>
+          </div>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const ok = await apiPut('/api/settings', {
+                defense_sec: defenseSec,
+                testimony_sec: testimonySec,
+                streamer_trial_min: Number(streamerMin) || 0,
+                sue_threshold: Number(sueThreshold) || 0,
+                sue_window_sec: Number(sueWindow) || 600,
+              })
+              if (ok) toast.success('Параметры суда сохранены')
+              else toast.error('Не сохранилось — проверь секретный ключ')
+            } catch {
+              toast.error('Ошибка сети')
+            }
+          }}
+          className="pressable rounded-lg bg-amber-400/90 px-4 py-1.5 text-sm font-bold text-black"
+        >
+          Сохранить параметры
+        </button>
+      </div>
     </div>
   )
 }

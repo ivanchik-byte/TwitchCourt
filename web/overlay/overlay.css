@@ -30,6 +30,16 @@ html, body {
   inset: 0;
 }
 
+/* Hall backdrop photo, dimmed so the CSS actors stay readable. */
+#court-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+}
+
 /* CSS prosecutor bust, left side. */
 #prosecutor {
   position: absolute;

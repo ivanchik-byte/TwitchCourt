@@ -7,6 +7,7 @@ import { CockpitView } from './views/CockpitView'
 
 const ModesView = lazy(() => import('./views/ModesView').then((m) => ({ default: m.ModesView })))
 const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ default: m.SettingsView })))
+const OBSRemoteView = lazy(() => import('./views/OBSRemoteView').then((m) => ({ default: m.OBSRemoteView })))
 
 function Shell() {
   const { t } = useTribunal()
@@ -19,6 +20,7 @@ function Shell() {
           <Routes>
             <Route path="/" element={<CockpitView />} />
             <Route path="/modes" element={<ModesView />} />
+            <Route path="/obs" element={<OBSRemoteView />} />
             <Route path="/settings" element={<SettingsView />} />
           </Routes>
         </Suspense>

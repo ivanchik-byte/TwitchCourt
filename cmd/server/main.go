@@ -169,8 +169,16 @@ func main() {
 			}
 			return
 		}
-		if d.Amount >= cfg.Donations.PlatinumMin && cfg.Donations.PlatinumMin > 0 {
-			crime := "Донат с требованием суда"
+		if cfg.Donations.StreamerTrialMin > 0 && d.Amount >= cfg.Donations.StreamerTrialMin {
+			crime := "Донат с требованием суда над стримером"
+			if strings.TrimSpace(d.Message) != "" {
+				crime = "Донат: " + strings.TrimSpace(d.Message)
+			}
+			context := "Донат " + strconv.FormatFloat(d.Amount, 'f', -1, 64) + " " + d.Currency + " от " + donor
+			openStreamerTrial(cfg.Game.StreamerName, crime, context)
+			return
+		}
+		if d.Amount >= cfg.Donations.PlatinumMin && cfg.Donations.PlatinumMin > 0 {			crime := "Донат с требованием суда"
 			if strings.TrimSpace(d.Message) != "" {
 				crime = "Донат: " + strings.TrimSpace(d.Message)
 			}
@@ -487,6 +495,45 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
+	mux.HandleFunc("/api/unban/trial", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg, r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var found *bot.UnbanRequest
+		for _, u := range unbanBoard.list() {
+			if u.ID == req.ID {
+				u := u
+				found = &u
+				break
+			}
+		}
+		if found == nil {
+			http.Error(w, "unknown appeal", http.StatusNotFound)
+			return
+		}
+		user := found.UserName
+		if user == "" {
+			user = found.UserLogin
+		}
+		if err := engine.StartUnbanTrial(user, found.Text); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
 	mux.HandleFunc("/api/dock", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -657,23 +704,45 @@ func main() {
 	})
 
 	mux.HandleFunc("/api/judge/photo", func(w http.ResponseWriter, r *http.Request) {
-		state := r.URL.Query().Get("state")
-		if !validJudgeState(state) {
-			http.Error(w, "unknown state, want normal|angry|gavel", http.StatusBadRequest)
-			return
-		}
+		// single judge portrait: ?state= is accepted for old overlays but ignored
 		switch r.Method {
 		case http.MethodGet:
-			serveJudgePhoto(w, r, state)
+			serveJudgePhoto(w, r)
 		case http.MethodPost:
 			if !checkHTTPAuth(cfg, r) {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if err := saveJudgePhoto(r, state); err != nil {
+			if err := saveJudgePhoto(r); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/court/photo", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			serveCourtBg(w, r)
+		case http.MethodPost:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if err := saveCourtBg(r); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodDelete:
+			if !checkHTTPAuth(cfg, r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			_ = os.Remove(courtBgPath())
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -700,10 +769,8 @@ func main() {
 			}
 		}
 		judge := map[string]bool{}
-		for _, state := range []string{"normal", "angry", "gavel"} {
-			if fi, err := os.Stat(judgePhotoPath(state)); err == nil && !fi.IsDir() {
-				judge[state] = true
-			}
+		if fi, err := os.Stat(judgePhotoPath()); err == nil && !fi.IsDir() {
+			judge["judge"] = true
 		}
 		json.NewEncoder(w).Encode(map[string]any{"sfx": files, "judge": judge})
 	})
@@ -739,12 +806,15 @@ func main() {
 		switch r.Method {
 		case http.MethodGet:
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts":   cfg.Donations.MinAmounts,
-				"default_min":   cfg.Donations.DefaultMin,
-				"punishments":   cfg.Courtroom.Punishments,
-				"judge_style":   cfg.Courtroom.JudgeStyle,
-				"defense_sec":   cfg.Courtroom.DefenseSec,
-				"testimony_sec": cfg.Courtroom.TestimonySec,
+				"min_amounts":        cfg.Donations.MinAmounts,
+				"default_min":        cfg.Donations.DefaultMin,
+				"streamer_trial_min": cfg.Donations.StreamerTrialMin,
+				"punishments":        cfg.Courtroom.Punishments,
+				"judge_style":        cfg.Courtroom.JudgeStyle,
+				"defense_sec":        cfg.Courtroom.DefenseSec,
+				"testimony_sec":      cfg.Courtroom.TestimonySec,
+				"sue_threshold":      cfg.Courtroom.SueThreshold,
+				"sue_window_sec":     cfg.Courtroom.SueWindowSec,
 			})
 		case http.MethodPut:
 			if !checkHTTPAuth(cfg, r) {
@@ -752,12 +822,15 @@ func main() {
 				return
 			}
 			var req struct {
-				MinAmounts   map[string]float64 `json:"min_amounts"`
-				DefaultMin   *float64           `json:"default_min"`
-				Punishments  []string           `json:"punishments"`
-				JudgeStyle   *string            `json:"judge_style"`
-				DefenseSec   *int               `json:"defense_sec"`
-				TestimonySec *int               `json:"testimony_sec"`
+				MinAmounts       map[string]float64 `json:"min_amounts"`
+				DefaultMin       *float64           `json:"default_min"`
+				StreamerTrialMin *float64           `json:"streamer_trial_min"`
+				Punishments      []string           `json:"punishments"`
+				JudgeStyle       *string            `json:"judge_style"`
+				DefenseSec       *int               `json:"defense_sec"`
+				TestimonySec     *int               `json:"testimony_sec"`
+				SueThreshold     *int               `json:"sue_threshold"`
+				SueWindowSec     *int               `json:"sue_window_sec"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -768,6 +841,9 @@ func main() {
 			}
 			if req.DefaultMin != nil {
 				cfg.Donations.DefaultMin = *req.DefaultMin
+			}
+			if req.StreamerTrialMin != nil && *req.StreamerTrialMin >= 0 {
+				cfg.Donations.StreamerTrialMin = *req.StreamerTrialMin
 			}
 			if req.Punishments != nil {
 				cfg.Courtroom.Punishments = req.Punishments
@@ -786,23 +862,48 @@ func main() {
 			if req.TestimonySec != nil && *req.TestimonySec >= 5 && *req.TestimonySec <= 120 {
 				cfg.Courtroom.TestimonySec = *req.TestimonySec
 			}
+			if req.SueThreshold != nil && *req.SueThreshold >= 0 && *req.SueThreshold <= 100 {
+				cfg.Courtroom.SueThreshold = *req.SueThreshold
+			}
+			if req.SueWindowSec != nil && *req.SueWindowSec >= 60 && *req.SueWindowSec <= 3600 {
+				cfg.Courtroom.SueWindowSec = *req.SueWindowSec
+			}
 			if err := cfg.Save("config.yaml"); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			donateGate.SetMinimums(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin)
 			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts":   cfg.Donations.MinAmounts,
-				"default_min":   cfg.Donations.DefaultMin,
-				"punishments":   cfg.Courtroom.Punishments,
-				"judge_style":   cfg.Courtroom.JudgeStyle,
-				"defense_sec":   cfg.Courtroom.DefenseSec,
-				"testimony_sec": cfg.Courtroom.TestimonySec,
+				"min_amounts":        cfg.Donations.MinAmounts,
+				"default_min":        cfg.Donations.DefaultMin,
+				"streamer_trial_min": cfg.Donations.StreamerTrialMin,
+				"punishments":        cfg.Courtroom.Punishments,
+				"judge_style":        cfg.Courtroom.JudgeStyle,
+				"defense_sec":        cfg.Courtroom.DefenseSec,
+				"testimony_sec":      cfg.Courtroom.TestimonySec,
+				"sue_threshold":      cfg.Courtroom.SueThreshold,
+				"sue_window_sec":     cfg.Courtroom.SueWindowSec,
 			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+
+	// !sue flashmob: chat votes the streamer onto the bench
+	sueTracker := court.NewSueTracker()
+	var suePending bool
+	trySueTrial := func(crime string) {
+		if engine.GetState() != court.StateIdle {
+			if !suePending {
+				suePending = true
+				chat.SendMessage("Следующее дело — суд над стримером: " + crime)
+			}
+			return
+		}
+		suePending = false
+		sueTracker.Reset()
+		openStreamerTrial(cfg.Game.StreamerName, crime, "флешмоб !sue в чате")
+	}
 
 	// chatHandler routes every chat line; chat itself is rebuilt on token change
 	chatHandler := func(cmd bot.ChatCommand) {
@@ -825,6 +926,17 @@ func main() {
 		case bot.CommandSnitch:
 			if cmd.Argument != "" {
 				engine.AddChatComment(cmd.Author, "!snitch "+cmd.Argument)
+			}
+		case bot.CommandSue:
+			if cfg.Courtroom.SueThreshold <= 0 {
+				break
+			}
+			window := time.Duration(cfg.Courtroom.SueWindowSec) * time.Second
+			if window <= 0 {
+				window = 10 * time.Minute
+			}
+			if n := sueTracker.Add(cmd.Author, cmd.Argument, time.Now(), window); n >= cfg.Courtroom.SueThreshold {
+				trySueTrial(sueTracker.TopReason())
 			}
 		default:
 			if !engine.AddTestimony(cmd.Author, cmd.Argument) {
@@ -882,6 +994,12 @@ func main() {
 			text += " " + twist
 		}
 		chat.SendMessage(text)
+		if suePending {
+			suePending = false
+			crime := sueTracker.TopReason()
+			sueTracker.Reset()
+			openStreamerTrial(cfg.Game.StreamerName, crime, "флешмоб !sue в чате")
+		}
 	}
 
 	engine.TimeoutHook = func(user string, secs int, ban bool, reason string) {
@@ -971,36 +1089,29 @@ var judgePhotoExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
 }
 
-func validJudgeState(state string) bool {
-	return state == "normal" || state == "angry" || state == "gavel"
+// single judge portrait for the whole tribunal
+func judgePhotoPath() string {
+	return filepath.Join("data", "judge.jpg")
 }
 
-func judgePhotoPath(state string) string {
-	return filepath.Join("data", "judge", state+".jpg")
-}
-
-// fallback to embedded default (angry/gavel fall back to normal until uploaded)
-func serveJudgePhoto(w http.ResponseWriter, r *http.Request, state string) {
-	if raw, err := os.ReadFile(judgePhotoPath(state)); err == nil {
+// fallback to the embedded default portrait
+func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
+	if raw, err := os.ReadFile(judgePhotoPath()); err == nil {
 		w.Header().Set("Content-Type", http.DetectContentType(raw))
 		w.Write(raw)
 		return
 	}
-	name := state
-	if state != "normal" {
-		name = "normal"
-	}
-	raw, err := web.StaticFS.ReadFile("overlay/assets/judge-" + name + ".jpg")
+	raw, err := web.StaticFS.ReadFile("overlay/assets/judge.jpg")
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Type", http.DetectContentType(raw))
 	w.Write(raw)
 }
 
-// saveJudgePhoto stores an uploaded judge portrait, max 5 MB, images only.
-func saveJudgePhoto(r *http.Request, state string) error {
+// saveJudgePhoto stores the uploaded judge portrait, max 5 MB, images only.
+func saveJudgePhoto(r *http.Request) error {
 	file, header, err := r.FormFile("photo")
 	if err != nil {
 		return fmt.Errorf("need multipart photo: %w", err)
@@ -1020,10 +1131,10 @@ func saveJudgePhoto(r *http.Request, state string) error {
 	if kind := http.DetectContentType(raw); !strings.HasPrefix(kind, "image/") {
 		return fmt.Errorf("not an image")
 	}
-	if err := os.MkdirAll(filepath.Join("data", "judge"), 0o755); err != nil {
+	if err := os.MkdirAll("data", 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Join("data", "judge"), "upload-*.jpg")
+	tmp, err := os.CreateTemp("data", "upload-*.jpg")
 	if err != nil {
 		return err
 	}
@@ -1035,7 +1146,65 @@ func saveJudgePhoto(r *http.Request, state string) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), judgePhotoPath(state))
+	return os.Rename(tmp.Name(), judgePhotoPath())
+}
+
+// court background: single hall photo, replaceable from settings
+func courtBgPath() string {
+	return filepath.Join("data", "court_bg.jpg")
+}
+
+func serveCourtBg(w http.ResponseWriter, r *http.Request) {
+	if raw, err := os.ReadFile(courtBgPath()); err == nil {
+		w.Header().Set("Content-Type", http.DetectContentType(raw))
+		w.Write(raw)
+		return
+	}
+	raw, err := web.StaticFS.ReadFile("overlay/assets/backgrounds/court_zoom_medium.jpg")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", http.DetectContentType(raw))
+	w.Write(raw)
+}
+
+func saveCourtBg(r *http.Request) error {
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		return fmt.Errorf("need multipart photo: %w", err)
+	}
+	defer file.Close()
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if !judgePhotoExts[ext] {
+		return fmt.Errorf("want jpg, png or webp")
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, 8*1024*1024+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > 8*1024*1024 {
+		return fmt.Errorf("photo over 8 MB")
+	}
+	if kind := http.DetectContentType(raw); !strings.HasPrefix(kind, "image/") {
+		return fmt.Errorf("not an image")
+	}
+	if err := os.MkdirAll("data", 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp("data", "upload-*.jpg")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), courtBgPath())
 }
 
 func checkHTTPAuth(cfg *config.Config, r *http.Request) bool {
