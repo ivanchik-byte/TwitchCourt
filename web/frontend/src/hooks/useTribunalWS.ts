@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
+import { toast } from 'sonner'
+import { getSecret } from '../lib/api'
+import type { DonationPayload, StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
 
 export interface StenogramEntry {
   id: number
@@ -13,6 +15,7 @@ interface TribunalState {
   connected: boolean
   rttMs: number | null
   phase: string
+  caseTitle: string
   defendant: string
   charge: string
   timeLeft: number | null
@@ -25,6 +28,7 @@ const initial: TribunalState = {
   connected: false,
   rttMs: null,
   phase: 'idle',
+  caseTitle: '',
   defendant: '',
   charge: '',
   timeLeft: null,
@@ -47,10 +51,11 @@ export function useTribunalWS() {
     }))
   }, [])
 
-  const send = useCallback((action: string, payload: unknown) => {
+  const send = useCallback((action: string, payload: Record<string, unknown> = {}) => {
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return false
-    ws.send(JSON.stringify({ action, payload }))
+    const secret = getSecret()
+    ws.send(JSON.stringify({ action, payload: secret ? { ...payload, secret } : payload }))
     return true
   }, [])
 
@@ -58,6 +63,7 @@ export function useTribunalWS() {
     setState((s) => ({
       ...s,
       phase: 'idle',
+      caseTitle: '',
       defendant: '',
       charge: '',
       timeLeft: null,
@@ -107,8 +113,9 @@ export function useTribunalWS() {
             setState((s) => ({
               ...s,
               phase: p.state ?? s.phase,
-              defendant: p.defendant ?? s.defendant,
-              charge: p.charge ?? s.charge,
+              caseTitle: p.case_title ?? (p.state === 'idle' ? '' : s.caseTitle),
+              defendant: p.state === 'idle' ? '' : (p.defendant ?? s.defendant),
+              charge: p.state === 'idle' ? '' : (p.charge ?? s.charge),
               timeLeft: typeof p.time_left_sec === 'number' ? p.time_left_sec : s.timeLeft,
             }))
             push('state_change', `${p.state}${p.defendant ? ` · ${p.defendant}` : ''}${p.charge ? ` — ${p.charge}` : ''}`)
@@ -134,7 +141,13 @@ export function useTribunalWS() {
           case 'panic':
             panicReset()
             break
-          case 'donation':
+          case 'donation': {
+            const p = msg.payload as DonationPayload
+            const line = `${p.donor} — ${p.amount} ${p.currency}${p.message ? `: ${p.message}` : ''}${p.opens_trial ? ' (открывает дело)' : ''}`
+            push('donation', line, 'донат')
+            toast(`Донат: ${p.donor} — ${p.amount} ${p.currency}`)
+            break
+          }
           case 'animation':
           case 'audio_chunk':
             break

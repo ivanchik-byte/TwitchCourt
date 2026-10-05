@@ -19,15 +19,15 @@ const maxTestimonyRunes = 200
 
 // PoolSeat is one willing defendant with an optional self-charge
 type PoolSeat struct {
-	Nick     string
-	Reason   string
-	JoinedAt time.Time
+	Nick     string    `json:"nick"`
+	Reason   string    `json:"reason"`
+	JoinedAt time.Time `json:"-"`
 }
 
 // Punishment is the streamer's chosen penalty for a guilty viewer
 type Punishment struct {
-	Kind string
-	Secs int
+	Kind string `json:"kind"`
+	Secs int    `json:"secs"`
 }
 
 // JoinPool lines a viewer up for the stand; reason is an optional self-charge

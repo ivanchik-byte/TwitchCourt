@@ -1,10 +1,13 @@
-BINARY := StreamTribunal
+BINARY := stream-tribunal-server
 DIST := dist
 
-.PHONY: run test vet build build-win package-win frontend clean
+.PHONY: run test vet build build-win package-win frontend overlay clean
 
 frontend:
-	cd web/frontend && npm install --no-audit --no-fund && npm run build
+	cd web/frontend && npm ci --no-audit --no-fund && npm run build
+
+overlay:
+	sh web/build.sh
 
 run:
 	go run ./cmd/server
@@ -15,10 +18,10 @@ test:
 vet:
 	go vet ./...
 
-build:
+build: overlay
 	go build -o $(DIST)/$(BINARY) ./cmd/server
 
-build-win:
+build-win: overlay
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST)/$(BINARY).exe ./cmd/server
 
 package-win: build-win

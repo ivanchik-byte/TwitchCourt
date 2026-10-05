@@ -51,7 +51,7 @@ export interface PoolSeat {
 export interface UnbanRequest {
   id: string
   user: string
+  user_login?: string
   text: string
   created_at: string
-  messages?: string[]
 }

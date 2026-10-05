@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { apiGet, apiPut, apiPost, apiUpload, apiFetch } from '../lib/api'
+import { apiGet, apiPut, apiPost, apiPostJson, apiUpload, apiFetch, apiNote } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
 import { SecretField } from '../components/SecretField'
 
@@ -15,17 +15,20 @@ function lines(v: string): string[] {
     .filter(Boolean)
 }
 
-const VOICE_PRESETS = ['ru-RU-SvetlanaNeural', 'ru-RU-DmitryNeural', 'custom']
-const SILERO_VOICES = ['xenia', 'kseniya', 'baya', 'aidar', 'eugene']
+interface VoiceLists {
+  edge: string[]
+  silero: string[]
+}
 
 const inputCls =
   'mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none focus:border-amber-400/50'
 const labelCls = 'block text-xs text-zinc-400'
 
-async function saveSection(name: string, fn: () => Promise<boolean>) {
+async function saveSection(name: string, fn: () => Promise<{ ok: boolean; status: number }>) {
   try {
-    if (await fn()) toast.success(`${name}: сохранено`)
-    else toast.error(`${name}: не сохранилось — проверь секретный ключ`)
+    const r = await fn()
+    if (r.ok) toast.success(`${name}: сохранено`)
+    else toast.error(`${name}: ${apiNote(r.status)}`)
   } catch {
     toast.error(`${name}: ошибка сети`)
   }
@@ -74,9 +77,9 @@ export function SettingsView() {
   const [sfx, setSfx] = useState<{ name: string; size: number }[]>([])
   const [photoTick, setPhotoTick] = useState(0)
   const [courtTick, setCourtTick] = useState(0)
+  const [voices, setVoices] = useState<VoiceLists>({ edge: [], silero: [] })
 
   useEffect(() => {
-    setSecret(secret)
     void apiGet<{ provider: string; model: string; temperature: number; base_url: string; has_key: boolean; live: boolean }>('/api/ai')
       .then((d) => {
         setAi({
@@ -91,22 +94,26 @@ export function SettingsView() {
     void apiGet<{
       engine: string; voice: string; rate: string; volume: string; pitch: string
       judge_voice: string; judge_rate: string; silero_url: string; silero_judge: string
+      voices?: { edge?: string[]; silero?: string[] }
     }>('/api/tts')
-      .then((d) =>
+      .then((d) => {
+        const edge = Array.isArray(d.voices?.edge) ? d.voices.edge : []
+        const silero = Array.isArray(d.voices?.silero) ? d.voices.silero : []
+        setVoices({ edge, silero })
         setTts((t) => ({
           ...t,
           engine: d.engine,
-          voice: VOICE_PRESETS.includes(d.voice) ? d.voice : 'custom',
-          customVoice: VOICE_PRESETS.includes(d.voice) ? '' : (d.voice ?? ''),
-          sileroJudge: d.silero_judge || 'xenia',
+          voice: edge.includes(d.voice) ? d.voice : 'custom',
+          customVoice: edge.includes(d.voice) ? '' : (d.voice ?? ''),
+          sileroJudge: silero.includes(d.silero_judge) ? d.silero_judge : (d.silero_judge || 'xenia'),
           rate: d.rate ?? '-10%',
           volume: d.volume ?? '',
           pitch: d.pitch ?? '',
           judgeVoice: d.judge_voice ?? '',
           judgeRate: d.judge_rate ?? '',
           sileroUrl: d.silero_url ?? '',
-        })),
-      )
+        }))
+      })
       .catch(() => undefined)
     void apiGet<Record<string, string | boolean>>('/api/integrations')
       .then((d) => {
@@ -133,7 +140,7 @@ export function SettingsView() {
     void apiGet<{ sfx: { name: string; size: number }[] }>('/api/sfx')
       .then((d) => setSfx(d.sfx ?? []))
       .catch(() => undefined)
-  }, [secret])
+  }, [])
 
   const effectiveVoice = tts.voice === 'custom' ? tts.customVoice : tts.voice
 
@@ -154,7 +161,7 @@ export function SettingsView() {
     <div className="mx-auto max-w-[1100px] space-y-3 p-3">
       <div className="card p-3">
         <div className="min-w-[220px] max-w-prose">
-          <SecretField label="Секретный ключ сервера" value={secret} onChange={setSecretLocal} placeholder="X-Secret" />
+          <SecretField label="Секретный ключ сервера (применяется при уходе с поля)" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v) }} placeholder="X-Secret" />
         </div>
       </div>
 
@@ -219,9 +226,9 @@ export function SettingsView() {
                     temperature: roundTemp(ai.temperature),
                     base_url: ai.baseUrl,
                     ...(apiKey ? { api_key: apiKey } : {}),
-                  }).then((ok) => {
-                    if (ok) setApiKey('')
-                    return ok
+                  }).then((r) => {
+                    if (r.ok) setApiKey('')
+                    return r
                   })
                 )
               }
@@ -231,13 +238,12 @@ export function SettingsView() {
             </button>
             <button
               onClick={async () => {
-                const t0 = Date.now()
-                try {
-                  const d = await apiGet<{ live: boolean; provider: string; model: string }>('/api/ai')
-                  toast.success(`Ping AI: ${Date.now() - t0}мс · ${d.provider}/${d.model || 'default'} · ${d.live ? 'live' : 'mock'}`)
-                } catch {
-                  toast.error('AI недоступен')
+                const r = await apiPostJson<{ ms: number; mock: boolean }>('/api/ai/ping', {})
+                if (!r.ok || !r.data) {
+                  toast.error(`AI пинг: ${apiNote(r.status)}`)
+                  return
                 }
+                toast.success(r.data.mock ? 'AI в mock-режиме — инференса нет' : `AI отвечает: ${r.data.ms}мс до первого токена`)
               }}
               className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
             >
@@ -250,7 +256,7 @@ export function SettingsView() {
           <h2 className="font-semibold">Синтез речи</h2>
           <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-2.5 text-xs text-zinc-300">
             <span className="font-semibold text-emerald-200">Локальный ♀:</span> движок Silero + голос{' '}
-            <span className="font-mono text-emerald-200">xenia</span> — самый человеческий русский голос,
+            <span className="font-mono text-emerald-200">{tts.sileroJudge || 'xenia'}</span> — самый человеческий русский голос,
             работает офлайн и грузит ПК только в момент озвучки.
           </div>
           <label className={labelCls}>
@@ -273,8 +279,9 @@ export function SettingsView() {
               onChange={(e) => setTts({ ...tts, voice: e.target.value })}
               className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
             >
-              <option value="ru-RU-SvetlanaNeural">ru-RU-SvetlanaNeural ♀</option>
-              <option value="ru-RU-DmitryNeural">ru-RU-DmitryNeural</option>
+              {voices.edge.map((v) => (
+                <option key={v} value={v}>{v}{v.includes('Svetlana') ? ' ♀' : ''}</option>
+              ))}
               <option value="custom">Свой…</option>
             </select>
           </label>
@@ -313,20 +320,21 @@ export function SettingsView() {
               <input value={tts.judgeRate} onChange={(e) => setTts({ ...tts, judgeRate: e.target.value })} className={inputCls} />
             </label>
           </div>
-          {tts.engine === 'silero' && (
             <label className={labelCls}>
-              Голос Silero (женские — xenia, kseniya, baya)
+              Голос Silero
               <select
-                value={SILERO_VOICES.includes(tts.sileroJudge) ? tts.sileroJudge : 'xenia'}
+                value={tts.sileroJudge}
                 onChange={(e) => setTts({ ...tts, sileroJudge: e.target.value })}
                 className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
               >
-                {SILERO_VOICES.map((v) => (
+                {voices.silero.map((v) => (
                   <option key={v} value={v}>{v}</option>
                 ))}
+                {!voices.silero.includes(tts.sileroJudge) && (
+                  <option value={tts.sileroJudge}>{tts.sileroJudge} (с сервера)</option>
+                )}
               </select>
             </label>
-          )}
           {tts.engine === 'silero' && (
             <label className={labelCls}>
               Silero URL
@@ -392,9 +400,9 @@ export function SettingsView() {
                     ...(twitch.broadcasterId ? { broadcaster_id: twitch.broadcasterId } : {}),
                     ...(twitch.daToken ? { donationalerts_token: twitch.daToken } : {}),
                     ...(twitch.dpKey ? { donatepay_key: twitch.dpKey } : {}),
-                  }).then((ok) => {
-                    if (ok) setTwitch((t) => ({ ...t, token: '', clientId: '', broadcasterId: '', daToken: '', dpKey: '' }))
-                    return ok
+                  }).then((r) => {
+                    if (r.ok) setTwitch((t) => ({ ...t, token: '', clientId: '', broadcasterId: '', daToken: '', dpKey: '' }))
+                    return r
                   })
                 )
               }
@@ -465,6 +473,9 @@ export function SettingsView() {
               onError={(e) => {
                 ;(e.target as HTMLImageElement).style.opacity = '0.25'
               }}
+              onLoad={(e) => {
+                ;(e.target as HTMLImageElement).style.opacity = '1'
+              }}
             />
             Нажми, чтобы заменить
             <input
@@ -484,6 +495,9 @@ export function SettingsView() {
             className="aspect-video w-full rounded-lg border border-white/10 bg-black/40 object-cover"
             onError={(e) => {
               ;(e.target as HTMLImageElement).style.opacity = '0.25'
+            }}
+            onLoad={(e) => {
+              ;(e.target as HTMLImageElement).style.opacity = '1'
             }}
           />
           <div className="flex gap-1.5">
@@ -544,7 +558,7 @@ export function SettingsView() {
             {sfx.map((f) => (
               <div key={f.name} className="flex items-center gap-2 text-xs text-zinc-400">
                 <span className="flex-1 truncate font-mono">{f.name}</span>
-                <audio controls preload="none" src={`/overlay/sfx/${f.name}`} className="h-7 w-44" />
+                <audio controls preload="none" src={`/overlay/sfx/${encodeURIComponent(f.name)}`} className="h-7 w-44" />
               </div>
             ))}
             {sfx.length === 0 && <p className="text-xs text-zinc-600">Сэмплов нет.</p>}

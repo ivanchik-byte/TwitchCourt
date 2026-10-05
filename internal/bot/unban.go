@@ -11,12 +11,12 @@ import (
 
 // UnbanRequest is a pardon appeal awaiting the streamer's verdict.
 type UnbanRequest struct {
-	ID        string
-	UserID    string
-	UserLogin string
-	UserName  string
-	Text      string
-	CreatedAt string
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
 }
 
 // UnbanClient talks to Twitch Helix moderation endpoints.

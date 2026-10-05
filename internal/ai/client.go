@@ -64,6 +64,11 @@ func NewClient(cfg config.AIConfig) *Client {
 	return client
 }
 
+// IsMock reports whether completions are simulated locally.
+func (c *Client) IsMock() bool {
+	return c == nil || c.isMock
+}
+
 func (c *Client) StreamCompletion(ctx context.Context, messages []ChatMessage, onDelta func(string) error) error {
 	if c.isMock {
 		return c.simulateStream(ctx, onDelta)

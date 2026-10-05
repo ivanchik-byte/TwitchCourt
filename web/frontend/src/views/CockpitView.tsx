@@ -1,5 +1,5 @@
 import { useHotkeys } from '../hooks/useHotkeys'
-import { useTribunal } from '../tribunal/TribunalContext'
+import { useTribunalActions } from '../tribunal/TribunalContext'
 import { BenchQueue } from '../components/cockpit/BenchQueue'
 import { GavelStage } from '../components/cockpit/GavelStage'
 import { LawyerMic } from '../components/cockpit/LawyerMic'
@@ -8,7 +8,7 @@ import { PunishmentMatrix } from '../components/cockpit/PunishmentMatrix'
 import { MobileActionBar } from '../components/cockpit/MobileActionBar'
 
 export function CockpitView() {
-  const { gavel, punish, pick, skip } = useTribunal()
+  const { gavel, punish, pick, skip, panic } = useTribunalActions()
 
   useHotkeys({
     onGavel: gavel,
@@ -18,7 +18,7 @@ export function CockpitView() {
     onBan: () => void punish('ban'),
     onRandom: () => void pick(),
     onSkip: () => void skip(),
-    onPanic: () => void skip(),
+    onPanic: panic,
   })
 
   return (

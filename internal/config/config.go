@@ -61,6 +61,7 @@ type CourtroomConfig struct {
 	TestimonySec int      `yaml:"testimony_sec"`
 	SueThreshold int      `yaml:"sue_threshold"`
 	SueWindowSec int      `yaml:"sue_window_sec"`
+	Articles     []string `yaml:"articles"`
 	Punishments  []string `yaml:"punishments"`
 }
 
@@ -70,9 +71,9 @@ type DonationsConfig struct {
 	PlatinumMin      float64            `yaml:"platinum_min"`
 	StreamerTrialMin float64            `yaml:"streamer_trial_min"`
 	MinAmounts       map[string]float64 `yaml:"min_amounts"`
-	DonationAlerts WidgetSource       `yaml:"donationalerts"`
-	DonatePay      KeySource          `yaml:"donatepay"`
-	TwitchBits     ToggleSource       `yaml:"twitch_bits"`
+	DonationAlerts   WidgetSource       `yaml:"donationalerts"`
+	DonatePay        KeySource          `yaml:"donatepay"`
+	TwitchBits       ToggleSource       `yaml:"twitch_bits"`
 }
 
 type WidgetSource struct {
@@ -154,6 +155,13 @@ func DefaultConfig() *Config {
 			TestimonySec: 25,
 			SueThreshold: 5,
 			SueWindowSec: 600,
+			Articles: []string{
+				"Слив катки",
+				"Токсичность в чате",
+				"Опоздание",
+				"Байт на бан",
+				"Духота в голосовом",
+			},
 			Punishments: []string{
 				"10 приседаний в прямом эфире",
 				"Минута молчания с рукой на сердце",
@@ -274,8 +282,36 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Courtroom.SueWindowSec <= 0 {
 		cfg.Courtroom.SueWindowSec = 600
 	}
+	if cfg.Donations.StreamerTrialMin < 0 {
+		cfg.Donations.StreamerTrialMin = 0
+	}
 
 	return cfg, nil
+}
+
+// Clone deep-copies maps and slices so a mutated clone can be published
+// via atomic pointer swap without racing live readers (RCU pattern).
+func (c *Config) Clone() *Config {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	if c.Donations.MinAmounts != nil {
+		out.Donations.MinAmounts = make(map[string]float64, len(c.Donations.MinAmounts))
+		for k, v := range c.Donations.MinAmounts {
+			out.Donations.MinAmounts[k] = v
+		}
+	}
+	if c.Courtroom.Punishments != nil {
+		out.Courtroom.Punishments = append([]string(nil), c.Courtroom.Punishments...)
+	}
+	if c.Courtroom.Articles != nil {
+		out.Courtroom.Articles = append([]string(nil), c.Courtroom.Articles...)
+	}
+	if c.Safety.CustomBlacklist != nil {
+		out.Safety.CustomBlacklist = append([]string(nil), c.Safety.CustomBlacklist...)
+	}
+	return &out
 }
 
 // Save writes the whole config back to disk, secrets included, mode 0600

@@ -11,7 +11,7 @@ interface SceneItem {
 interface Preset {
   name: string
   hint: string
-  apply: (obs: OBSWebSocket, scene: string, items: SceneItem[]) => Promise<void>
+  apply: (obs: OBSWebSocket, scene: string, items: SceneItem[], canvas: { w: number; h: number }) => Promise<void>
 }
 
 function find(items: SceneItem[], ...needles: string[]): SceneItem | undefined {
@@ -42,12 +42,12 @@ const PRESETS: Preset[] = [
   {
     name: 'Камера крупно',
     hint: 'Вебка на весь экран, зал скрыт',
-    apply: async (obs, scene, items) => {
+    apply: async (obs, scene, items, canvas) => {
       const cam = find(items, 'камера', 'camera', 'вебка', 'webcam', 'video capture')
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       if (cam) {
         await setVisible(obs, scene, cam, true)
-        await setBounds(obs, scene, cam, 0, 0, 1920, 1080)
+        await setBounds(obs, scene, cam, 0, 0, canvas.w, canvas.h)
       }
       await setVisible(obs, scene, court, false)
     },
@@ -55,25 +55,25 @@ const PRESETS: Preset[] = [
   {
     name: 'Зал целиком',
     hint: 'Оверлей суда на весь экран',
-    apply: async (obs, scene, items) => {
+    apply: async (obs, scene, items, canvas) => {
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       if (court) {
         await setVisible(obs, scene, court, true)
-        await setBounds(obs, scene, court, 0, 0, 1920, 1080)
+        await setBounds(obs, scene, court, 0, 0, canvas.w, canvas.h)
       }
     },
   },
   {
     name: 'Судья в углу',
     hint: 'Зал + портрет судьи PiP справа внизу',
-    apply: async (obs, scene, items) => {
+    apply: async (obs, scene, items, canvas) => {
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       const judge = find(items, 'судья', 'judge')
       await setVisible(obs, scene, court, true)
-      if (court) await setBounds(obs, scene, court, 0, 0, 1920, 1080)
+      if (court) await setBounds(obs, scene, court, 0, 0, canvas.w, canvas.h)
       if (judge) {
         await setVisible(obs, scene, judge, true)
-        await setBounds(obs, scene, judge, 1470, 680, 400, 350)
+        await setBounds(obs, scene, judge, Math.round(canvas.w * 0.76), Math.round(canvas.h * 0.63), Math.round(canvas.w * 0.21), Math.round(canvas.h * 0.32))
       }
     },
   },
@@ -82,11 +82,12 @@ const PRESETS: Preset[] = [
 export function OBSRemoteView() {
   const [host, setHost] = useState(localStorage.getItem('obs-host') || '127.0.0.1')
   const [port, setPort] = useState(localStorage.getItem('obs-port') || '4455')
-  const [password, setPassword] = useState(localStorage.getItem('obs-password') || '')
+  const [password, setPassword] = useState(() => sessionStorage.getItem('obs-password') || '')
   const [connected, setConnected] = useState(false)
   const [scenes, setScenes] = useState<string[]>([])
   const [scene, setScene] = useState('')
   const [items, setItems] = useState<SceneItem[]>([])
+  const [canvas, setCanvas] = useState({ w: 1920, h: 1080 })
   const obsRef = useRef<OBSWebSocket | null>(null)
 
   const disconnect = useCallback(async () => {
@@ -122,24 +123,40 @@ export function OBSRemoteView() {
   }, [scene])
 
   useEffect(() => {
-    if (connected) void refresh()
-  }, [connected, refresh])
+    if (connected && scene) void refresh()
+  }, [connected, scene, refresh])
 
   const connect = async () => {
     await disconnect()
+    let obs: OBSWebSocket | null = null
     try {
       const { default: OBSWebSocket } = await import('obs-websocket-js')
-      const obs = new OBSWebSocket()
+      obs = new OBSWebSocket()
       await obs.connect(`ws://${host}:${port}`, password || undefined)
       obsRef.current = obs
       localStorage.setItem('obs-host', host)
       localStorage.setItem('obs-port', port)
-      localStorage.setItem('obs-password', password)
+      sessionStorage.setItem('obs-password', password)
       const { currentProgramSceneName } = await obs.call('GetCurrentProgramScene')
       setScene(currentProgramSceneName as string)
+      try {
+        const vs = await obs.call('GetVideoSettings')
+        const w = Number((vs as { baseWidth?: number }).baseWidth)
+        const h = Number((vs as { baseHeight?: number }).baseHeight)
+        if (w > 0 && h > 0) setCanvas({ w, h })
+      } catch {
+        /* keep default canvas */
+      }
       setConnected(true)
       toast.success('OBS подключён')
     } catch {
+      try {
+        await obs?.disconnect()
+      } catch {
+        /* already down */
+      }
+      obsRef.current = null
+      setConnected(false)
       toast.error('Не подключилось: включи WebSocket-сервер в OBS (Инструменты → WebSocket-сервер) и проверь пароль')
     }
   }
@@ -163,7 +180,7 @@ export function OBSRemoteView() {
     const obs = obsRef.current
     if (!obs || !scene) return
     try {
-      await p.apply(obs, scene, items)
+      await p.apply(obs, scene, items, canvas)
       toast.success(p.name)
       void refresh()
     } catch {
@@ -184,7 +201,7 @@ export function OBSRemoteView() {
             className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
           <input value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ''))} placeholder="4455" inputMode="numeric"
             className="tabular h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль OBS" autoComplete="off"
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль OBS (только на сессию)" autoComplete="off"
             className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
           {connected ? (
             <button onClick={() => void disconnect()} className="pressable rounded-lg border border-white/10 px-4 py-1.5 text-sm">

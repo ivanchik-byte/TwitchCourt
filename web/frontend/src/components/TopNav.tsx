@@ -11,7 +11,7 @@ const tabs = [
 
 export function TopNav({ wsOk, rtt }: { wsOk: boolean; rtt: number | null }) {
   return (
-    <nav className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur-md">
+    <nav className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur-md" aria-label="Разделы трибунала">
       <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-2 px-3">
         <span className="font-mono text-xs tracking-widest text-amber-400">TRIBUNAL</span>
         <div className="flex gap-1">
@@ -32,7 +32,7 @@ export function TopNav({ wsOk, rtt }: { wsOk: boolean; rtt: number | null }) {
             </NavLink>
           ))}
         </div>
-        <div className="ml-auto flex items-center gap-2 font-mono text-xs">
+        <div className="ml-auto flex items-center gap-2 font-mono text-xs" role="status" aria-live="polite">
           <span className={cn('inline-block h-2 w-2 rounded-full', wsOk ? 'bg-emerald-400' : 'bg-red-500')} />
           <span className="text-zinc-400">{wsOk ? `live${rtt != null ? ` · ${rtt}ms` : ''}` : 'offline · retry 2s'}</span>
         </div>

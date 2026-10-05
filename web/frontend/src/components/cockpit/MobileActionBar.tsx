@@ -1,21 +1,11 @@
 import { Gavel } from 'lucide-react'
-import { toast } from 'sonner'
-import { useTribunal } from '../../tribunal/TribunalContext'
+import { useTribunalActions } from '../../tribunal/TribunalContext'
+import { useBan, usePunishWithToast } from './usePunish'
 
 export function MobileActionBar() {
-  const { gavel, punish } = useTribunal()
-
-  const ban = async () => {
-    const ok = await punish('ban')
-    if (!ok) {
-      toast.error('Не вышло — проверь секретный ключ')
-      return
-    }
-    toast('Бан выдан', {
-      duration: 5000,
-      action: { label: 'Отмена', onClick: () => void punish('pardon') },
-    })
-  }
+  const { gavel } = useTribunalActions()
+  const ban = useBan()
+  const punishToast = usePunishWithToast()
 
   return (
     <div className="sticky bottom-0 z-10 -mx-3 mt-1 border-t border-white/10 bg-black/85 px-3 py-2 backdrop-blur-md lg:hidden">
@@ -28,25 +18,29 @@ export function MobileActionBar() {
           <Gavel size={16} /> <span className="keycap">Space</span>
         </button>
         <button
-          onClick={() => void punish('pardon')}
+          onClick={() => void punishToast('pardon')}
+          aria-label="Помиловать (1)"
           className="pressable rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-2.5 text-sm"
         >
           1
         </button>
         <button
-          onClick={() => void punish('timeout', 60)}
+          onClick={() => void punishToast('timeout', 60)}
+          aria-label="Мут 60 секунд (2)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2.5 py-2.5 text-sm"
         >
           60с
         </button>
         <button
-          onClick={() => void punish('timeout', 300)}
+          onClick={() => void punishToast('timeout', 300)}
+          aria-label="Мут 5 минут (3)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2.5 py-2.5 text-sm"
         >
           5м
         </button>
         <button
           onClick={() => void ban()}
+          aria-label="Бан канала (4)"
           className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-2.5 py-2.5 text-sm"
         >
           Бан

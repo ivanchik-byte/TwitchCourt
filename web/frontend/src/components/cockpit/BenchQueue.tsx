@@ -1,11 +1,13 @@
 import { Shuffle, SkipForward } from 'lucide-react'
-import { useTribunal } from '../../tribunal/TribunalContext'
+import { useTribunalActions, useTribunalPool, useTribunalState } from '../../tribunal/TribunalContext'
 
 export function BenchQueue() {
-  const { t, pool, pick, skip } = useTribunal()
+  const t = useTribunalState()
+  const pool = useTribunalPool()
+  const { pick, skip } = useTribunalActions()
 
   return (
-    <section className="card flex min-h-0 flex-col gap-2 p-3">
+    <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Скамья подсудимых">
       <p className="text-[11px] uppercase tracking-widest text-zinc-500">Скамья · !court</p>
       <div className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2.5">
         {t.defendant ? (
@@ -18,7 +20,7 @@ export function BenchQueue() {
           <p className="text-sm text-zinc-500">Никого на скамье</p>
         )}
       </div>
-      <ul className="flex min-h-[120px] flex-col gap-1 overflow-y-auto lg:flex-1">
+      <ul className="flex min-h-[120px] flex-col gap-1 overflow-y-auto lg:flex-1" aria-label="Очередь !court">
         {pool.length === 0 && !t.defendant && (
           <li className="rounded-lg border border-dashed border-white/10 p-2 text-sm text-zinc-500">
             Очередь пуста. Ждём !court.
@@ -26,9 +28,13 @@ export function BenchQueue() {
         )}
         {pool.map((s) => (
           <li key={s.nick} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
-            <span className="min-w-0 flex-1 truncate text-sm">{s.nick}</span>
+            <span className="min-w-0 flex-1 truncate text-sm">
+              {s.nick}
+              {s.reason && <span className="ml-1.5 text-xs text-zinc-500">· {s.reason}</span>}
+            </span>
             <button
               onClick={() => void pick(s.nick)}
+              aria-label={`Взять на скамью ${s.nick}`}
               className="pressable rounded-md border border-white/10 px-2 py-0.5 text-xs text-zinc-300"
             >
               Взять
@@ -45,9 +51,10 @@ export function BenchQueue() {
         </button>
         <button
           onClick={() => void skip()}
+          aria-label="Пропустить (N)"
           className="pressable flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-2 text-sm text-zinc-300"
         >
-          <SkipForward size={14} /> <span className="keycap">Tab</span>
+          <SkipForward size={14} /> <span className="keycap">N</span>
         </button>
       </div>
     </section>

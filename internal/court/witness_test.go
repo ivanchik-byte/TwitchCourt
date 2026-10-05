@@ -15,11 +15,13 @@ import (
 )
 
 func newWitnessEngine() *Engine {
-	return &Engine{
+	e := &Engine{
 		filter: safety.NewFilter(nil),
 		recall: memory.NewStore(""),
 		state:  StateIdle,
 	}
+	e.SwapConfig(config.DefaultConfig())
+	return e
 }
 
 func TestAddWitnessIdle(t *testing.T) {
@@ -140,11 +142,13 @@ func TestFallbackDefense(t *testing.T) {
 
 func TestCastVoiceMapping(t *testing.T) {
 	e := newWitnessEngine()
-	e.cfg = config.DefaultConfig()
+	e.SwapConfig(config.DefaultConfig())
 	if got := e.castVoice("ru-RU-DmitryNeural", "aidar"); got != "ru-RU-DmitryNeural" {
 		t.Fatalf("edge engine must keep edge voice, got %q", got)
 	}
-	e.cfg.TTS.Engine = "silero"
+	next := e.cfg.Load().Clone()
+	next.TTS.Engine = "silero"
+	e.SwapConfig(next)
 	if got := e.castVoice("ru-RU-DmitryNeural", "aidar"); got != "aidar" {
 		t.Fatalf("silero engine must map to speaker, got %q", got)
 	}

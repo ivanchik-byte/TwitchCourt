@@ -23,9 +23,12 @@ export function useHotkeys(map: HotkeyMap) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (inField(e)) return
+      const el = e.target as HTMLElement | null
       const m = ref.current
       switch (e.code) {
         case 'Space':
+          // a focused button already fires on Space — don't double-fire the gavel
+          if (el?.closest?.('button, [role="button"], a')) return
           e.preventDefault()
           m.onGavel?.()
           break
@@ -44,12 +47,10 @@ export function useHotkeys(map: HotkeyMap) {
         case 'KeyR':
           m.onRandom?.()
           break
-        case 'Tab':
-          e.preventDefault()
+        case 'KeyN':
           m.onSkip?.()
           break
-        case 'F12':
-          e.preventDefault()
+        case 'Escape':
           m.onPanic?.()
           break
       }

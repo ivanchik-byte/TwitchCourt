@@ -1,6 +1,7 @@
 server:
   host: "127.0.0.1"
   port: 7890
+  secret: ""
 
 ai:
   provider: "groq"
@@ -8,6 +9,7 @@ ai:
   model: "llama-3.3-70b-versatile"
   temperature: 0.85
   stream: true
+  base_url: ""
 
 tts:
   enabled: true
@@ -29,11 +31,18 @@ tts:
 
 courtroom:
   theme: "ace_attorney"
+  judge_name: "Судья"
   judge_style: "strict"
   defense_sec: 20
   testimony_sec: 25
   sue_threshold: 5
   sue_window_sec: 600
+  articles:
+    - "Слив катки"
+    - "Токсичность в чате"
+    - "Опоздание"
+    - "Байт на бан"
+    - "Духота в голосовом"
   punishments:
     - "10 приседаний в прямом эфире"
     - "Минута молчания с рукой на сердце"

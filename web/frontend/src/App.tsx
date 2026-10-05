@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { TopNav } from './components/TopNav'
-import { TribunalProvider, useTribunal } from './tribunal/TribunalContext'
+import { TribunalProvider, useTribunalState } from './tribunal/TribunalContext'
 import { CockpitView } from './views/CockpitView'
 
 const ModesView = lazy(() => import('./views/ModesView').then((m) => ({ default: m.ModesView })))
@@ -10,7 +10,7 @@ const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ de
 const OBSRemoteView = lazy(() => import('./views/OBSRemoteView').then((m) => ({ default: m.OBSRemoteView })))
 
 function Shell() {
-  const { t } = useTribunal()
+  const t = useTribunalState()
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
@@ -22,6 +22,7 @@ function Shell() {
             <Route path="/modes" element={<ModesView />} />
             <Route path="/obs" element={<OBSRemoteView />} />
             <Route path="/settings" element={<SettingsView />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>

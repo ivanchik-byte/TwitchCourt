@@ -1,6 +1,6 @@
-# Frontend toolchain (rebuilt via `make frontend`)
+# Frontend toolchain (dashboard/ is built output, committed for go:embed)
+node_modules/
 web/frontend/node_modules/
-web/frontend/dist/
 
 # Documentation & notes
 MoneyPrinter.md
@@ -11,6 +11,7 @@ notes.md
 *.exe
 StreamTribunal
 stream-tribunal-server
+/server
 bin/
 dist/
 
@@ -25,3 +26,6 @@ data/
 image.jpg
 web/frontend/tsconfig.tsbuildinfo
 server.log
+*.log
+.env
+web/compiled/
