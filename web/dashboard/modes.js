@@ -614,12 +614,22 @@ var GooeyNav;
                 .then((data) => {
                 const p = data && data.punishment;
                 if (punishStatus && p) {
-                    punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+                    punishStatus.textContent = "Кара: " + punishLabel(p);
                 }
             })
                 .catch(() => undefined);
         });
     });
+    function punishLabel(p) {
+        switch (p.Kind) {
+            case "pardon":
+                return "Помилование";
+            case "ban":
+                return "Бан";
+            default:
+                return "Мут " + p.Secs + "с";
+        }
+    }
     function loadDock() {
         if (!poolList)
             return;
@@ -654,7 +664,7 @@ var GooeyNav;
             });
             const p = data && data.punishment;
             if (punishStatus && p) {
-                punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+                punishStatus.textContent = "Кара: " + punishLabel(p);
             }
         })
             .catch(() => undefined);

@@ -2,6 +2,7 @@ namespace Desk {
   export type ServerEvent =
     | { type: "state_change"; payload: StateChange }
     | { type: "verdict"; payload: Verdict }
+    | { type: "subtitles"; payload: Subtitles }
     | { type: "donation"; payload: Donation }
     | { type: "panic"; payload: Record<string, unknown> }
     | { type: string; payload: Record<string, unknown> };
@@ -20,6 +21,11 @@ namespace Desk {
     defendant?: string;
     charge?: string;
     time_left_sec?: number;
+  }
+
+  export interface Subtitles {
+    speaker: string;
+    text: string;
   }
 
   export interface Verdict {
@@ -62,11 +68,58 @@ namespace Desk {
   const btnPanic = el("btn-panic");
   const btnGavel = el("btn-gavel");
   const deckStatus = el("deck-status");
-  const trialBox = el("trial-box");
-  const activeCaseTitle = el("active-case-title");
   const eventFeed = el("event-feed");
+  const phasePill = el("phase-pill");
+  const phaseName = el("phase-name");
+  const phaseTimer = el("phase-timer");
+  const judgeLine = el("judge-line");
+  const verdictLog = el("verdict-log");
+  const dockCurrent = el("dock-current");
+  const manualNick = el("manual-nick") as HTMLInputElement;
+  const manualCrime = el("manual-crime") as HTMLInputElement;
+  const btnManualTrial = el("btn-manual-trial");
 
   let ws: WebSocket | null = null;
+  let phaseDeadline = 0;
+  let phaseTick = 0;
+
+  const phaseNames: Record<string, string> = {
+    idle: "Зал пуст",
+    indictment: "Обвинение",
+    testimony: "Показания",
+    defense: "Твоя защита",
+    objection: "Протест",
+    deliberation: "Совещание",
+    verdict: "Приговор",
+  };
+
+  function stopTimer(): void {
+    window.clearInterval(phaseTick);
+    phaseTick = 0;
+    phaseDeadline = 0;
+    phaseTimer.textContent = "";
+    phaseTimer.classList.remove("urgent");
+  }
+
+  function renderTimer(): void {
+    if (!phaseDeadline) return;
+    const left = Math.max(0, Math.round((phaseDeadline - Date.now()) / 1000));
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    phaseTimer.textContent = pad(Math.floor(left / 60)) + ":" + pad(left % 60);
+    phaseTimer.classList.toggle("urgent", left <= 5);
+    if (left <= 0) stopTimer();
+  }
+
+  function renderPhase(state: string, timeLeft?: number): void {
+    Desk.say(phasePill, phaseNames[state] || state);
+    Desk.say(phaseName, phaseNames[state] || state);
+    stopTimer();
+    if (typeof timeLeft === "number" && timeLeft > 0 && state !== "idle") {
+      phaseDeadline = Date.now() + timeLeft * 1000;
+      renderTimer();
+      phaseTick = window.setInterval(renderTimer, 500);
+    }
+  }
 
   function secret(): string {
     return secretInput.value.trim();
@@ -117,12 +170,27 @@ namespace Desk {
   }
 
   function showTrial(title: string): void {
-    Desk.say(activeCaseTitle, title);
-    trialBox.classList.remove("hidden");
+    Desk.say(dockCurrent, title);
   }
 
   function hideTrial(): void {
-    trialBox.classList.add("hidden");
+    Desk.say(dockCurrent, "Никого на скамье");
+    renderPhase("idle");
+  }
+
+  function logVerdict(text: string): void {
+    const empty = verdictLog.querySelector(".feed-empty");
+    if (empty) empty.remove();
+    const item = document.createElement("li");
+    const now = new Date();
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    item.textContent = "[" + pad(now.getHours()) + ":" + pad(now.getMinutes()) + "] " + text;
+    verdictLog.prepend(item);
+    while (verdictLog.children.length > 5) {
+      const last = verdictLog.lastChild;
+      if (last) last.remove();
+      else break;
+    }
   }
 
   function connect(): void {
@@ -142,14 +210,22 @@ namespace Desk {
       switch (msg.type) {
         case "state_change": {
           const state = String(msg.payload.state || "idle");
+          const secs = typeof msg.payload.time_left_sec === "number" ? msg.payload.time_left_sec : undefined;
+          renderPhase(state, secs);
           if (state === "idle") {
             hideTrial();
           } else {
-            const caseTitle = String(msg.payload.case_title || "");
             const defendant = String(msg.payload.defendant || "");
-            showTrial(caseTitle ? caseTitle + " (" + defendant + ")" : "Идет заседание");
+            if (defendant) showTrial("На скамье: " + defendant);
+            const caseTitle = String(msg.payload.case_title || "");
             if (caseTitle) feed("Открыто дело: " + caseTitle, "trial");
           }
+          break;
+        }
+        case "subtitles": {
+          const speaker = String(msg.payload.speaker || "");
+          const text = String(msg.payload.text || "");
+          if (text) Desk.say(judgeLine, speaker ? speaker + ": " + text : text);
           break;
         }
         case "donation": {
@@ -167,6 +243,7 @@ namespace Desk {
           if (msg.payload.penalty) parts.push("наказание: " + String(msg.payload.penalty));
           if (msg.payload.twist) parts.push(String(msg.payload.twist));
           feed(parts.join(" · "), "verdict");
+          logVerdict(parts.join(" · "));
           break;
         }
         case "panic":
@@ -192,7 +269,57 @@ namespace Desk {
     if (event.key === "F12") {
       event.preventDefault();
       sendAction("panic", {});
+      return;
     }
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
+    switch (event.key) {
+      case " ":
+        event.preventDefault();
+        btnGavel.click();
+        break;
+      case "1":
+      case "2":
+      case "3":
+      case "4": {
+        const chips = Array.from(document.querySelectorAll<HTMLButtonElement>("#punish-row .chip"));
+        const chip = chips[Number(event.key) - 1];
+        if (chip) chip.click();
+        break;
+      }
+      case "r":
+      case "R":
+      case "к":
+      case "К":
+        pickSeat("");
+        break;
+      case "Tab":
+        event.preventDefault();
+        if (btnDockSkip) (btnDockSkip as HTMLButtonElement).click();
+        break;
+      default:
+        break;
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("#article-row .chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      manualCrime.value = chip.getAttribute("data-crime") || "";
+      manualNick.focus();
+    });
+  });
+
+  btnManualTrial.addEventListener("click", () => {
+    const defendant = manualNick.value.trim();
+    const crime = manualCrime.value.trim();
+    if (!defendant || !crime) {
+      Desk.say(deckStatus, "Впиши ник и статью.");
+      return;
+    }
+    post("/api/trial", { defendant, crime, viewer: true }).then((ok) => {
+      Desk.say(deckStatus, ok ? "Дело открыто." : "Суд занят или нет связи.");
+    });
   });
 
   const backdrop = document.getElementById("bg-canvas") as HTMLCanvasElement | null;
@@ -220,6 +347,17 @@ namespace Desk {
 
   function dockSay(text: string): void {
     if (dockStatus) dockStatus.textContent = text;
+  }
+
+  function punishLabel(p: { Kind: string; Secs: number }): string {
+    switch (p.Kind) {
+      case "pardon":
+        return "Помилование";
+      case "ban":
+        return "Бан";
+      default:
+        return "Мут " + p.Secs + "с";
+    }
   }
 
   function pickSeat(nick: string): void {
@@ -261,7 +399,7 @@ namespace Desk {
         .then((data: { punishment?: { Kind: string; Secs: number } }) => {
           const p = data && data.punishment;
           if (punishStatus && p) {
-            punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+            punishStatus.textContent = "Кара: " + punishLabel(p);
           }
         })
         .catch(() => undefined);
@@ -300,7 +438,7 @@ namespace Desk {
         });
         const p = data && data.punishment;
         if (punishStatus && p) {
-          punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+          punishStatus.textContent = "Кара: " + punishLabel(p);
         }
       })
       .catch(() => undefined);

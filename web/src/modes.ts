@@ -252,12 +252,23 @@
         .then((data: { punishment?: { Kind: string; Secs: number } }) => {
           const p = data && data.punishment;
           if (punishStatus && p) {
-            punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+            punishStatus.textContent = "Кара: " + punishLabel(p);
           }
         })
         .catch(() => undefined);
     });
   });
+
+  function punishLabel(p: { Kind: string; Secs: number }): string {
+    switch (p.Kind) {
+      case "pardon":
+        return "Помилование";
+      case "ban":
+        return "Бан";
+      default:
+        return "Мут " + p.Secs + "с";
+    }
+  }
 
   function loadDock(): void {
     if (!poolList) return;
@@ -291,7 +302,7 @@
         });
         const p = data && data.punishment;
         if (punishStatus && p) {
-          punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+          punishStatus.textContent = "Кара: " + punishLabel(p);
         }
       })
       .catch(() => undefined);

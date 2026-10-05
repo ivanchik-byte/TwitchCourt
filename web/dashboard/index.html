@@ -16,73 +16,75 @@
       <li><a href="/modes" data-page="modes">Режимы</a></li>
     </ul>
   </nav>
-  <div class="ledger">
-    <header class="masthead">
-      <div class="masthead-title">
-        <p class="overline">Реестр №404 · пульт</p>
-        <h1>Пульт трибунала</h1>
-        <p class="subline">Быстрые руки, громкий молоток</p>
+  <div class="ledger cockpit">
+    <header class="cockpit-bar">
+      <div class="cockpit-title">
+        <span class="overline">Трибунал · пульт</span>
+        <span id="phase-pill" class="phase-pill">Зал пуст</span>
       </div>
-      <div class="masthead-status">
+      <div class="cockpit-status">
         <p class="docket-line"><span id="ws-dot" class="dot" aria-hidden="true"></span> <span id="ws-label">Подключение...</span></p>
-        <div class="masthead-keys">
-          <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
-          <button type="button" id="btn-panic" class="btn btn-seal">Мьют (F12)</button>
-        </div>
+        <input type="password" id="secret-input" placeholder="Секретный ключ" autocomplete="off">
+        <button type="button" id="btn-panic" class="btn btn-seal">⚡ Паника (F12)</button>
       </div>
     </header>
 
-    <main class="folio">
-      <section class="article" aria-labelledby="deck-heading">
-        <p class="overline">Быстрый вызов</p>
-        <p class="overline">Скамья подсудимых</p>
-        <h2 id="deck-heading">Очередь на скамью</h2>
-        <p class="subline">Зрители пишут !court · ты выбираешь одного</p>
+    <main class="cockpit-grid">
+      <section class="cell cell-dock" aria-labelledby="dock-heading">
+        <p class="overline">Скамья · !court</p>
+        <h2 id="dock-heading">Очередь</h2>
+        <p id="dock-current" class="case-line">Никого на скамье</p>
         <ul id="dock-list" class="event-feed" aria-live="polite">
           <li class="feed-empty">Очередь пуста. Ждём !court.</li>
         </ul>
-        <div class="presets">
-          <button type="button" id="btn-dock-random" class="btn">Случайный на скамью</button>
-          <button type="button" id="btn-dock-skip" class="btn btn-seal">Подсудимый спит (Скип)</button>
+        <div class="btn-row">
+          <button type="button" id="btn-dock-random" class="btn">Случайный <span class="key">R</span></button>
+          <button type="button" id="btn-dock-skip" class="btn btn-seal">Скип <span class="key">Tab</span></button>
         </div>
         <p id="dock-status" class="footnote" aria-live="polite"></p>
-        <h3>Кара за виновность</h3>
-        <div class="presets" id="punish-row">
-          <button type="button" class="chip" data-kind="pardon">Помиловать</button>
-          <button type="button" class="chip" data-kind="timeout" data-secs="60">Мут 60</button>
-          <button type="button" class="chip" data-kind="timeout" data-secs="300">Мут 300</button>
-          <button type="button" class="chip" data-kind="ban">Бан</button>
+      </section>
+
+      <section class="cell cell-gavel" aria-labelledby="phase-heading">
+        <p class="overline">Ход суда</p>
+        <h2 id="phase-heading"><span id="phase-name">Зал пуст</span> <span id="phase-timer" class="phase-timer"></span></h2>
+        <button type="button" id="btn-gavel" class="btn btn-gavel">🔨 УДАРИТЬ МОЛОТКОМ <span class="key">Space</span></button>
+        <p id="deck-status" class="footnote" aria-live="polite"></p>
+        <p id="judge-line" class="judge-line" aria-live="off"></p>
+        <h3>Быстрые статьи</h3>
+        <div class="row">
+          <label class="field"><span>Ник зрителя</span><input type="text" id="manual-nick" placeholder="ник" autocomplete="off"></label>
+          <label class="field"><span>Статья</span><input type="text" id="manual-crime" placeholder="за что судим" autocomplete="off"></label>
+        </div>
+        <div class="presets" id="article-row">
+          <button type="button" class="chip" data-crime="Слив катки на 20 минуте">Слив катки</button>
+          <button type="button" class="chip" data-crime="Токсичность в чате">Токсичность</button>
+          <button type="button" class="chip" data-crime="Опоздание на стрим">Опоздание</button>
+          <button type="button" class="chip" data-crime="Байт на бан">Байт на бан</button>
+          <button type="button" class="chip" data-crime="Духота в голосовом">Духота</button>
+        </div>
+        <button type="button" id="btn-manual-trial" class="btn">Открыть дело</button>
+      </section>
+
+      <section class="cell cell-punish" aria-labelledby="punish-heading">
+        <p class="overline">Кара · вердикт в 1 клик</p>
+        <h2 id="punish-heading">Наказание</h2>
+        <div class="punish-grid" id="punish-row">
+          <button type="button" class="chip punish-pardon" data-kind="pardon">Помиловать <span class="key">1</span></button>
+          <button type="button" class="chip punish-mute" data-kind="timeout" data-secs="60">Мут 60 <span class="key">2</span></button>
+          <button type="button" class="chip punish-mute-long" data-kind="timeout" data-secs="300">Мут 300 <span class="key">3</span></button>
+          <button type="button" class="chip punish-ban" data-kind="ban">Бан <span class="key">4</span></button>
         </div>
         <p id="punish-status" class="footnote" aria-live="polite"></p>
-        <button type="button" id="btn-gavel" class="btn btn-gavel">Молоток · «Суд слушает!»</button>
-        <p id="deck-status" class="footnote" aria-live="polite"></p>
-      </section>
-
-      <section class="article hidden" id="trial-box" aria-labelledby="trial-heading">
-        <p class="overline">Идет заседание</p>
-        <h2 id="trial-heading">Активный суд</h2>
-        <p id="active-case-title" class="case-line">Нет активного дела</p>
-        <p id="trial-status" class="footnote" aria-live="polite"></p>
-      </section>
-
-      <section class="article article-wide" aria-labelledby="feed-heading">
-        <p class="overline">События</p>
-        <h2 id="feed-heading">Лента событий</h2>
-        <ul id="event-feed" class="event-feed" aria-live="polite">
-          <li class="feed-empty">В зале суда тихо. Выберите дело на плитке выше.</li>
+        <h3>Протокол</h3>
+        <ul id="verdict-log" class="event-feed" aria-live="polite">
+          <li class="feed-empty">Приговоров пока нет.</li>
+        </ul>
+        <h3>Лента</h3>
+        <ul id="event-feed" class="event-feed feed-compact" aria-live="polite">
+          <li class="feed-empty">В зале суда тихо.</li>
         </ul>
       </section>
     </main>
-
-    <footer class="colophon" id="court-contacts">
-      <p>Суд над стримером · подсудимый всегда стример · ничья в пользу подсудимого</p>
-      <div class="social-dock" role="navigation" aria-label="Связь">
-        <a class="dock-item" href="https://t.me/ivanchikbyte" target="_blank" rel="noopener" data-short="TG" data-full="Telegram"><span>TG</span></a>
-        <a class="dock-item" href="https://t.me/ivanchik_byte" target="_blank" rel="noopener" data-short="CH" data-full="Канал"><span>CH</span></a>
-        <a class="dock-item" href="https://github.com/ivanchik-byte" target="_blank" rel="noopener" data-short="GH" data-full="GitHub"><span>GH</span></a>
-        <a class="dock-item" href="https://github.com/ivanchik-byte?tab=repositories" target="_blank" rel="noopener" data-short="RP" data-full="Репозитории"><span>RP</span></a>
-      </div>
-    </footer>
   </div>
 
   <script src="app.js"></script>
