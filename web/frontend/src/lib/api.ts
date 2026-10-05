@@ -31,3 +31,11 @@ export async function apiPut(path: string, body: unknown): Promise<boolean> {
   const res = await apiFetch(path, { method: 'PUT', body: JSON.stringify(body) })
   return res.ok
 }
+
+export async function apiUpload(path: string, form: FormData): Promise<boolean> {
+  const headers = new Headers()
+  const secret = getSecret()
+  if (secret) headers.set('X-Tribunal-Secret', secret)
+  const res = await fetch(path, { method: 'POST', headers, body: form })
+  return res.ok
+}

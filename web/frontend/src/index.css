@@ -1,3 +1,5 @@
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 
 @theme {
@@ -10,14 +12,16 @@
   --color-innocent: oklch(0.7 0.16 160);
   --color-counsel: oklch(0.72 0.12 200);
   --color-muted: oklch(0.55 0 0);
-  --font-sans: "Satoshi", "Geist", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 html, body {
   background: var(--color-canvas);
   color: oklch(0.93 0 0);
   font-family: var(--font-sans);
+  letter-spacing: -0.015em;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   min-height: 100dvh;
 }
 
@@ -57,6 +61,11 @@ html, body {
 .timer-digits {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 @media (prefers-reduced-motion: reduce) {

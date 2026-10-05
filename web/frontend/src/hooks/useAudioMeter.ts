@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function useAudioMeter(active: boolean) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [level, setLevel] = useState(0)
 
   useEffect(() => {
     if (!active) return
@@ -14,6 +13,7 @@ export function useAudioMeter(active: boolean) {
 
     const data = new Uint8Array(64)
     const draw = () => {
+      if (cancelled) return
       const canvas = canvasRef.current
       if (!canvas) {
         raf = requestAnimationFrame(draw)
@@ -30,16 +30,21 @@ export function useAudioMeter(active: boolean) {
         const v = Math.abs(data[i] - 128) / 128
         if (v > peak) peak = v
       }
-      setLevel((prev) => prev * 0.7 + peak * 0.3)
       const segs = 24
       const w = canvas.width / segs
       g.clearRect(0, 0, canvas.width, canvas.height)
       for (let i = 0; i < segs; i++) {
         const on = peak * segs > i
-        g.fillStyle = on ? (i > segs * 0.8 ? '#ef4444' : i > segs * 0.55 ? '#f59e0b' : '#10b981') : 'rgba(255,255,255,0.08)'
+        g.fillStyle = on
+          ? i > segs * 0.8
+            ? 'oklch(0.62 0.22 25)'
+            : i > segs * 0.55
+              ? 'oklch(0.75 0.15 75)'
+              : 'oklch(0.7 0.16 160)'
+          : 'rgba(255,255,255,0.08)'
         g.fillRect(i * w + 1, 2, w - 2, canvas.height - 4)
       }
-      if (!cancelled) raf = requestAnimationFrame(draw)
+      raf = requestAnimationFrame(draw)
     }
 
     navigator.mediaDevices
@@ -66,5 +71,5 @@ export function useAudioMeter(active: boolean) {
     }
   }, [active])
 
-  return { canvasRef, level }
+  return { canvasRef }
 }

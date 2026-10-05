@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export interface HotkeyMap {
   onGavel?: () => void
@@ -17,40 +17,44 @@ function inField(e: KeyboardEvent): boolean {
 }
 
 export function useHotkeys(map: HotkeyMap) {
+  const ref = useRef(map)
+  ref.current = map
+
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (inField(e)) return
+      const m = ref.current
       switch (e.code) {
         case 'Space':
           e.preventDefault()
-          map.onGavel?.()
+          m.onGavel?.()
           break
         case 'Digit1':
-          map.onPardon?.()
+          m.onPardon?.()
           break
         case 'Digit2':
-          map.onMute60?.()
+          m.onMute60?.()
           break
         case 'Digit3':
-          map.onMute300?.()
+          m.onMute300?.()
           break
         case 'Digit4':
-          map.onBan?.()
+          m.onBan?.()
           break
         case 'KeyR':
-          map.onRandom?.()
+          m.onRandom?.()
           break
         case 'Tab':
           e.preventDefault()
-          map.onSkip?.()
+          m.onSkip?.()
           break
         case 'F12':
           e.preventDefault()
-          map.onPanic?.()
+          m.onPanic?.()
           break
       }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [map])
+  }, [])
 }

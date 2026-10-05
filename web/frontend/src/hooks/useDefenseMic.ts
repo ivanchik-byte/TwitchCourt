@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface DefenseMic {
   supported: boolean
@@ -8,35 +8,64 @@ interface DefenseMic {
   stop: () => void
 }
 
+interface SpeechRec {
+  lang: string
+  interimResults: boolean
+  continuous: boolean
+  onresult: ((ev: SpeechResultEvent) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+}
+
+interface SpeechResultEvent {
+  resultIndex: number
+  results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>
+}
+
+const INTERIM_THROTTLE_MS = 400
+
+function detectRecognition(): (new () => SpeechRec) | null {
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRec
+    webkitSpeechRecognition?: new () => SpeechRec
+  }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
 export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void): DefenseMic {
+  const [supported] = useState(() => detectRecognition() !== null)
   const [transcript, setTranscript] = useState('')
   const [listening, setListening] = useState(false)
-  const recRef = useRef<{ stop: () => void; start: () => void } | null>(null)
+  const recRef = useRef<SpeechRec | null>(null)
+  const lastInterimAt = useRef(0)
   const onFinalRef = useRef(onFinal)
   onFinalRef.current = onFinal
 
   useEffect(() => {
-    const SR = (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition
-      ?? (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
-    if (!SR || !enabled) return
+    const Ctor = detectRecognition()
+    if (!Ctor || !enabled) return
 
-    const Rec = SR as new () => {
-      lang: string
-      interimResults: boolean
-      continuous: boolean
-      onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
-      onend: (() => void) | null
-      start: () => void
-      stop: () => void
-    }
-    const rec = new Rec()
+    const rec = new Ctor()
     rec.lang = 'ru-RU'
     rec.interimResults = true
     rec.continuous = true
     rec.onresult = (ev) => {
-      const last = ev.results[ev.results.length - 1]?.[0]?.transcript ?? ''
-      setTranscript(last)
-      if (last.trim()) onFinalRef.current(last.trim())
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const res = ev.results[i]
+        const text = res[0]?.transcript ?? ''
+        if (!text.trim()) continue
+        if (res.isFinal) {
+          setTranscript(text)
+          onFinalRef.current(text.trim())
+        } else {
+          const now = Date.now()
+          if (now - lastInterimAt.current > INTERIM_THROTTLE_MS) {
+            lastInterimAt.current = now
+            setTranscript(text)
+          }
+        }
+      }
     }
     // chrome sleeps recognition — restart while defense phase is live
     rec.onend = () => {
@@ -62,15 +91,28 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
       } catch {
         /* noop */
       }
+      recRef.current = null
       setListening(false)
     }
   }, [enabled])
 
-  return {
-    supported: true,
-    listening,
-    transcript,
-    start: () => undefined,
-    stop: () => undefined,
-  }
+  const start = useCallback(() => {
+    try {
+      recRef.current?.start()
+      setListening(true)
+    } catch {
+      /* already running */
+    }
+  }, [])
+
+  const stop = useCallback(() => {
+    try {
+      recRef.current?.stop()
+    } catch {
+      /* already stopped */
+    }
+    setListening(false)
+  }, [])
+
+  return { supported, listening, transcript, start, stop }
 }

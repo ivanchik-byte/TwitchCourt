@@ -301,6 +301,7 @@ func main() {
 				"model":       cfg.AI.Model,
 				"temperature": cfg.AI.Temperature,
 				"stream":      cfg.AI.Stream,
+				"base_url":    cfg.AI.BaseURL,
 				"has_key":     cfg.AI.APIKey != "",
 				"live":        cfg.AI.APIKey != "" || cfg.AI.Provider == "ollama",
 			}
@@ -318,6 +319,7 @@ func main() {
 				APIKey      *string  `json:"api_key"`
 				Model       *string  `json:"model"`
 				Temperature *float64 `json:"temperature"`
+				BaseURL     *string  `json:"base_url"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -340,6 +342,9 @@ func main() {
 			}
 			if req.Temperature != nil {
 				cfg.AI.Temperature = *req.Temperature
+			}
+			if req.BaseURL != nil {
+				cfg.AI.BaseURL = *req.BaseURL
 			}
 			if err := cfg.Save("config.yaml"); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

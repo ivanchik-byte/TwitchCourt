@@ -49,6 +49,9 @@ func NewClient(cfg config.AIConfig) *Client {
 		endpoint = "https://api.cerebras.ai/v1/chat/completions"
 	case "ollama":
 		endpoint = "http://localhost:11434/v1/chat/completions"
+		if strings.TrimSpace(cfg.BaseURL) != "" {
+			endpoint = strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/") + "/v1/chat/completions"
+		}
 	}
 
 	client := &Client{

@@ -31,6 +31,7 @@ type AIConfig struct {
 	Model       string  `yaml:"model"`
 	Temperature float64 `yaml:"temperature"`
 	Stream      bool    `yaml:"stream"`
+	BaseURL     string  `yaml:"base_url"`
 }
 
 type TTSConfig struct {
