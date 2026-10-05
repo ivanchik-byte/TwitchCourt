@@ -385,6 +385,30 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 			parts = append(parts, "Подсудимый: "+t)
 		}
 	}
+	if e.recall != nil {
+		var snitches []string
+		for _, l := range e.recall.RecentComments(10) {
+			text := strings.TrimSpace(html.UnescapeString(l.Text))
+			if !strings.HasPrefix(strings.ToLower(text), "!snitch") {
+				continue
+			}
+			text = strings.TrimSpace(text[len("!snitch"):])
+			if text == "" {
+				continue
+			}
+			author := l.Author
+			if author == "" {
+				author = "зал"
+			}
+			snitches = append(snitches, author+": "+truncateRunes(text, maxTestimonyRunes))
+		}
+		if len(snitches) > 3 {
+			snitches = snitches[len(snitches)-3:]
+		}
+		if len(snitches) > 0 {
+			parts = append(parts, "Доносы зала: "+strings.Join(snitches, " / "))
+		}
+	}
 	if d := strings.TrimSpace(html.UnescapeString(c.Defense)); d != "" {
 		parts = append(parts, "Защита: "+d)
 	}

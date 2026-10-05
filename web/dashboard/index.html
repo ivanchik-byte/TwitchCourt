@@ -35,13 +35,25 @@
     <main class="folio">
       <section class="article" aria-labelledby="deck-heading">
         <p class="overline">Быстрый вызов</p>
-        <h2 id="deck-heading">Открыть дело</h2>
-        <div class="deck">
-          <button type="button" class="tile" data-defendant="Стример" data-crime="Купание в лаве с полным инвентарем" data-context="Чат: опять в лаву!">Лава</button>
-          <button type="button" class="tile" data-defendant="Стример" data-crime="Взрыв на крипере у порога дома" data-context="Чат: крипер подкрался сзади!">Крипер</button>
-          <button type="button" class="tile" data-defendant="Стример" data-crime="Слив клатча один в один" data-context="Чат: клатч был твой!">Клатч</button>
-          <button type="button" class="tile" data-defendant="Стример" data-crime="Опоздание на стрим на 40 минут без предупреждения" data-context="Чат: где стрим?">Опоздание</button>
+        <p class="overline">Скамья подсудимых</p>
+        <h2 id="deck-heading">Очередь на скамью</h2>
+        <p class="subline">Зрители пишут !court · ты выбираешь одного</p>
+        <ul id="dock-list" class="event-feed" aria-live="polite">
+          <li class="feed-empty">Очередь пуста. Ждём !court.</li>
+        </ul>
+        <div class="presets">
+          <button type="button" id="btn-dock-random" class="btn">Случайный на скамью</button>
+          <button type="button" id="btn-dock-skip" class="btn btn-seal">Подсудимый спит (Скип)</button>
         </div>
+        <p id="dock-status" class="footnote" aria-live="polite"></p>
+        <h3>Кара за виновность</h3>
+        <div class="presets" id="punish-row">
+          <button type="button" class="chip" data-kind="pardon">Помиловать</button>
+          <button type="button" class="chip" data-kind="timeout" data-secs="60">Мут 60</button>
+          <button type="button" class="chip" data-kind="timeout" data-secs="300">Мут 300</button>
+          <button type="button" class="chip" data-kind="ban">Бан</button>
+        </div>
+        <p id="punish-status" class="footnote" aria-live="polite"></p>
         <button type="button" id="btn-gavel" class="btn btn-gavel">Молоток · «Суд слушает!»</button>
         <p id="deck-status" class="footnote" aria-live="polite"></p>
       </section>

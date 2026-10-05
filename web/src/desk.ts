@@ -179,18 +179,6 @@ namespace Desk {
     };
   }
 
-  document.querySelectorAll<HTMLButtonElement>(".tile").forEach((tile) => {
-    tile.addEventListener("click", () => {
-      post("/api/trial", {
-        defendant: tile.getAttribute("data-defendant") || "Стример",
-        crime: tile.getAttribute("data-crime") || "",
-        context: tile.getAttribute("data-context") || "",
-      }).then((ok) => {
-        Desk.say(deckStatus, ok ? "Дело открыто." : "Суд занят или нет связи.");
-      });
-    });
-  });
-
   btnGavel.addEventListener("click", () => {
     sendAction("animation", { name: "slam" });
     post("/api/say", { text: "Суд слушает!" }).then((ok) => {
@@ -212,4 +200,112 @@ namespace Desk {
   const gooey = document.getElementById("gooey-nav");
   if (gooey) GooeyNav.mount(gooey);
   connect();
+
+  interface PoolSeat {
+    Nick: string;
+    Reason: string;
+  }
+
+  interface DockState {
+    pool?: PoolSeat[];
+    defendant?: string;
+    punishment?: { Kind: string; Secs: number };
+  }
+
+  const poolList = document.getElementById("dock-list");
+  const dockStatus = document.getElementById("dock-status");
+  const punishStatus = document.getElementById("punish-status");
+  const btnDockRandom = document.getElementById("btn-dock-random");
+  const btnDockSkip = document.getElementById("btn-dock-skip");
+
+  function dockSay(text: string): void {
+    if (dockStatus) dockStatus.textContent = text;
+  }
+
+  function pickSeat(nick: string): void {
+    fetch("/api/dock/pick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(nick ? { nick } : {}),
+    })
+      .then((res) => {
+        if (res.ok) loadDock();
+        else dockSay("Суд занят или очередь пуста.");
+      })
+      .catch(() => dockSay("Нет связи с сервером."));
+  }
+
+  if (btnDockRandom) btnDockRandom.addEventListener("click", () => pickSeat(""));
+  if (btnDockSkip) {
+    btnDockSkip.addEventListener("click", () => {
+      fetch("/api/dock/skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: "{}",
+      })
+        .then(() => loadDock())
+        .catch(() => dockSay("Нет связи с сервером."));
+    });
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("#punish-row .chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const kind = chip.getAttribute("data-kind") || "timeout";
+      const secs = Number(chip.getAttribute("data-secs") || "90");
+      fetch("/api/punish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ kind, secs }),
+      })
+        .then((res) => res.json())
+        .then((data: { punishment?: { Kind: string; Secs: number } }) => {
+          const p = data && data.punishment;
+          if (punishStatus && p) {
+            punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+          }
+        })
+        .catch(() => undefined);
+    });
+  });
+
+  function loadDock(): void {
+    if (!poolList) return;
+    fetch("/api/dock")
+      .then((res) => res.json())
+      .then((data: DockState) => {
+        while (poolList.firstChild) poolList.firstChild.remove();
+        const items = (data && data.pool) || [];
+        if (data && data.defendant) {
+          const now = document.createElement("li");
+          now.textContent = "На скамье: " + data.defendant;
+          poolList.appendChild(now);
+        }
+        if (items.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "feed-empty";
+          empty.textContent = "Очередь пуста. Ждём !court.";
+          poolList.appendChild(empty);
+        }
+        items.forEach((seat) => {
+          const item = document.createElement("li");
+          item.textContent = seat.Nick + (seat.Reason ? ": " + seat.Reason : "");
+          const take = document.createElement("button");
+          take.type = "button";
+          take.className = "chip";
+          take.textContent = "На скамью";
+          take.addEventListener("click", () => pickSeat(seat.Nick));
+          item.appendChild(document.createTextNode(" "));
+          item.appendChild(take);
+          poolList.appendChild(item);
+        });
+        const p = data && data.punishment;
+        if (punishStatus && p) {
+          punishStatus.textContent = "Кара: " + p.Kind + (p.Kind === "timeout" ? " " + p.Secs + "с" : "");
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  loadDock();
+  window.setInterval(loadDock, 3000);
 })();
