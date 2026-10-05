@@ -575,6 +575,45 @@ var GooeyNav;
     }
     loadUnban();
     window.setInterval(loadUnban, 30000);
+    function avatarColor(nick) {
+        let h = 0;
+        for (let i = 0; i < nick.length; i++)
+            h = (h * 31 + nick.charCodeAt(i)) % 360;
+        return "hsl(" + h + ", 60%, 42%)";
+    }
+    function waitLabel(joined) {
+        if (!joined)
+            return "";
+        const ms = Date.now() - Date.parse(joined);
+        if (!isFinite(ms) || ms < 0)
+            return "";
+        const m = Math.floor(ms / 60000);
+        if (m < 1)
+            return "меньше минуты";
+        if (m < 60)
+            return m + " мин";
+        return Math.floor(m / 60) + " ч " + (m % 60) + " мин";
+    }
+    function seatLine(seat) {
+        const item = document.createElement("li");
+        item.className = "dock-seat";
+        const av = document.createElement("span");
+        av.className = "avatar";
+        av.textContent = seat.Nick.slice(0, 1).toUpperCase();
+        av.style.background = avatarColor(seat.Nick);
+        item.appendChild(av);
+        const body = document.createElement("span");
+        body.textContent = seat.Nick + (seat.Reason ? " — «" + seat.Reason + "»" : "") + " · ждёт " + waitLabel(seat.JoinedAt);
+        item.appendChild(body);
+        const take = document.createElement("button");
+        take.type = "button";
+        take.className = "chip";
+        take.textContent = "На скамью";
+        take.addEventListener("click", () => pickSeat(seat.Nick));
+        item.appendChild(document.createTextNode(" "));
+        item.appendChild(take);
+        return item;
+    }
     const poolList = document.getElementById("dock-list");
     const dockStatus = document.getElementById("dock-status");
     const punishStatus = document.getElementById("punish-status");
@@ -661,16 +700,7 @@ var GooeyNav;
                 poolList.appendChild(empty);
             }
             items.forEach((seat) => {
-                const item = document.createElement("li");
-                item.textContent = seat.Nick + (seat.Reason ? ": " + seat.Reason : "");
-                const take = document.createElement("button");
-                take.type = "button";
-                take.className = "chip";
-                take.textContent = "На скамью";
-                take.addEventListener("click", () => pickSeat(seat.Nick));
-                item.appendChild(document.createTextNode(" "));
-                item.appendChild(take);
-                poolList.appendChild(item);
+                poolList.appendChild(seatLine(seat));
             });
             const p = data && data.punishment;
             if (punishStatus && p) {
@@ -712,7 +742,7 @@ var GooeyNav;
         const box = document.getElementById("mic-meter");
         if (!box || box.children.length > 0)
             return;
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 24; i++) {
             const seg = document.createElement("span");
             seg.className = "seg";
             box.appendChild(seg);
@@ -722,11 +752,11 @@ var GooeyNav;
         const box = document.getElementById("mic-meter");
         if (!box)
             return;
-        const lit = Math.round(level * 12);
+        const lit = Math.round(level * 24);
         const segs = box.children;
         for (let i = 0; i < segs.length; i++) {
             const seg = segs[i];
-            seg.className = "seg" + (i < lit ? " on" + (i >= 9 ? " hot" : i >= 6 ? " warn" : "") : "");
+            seg.className = "seg" + (i < lit ? " on" + (i >= 19 ? " hot" : i >= 13 ? " warn" : "") : "");
         }
     }
     function meterTick() {

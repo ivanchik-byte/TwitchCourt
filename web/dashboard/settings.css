@@ -1,16 +1,19 @@
 /* Настройки суда: X Lights Out, секции реестром, на весь экран. */
 
 :root {
-  --black: #030407;
-  --surface: rgba(16, 19, 24, 0.92);
-  --sunken: rgba(3, 4, 7, 0.85);
-  --line: #2f3336;
-  --ink: #e7e9ea;
-  --dim: #71767b;
+  --black: #08090a;
+  --surface: rgba(15, 16, 19, 0.92);
+  --sunken: rgba(8, 9, 10, 0.85);
+  --line: rgba(255, 255, 255, 0.1);
+  --ink: #ededed;
+  --dim: #8b8d98;
   --accent: #1d9bf0;
   --accent-deep: #1a8cd8;
   --seal: #f4212e;
   --ok: #00ba7c;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --bevel: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
   --font-body: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Menlo, monospace;
 }
@@ -175,9 +178,9 @@ body {
   padding: clamp(22px, 3vw, 36px) clamp(18px, 3vw, 32px);
   background: var(--surface);
   background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.04), transparent 120px);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-default);
   border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--bevel), 0 16px 40px rgba(0, 0, 0, 0.4);
 }
 
 .article + .article {

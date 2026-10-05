@@ -4,6 +4,7 @@ import (
 	"html"
 	"math/rand"
 	"strings"
+	"time"
 
 	"stream-tribunal/internal/obs"
 )
@@ -18,8 +19,9 @@ const maxTestimonyRunes = 200
 
 // PoolSeat is one willing defendant with an optional self-charge
 type PoolSeat struct {
-	Nick   string
-	Reason string
+	Nick     string
+	Reason   string
+	JoinedAt time.Time
 }
 
 // Punishment is the streamer's chosen penalty for a guilty viewer
@@ -44,7 +46,7 @@ func (e *Engine) JoinPool(nick, reason string) (joined bool, position int) {
 	if len(e.pool) >= maxPool {
 		return false, 0
 	}
-	e.pool = append(e.pool, PoolSeat{Nick: clean, Reason: truncateRunes(html.UnescapeString(e.filter.Sanitize(reason)), maxTestimonyRunes)})
+	e.pool = append(e.pool, PoolSeat{Nick: clean, Reason: truncateRunes(html.UnescapeString(e.filter.Sanitize(reason)), maxTestimonyRunes), JoinedAt: time.Now()})
 	return true, len(e.pool)
 }
 

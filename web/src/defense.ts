@@ -28,7 +28,7 @@
   function buildMeter(): void {
     const box = document.getElementById("mic-meter");
     if (!box || box.children.length > 0) return;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {
       const seg = document.createElement("span");
       seg.className = "seg";
       box.appendChild(seg);
@@ -38,11 +38,11 @@
   function paintMeter(level: number): void {
     const box = document.getElementById("mic-meter");
     if (!box) return;
-    const lit = Math.round(level * 12);
+    const lit = Math.round(level * 24);
     const segs = box.children;
     for (let i = 0; i < segs.length; i++) {
       const seg = segs[i] as HTMLElement;
-      seg.className = "seg" + (i < lit ? " on" + (i >= 9 ? " hot" : i >= 6 ? " warn" : "") : "");
+      seg.className = "seg" + (i < lit ? " on" + (i >= 19 ? " hot" : i >= 13 ? " warn" : "") : "");
     }
   }
 
