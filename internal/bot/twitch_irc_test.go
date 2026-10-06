@@ -50,7 +50,7 @@ func TestTimeoutCommand(t *testing.T) {
 	irc := NewTwitchIRC("channel", "bot", "token", func(ChatCommand) {})
 	irc.Timeout("troll", 90)
 	select {
-	case msg := <-irc.sendCh:
+	case msg := <-irc.modCh:
 		if msg != "/timeout troll 90" {
 			t.Fatalf("bad timeout command: %q", msg)
 		}
@@ -59,12 +59,25 @@ func TestTimeoutCommand(t *testing.T) {
 	}
 	irc.Ban("troll")
 	select {
-	case msg := <-irc.sendCh:
+	case msg := <-irc.modCh:
 		if msg != "/ban troll" {
 			t.Fatalf("bad ban command: %q", msg)
 		}
 	default:
 		t.Fatal("ban must queue a message")
+	}
+}
+
+func TestChatMessageQueue(t *testing.T) {
+	irc := NewTwitchIRC("channel", "bot", "token", func(ChatCommand) {})
+	irc.SendMessage("hello chat")
+	select {
+	case msg := <-irc.sendCh:
+		if msg != "hello chat" {
+			t.Fatalf("bad chat message: %q", msg)
+		}
+	default:
+		t.Fatal("chat must queue a message")
 	}
 }
 

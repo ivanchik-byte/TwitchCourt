@@ -24,6 +24,7 @@ type PiperDaemon struct {
 	stdin  io.WriteCloser
 	stdout *bufio.Reader
 	mu     sync.Mutex
+	sem    chan struct{}
 	isMock bool
 	closed bool
 }
@@ -34,10 +35,11 @@ type PiperInput struct {
 }
 
 func NewPiperDaemon(cfg config.TTSConfig) (*PiperDaemon, error) {
-	daemon := &PiperDaemon{cfg: cfg}
+	daemon := &PiperDaemon{cfg: cfg, sem: make(chan struct{}, 1)}
 
 	if !cfg.Enabled {
 		daemon.isMock = true
+		log.Printf("piper TTS disabled, mock beep mode active")
 		return daemon, nil
 	}
 
@@ -114,16 +116,32 @@ func (p *PiperDaemon) Synthesize(ctx context.Context, text string) ([]byte, erro
 	default:
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Serialize pipe I/O without holding mu: Close() never blocks on synthesis.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case p.sem <- struct{}{}:
+	}
+	defer func() { <-p.sem }()
 
-	if p.isMock {
+	p.mu.Lock()
+	isMock := p.isMock
+	closed := p.closed
+	stdin := p.stdin
+	stdout := p.stdout
+	speaker := p.cfg.SpeakerID
+	p.mu.Unlock()
+
+	if closed {
+		return nil, fmt.Errorf("piper daemon closed")
+	}
+	if isMock {
 		return generateMockBeepWav(text)
 	}
 
 	req := PiperInput{
 		Text:      text,
-		SpeakerID: p.cfg.SpeakerID,
+		SpeakerID: speaker,
 	}
 	encoded, err := json.Marshal(req)
 	if err != nil {
@@ -131,29 +149,47 @@ func (p *PiperDaemon) Synthesize(ctx context.Context, text string) ([]byte, erro
 	}
 	encoded = append(encoded, '\n')
 
-	if _, err := p.stdin.Write(encoded); err != nil {
-		return nil, fmt.Errorf("failed writing to piper stdin: %w", err)
+	type ioResult struct {
+		data []byte
+		err  error
 	}
+	done := make(chan ioResult, 1)
+	go func() {
+		if _, err := stdin.Write(encoded); err != nil {
+			done <- ioResult{nil, fmt.Errorf("failed writing to piper stdin: %w", err)}
+			return
+		}
 
-	header := make([]byte, 44)
-	if _, err := io.ReadFull(p.stdout, header); err != nil {
-		return nil, fmt.Errorf("failed reading wav header: %w", err)
+		header := make([]byte, 44)
+		if _, err := io.ReadFull(stdout, header); err != nil {
+			done <- ioResult{nil, fmt.Errorf("failed reading wav header: %w", err)}
+			return
+		}
+
+		dataSize := binary.LittleEndian.Uint32(header[40:44])
+		if dataSize > 25*1024*1024 {
+			done <- ioResult{nil, fmt.Errorf("invalid wav chunk size: %d", dataSize)}
+			return
+		}
+
+		audioBuffer := make([]byte, dataSize)
+		if _, err := io.ReadFull(stdout, audioBuffer); err != nil {
+			done <- ioResult{nil, fmt.Errorf("failed reading audio payload: %w", err)}
+			return
+		}
+
+		fullWav := make([]byte, 0, 44+dataSize)
+		fullWav = append(fullWav, header...)
+		fullWav = append(fullWav, audioBuffer...)
+		done <- ioResult{fullWav, nil}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-done:
+		return r.data, r.err
 	}
-
-	dataSize := binary.LittleEndian.Uint32(header[40:44])
-	if dataSize > 25*1024*1024 {
-		return nil, fmt.Errorf("invalid wav chunk size: %d", dataSize)
-	}
-
-	audioBuffer := make([]byte, dataSize)
-	if _, err := io.ReadFull(p.stdout, audioBuffer); err != nil {
-		return nil, fmt.Errorf("failed reading audio payload: %w", err)
-	}
-
-	fullWav := make([]byte, 0, 44+dataSize)
-	fullWav = append(fullWav, header...)
-	fullWav = append(fullWav, audioBuffer...)
-	return fullWav, nil
 }
 
 func (p *PiperDaemon) Close() error {

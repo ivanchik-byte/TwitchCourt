@@ -91,10 +91,14 @@ func (w *DonatePayWatcher) listen(ctx context.Context) error {
 
 	pingTicker := time.NewTicker(25 * time.Second)
 	defer pingTicker.Stop()
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
+				return
+			case <-done:
 				return
 			case <-pingTicker.C:
 				_ = conn.WriteJSON(map[string]any{

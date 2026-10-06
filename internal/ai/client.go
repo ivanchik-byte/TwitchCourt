@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,6 +60,9 @@ func NewClient(cfg config.AIConfig) *Client {
 		endpoint:   endpoint,
 		httpClient: &http.Client{Timeout: 90 * time.Second},
 		isMock:     cfg.APIKey == "" && cfg.Provider != "ollama",
+	}
+	if client.isMock {
+		log.Printf("AI mock mode active (no API key): verdicts use canned phrases, not a model")
 	}
 
 	return client

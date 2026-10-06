@@ -55,6 +55,7 @@ type Witness struct {
 }
 
 const maxWitnessMessageRunes = 140
+const maxWitnesses = 10
 
 // maxDefenseRunes caps the streamer's live defense fed into the counter-prompt
 const maxDefenseRunes = 600
@@ -126,12 +127,13 @@ func (e *Engine) currentVoice() audio.Synthesizer {
 	return e.voice
 }
 
-// speak serializes voice profile switch and audio synthesis
+// speak serializes voice profile switch, synthesis itself runs without the lock
 func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker, voice, rate string) error {
 	e.speakMu.Lock()
-	defer e.speakMu.Unlock()
 	e.applyVoiceProfile(voice, rate)
-	return e.dispatchSpeechChunk(ctx, s, index, isLast, speaker)
+	voiceSynth := e.currentVoice()
+	e.speakMu.Unlock()
+	return e.dispatchSpeechChunkWith(ctx, s, index, isLast, speaker, voiceSynth)
 }
 
 // castVoice maps an Edge voice name to the Silero speaker when the
@@ -361,8 +363,10 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 
 	// read queued testimony before the bench retires
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
-		_ = e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+		if err := e.speak(ctx, ai.SentenceChunk{Text: interlude, Animation: "slam"}, chunkIndex, false,
+			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			log.Printf("witness interlude speech failed: %v", err)
+		}
 	}
 
 	guilty, decided := e.deliberate(ctx, c, chunkIndex+1)
@@ -404,7 +408,7 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 	var ruling strings.Builder
 	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
 	index := startIndex
-	if err := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
+	streamErr := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		ruling.WriteString(delta)
 		for _, s := range chunker.Feed(delta) {
 			if err := e.speak(ctx, s, index, false,
@@ -414,29 +418,39 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 			index++
 		}
 		return nil
-	}); err != nil {
-		log.Printf("deliberation stream failed, bench acquits: %v", err)
-		standby := "Судья не решился. НЕВИНОВЕН. Суд окончен."
-		ruling.WriteString(standby)
+	})
+	if streamErr != nil {
+		log.Printf("deliberation stream failed, verdict undecided: %v", streamErr)
 		if ctx.Err() == nil {
+			standby := "Судья запнулся. Решение откладывается."
 			for _, s := range chunker.Feed(standby + " ") {
-				_ = e.speak(ctx, s, index, false,
-					e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+				if err := e.speak(ctx, s, index, false,
+					e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+					log.Printf("standby speech failed: %v", err)
+				}
 				index++
 			}
 		}
 	}
 	if last := chunker.Flush(); last != nil {
-		_ = e.speak(ctx, *last, index, false,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+		if err := e.speak(ctx, *last, index, false,
+			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			log.Printf("deliberation flush speech failed: %v", err)
+		}
 	}
 	return ai.ParseVerdict(ruling.String())
 }
 
-// caseTestimony bundles everything the bench must weigh
+// caseTestimony bundles everything the bench must weigh.
+// Snapshots case slices under lock so concurrent chat writes can't race the read.
 func (e *Engine) caseTestimony(c *TrialCase) string {
+	e.mu.RLock()
+	testimony := append([]string(nil), c.Testimony...)
+	defense := c.Defense
+	witnesses := append([]Witness(nil), c.Witnesses...)
+	e.mu.RUnlock()
 	parts := []string{}
-	for _, t := range c.Testimony {
+	for _, t := range testimony {
 		if t = strings.TrimSpace(t); t != "" {
 			parts = append(parts, "Подсудимый: "+t)
 		}
@@ -465,10 +479,10 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 			parts = append(parts, "Доносы зала: "+strings.Join(snitches, " / "))
 		}
 	}
-	if d := strings.TrimSpace(html.UnescapeString(c.Defense)); d != "" {
+	if d := strings.TrimSpace(html.UnescapeString(defense)); d != "" {
 		parts = append(parts, "Защита: "+d)
 	}
-	if w := e.drainWitnessInterlude(c); w != "" {
+	if w := buildWitnessInterlude(witnesses); w != "" {
 		parts = append(parts, w)
 	}
 	if len(parts) == 0 {
@@ -566,13 +580,17 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}); err != nil {
 		log.Printf("objection stream failed, using standby: %v", err)
 		if ctx.Err() == nil {
-			_ = e.speak(ctx, ai.SentenceChunk{Text: "Суд не расслышал оправданий и продолжает!", Animation: "objection"}, index, false,
-				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+			if serr := e.speak(ctx, ai.SentenceChunk{Text: "Суд не расслышал оправданий и продолжает!", Animation: "objection"}, index, false,
+				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); serr != nil {
+				log.Printf("objection standby speech failed: %v", serr)
+			}
 		}
 	}
 	if last := chunker.Flush(); last != nil {
-		_ = e.speak(ctx, *last, index, false,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+		if err := e.speak(ctx, *last, index, false,
+			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			log.Printf("objection flush speech failed: %v", err)
+		}
 	}
 }
 
@@ -615,13 +633,17 @@ func (e *Engine) AddDefense(author, text string) bool {
 	if e.currCase.Defense != "" {
 		e.currCase.Defense += " / "
 	}
-	e.currCase.Defense = truncateRunes(e.currCase.Defense+line, maxDefenseRunes)
+	e.currCase.Defense = truncateRunesTail(e.currCase.Defense+line, maxDefenseRunes)
 	return true
 }
 
 var ssmlDisplayRe = regexp.MustCompile(`<break[^>]*/?>`)
 
 func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker string) error {
+	return e.dispatchSpeechChunkWith(ctx, s, index, isLast, speaker, e.currentVoice())
+}
+
+func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker string, voice audio.Synthesizer) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -653,13 +675,13 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 
 	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	rawBytes, err := e.currentVoice().Synthesize(synthCtx, speechText)
+	rawBytes, err := voice.Synthesize(synthCtx, speechText)
 	if err != nil {
 		log.Printf("tts synthesis error: %v", err)
-		return nil
+		return err
 	}
 	if len(rawBytes) == 0 {
-		return nil
+		return fmt.Errorf("tts returned no audio")
 	}
 
 	b64Audio := base64.StdEncoding.EncodeToString(rawBytes)
@@ -682,8 +704,10 @@ func (e *Engine) Say(text string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		_ = e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+		if err := e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true,
+			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			log.Printf("gavel interjection speech failed: %v", err)
+		}
 	}()
 }
 
@@ -716,6 +740,9 @@ func (e *Engine) AddWitness(donor string, amount float64, currency, message stri
 		Message:  e.filter.Sanitize(message),
 	}
 	e.currCase.Witnesses = append(e.currCase.Witnesses, w)
+	if len(e.currCase.Witnesses) > maxWitnesses {
+		e.currCase.Witnesses = e.currCase.Witnesses[len(e.currCase.Witnesses)-maxWitnesses:]
+	}
 
 	if e.recall != nil {
 		e.recall.AddComment(cleanDonor, "свидетель: "+w.Message)
@@ -751,6 +778,16 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(runes[:max]) + "..."
+}
+
+// truncateRunesTail keeps the freshest tail so a new defense line
+// is never dropped in favor of stale text.
+func truncateRunesTail(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return "..." + string(runes[len(runes)-max:])
 }
 
 func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
@@ -852,8 +889,10 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 
 	// the ruling itself was spoken during deliberation: only the penalty lands now
 	if sentence := verdictSentence(verdictStr, penalty, twist); sentence != "" {
-		_ = e.speak(ctx, ai.SentenceChunk{Text: sentence, Animation: "slam"}, 0, true,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate)
+		if err := e.speak(ctx, ai.SentenceChunk{Text: sentence, Animation: "slam"}, 0, true,
+			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			log.Printf("verdict sentence speech failed: %v", err)
+		}
 	}
 
 	e.hub.BroadcastEvent(obs.EventVerdict, obs.VerdictPayload{

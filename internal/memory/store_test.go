@@ -20,7 +20,10 @@ func TestOffenderCount(t *testing.T) {
 		t.Fatalf("want 2 recent, got %d", got)
 	}
 
-	reloaded := NewStore(filepath.Join(dir, "memory.json"))
+	reloaded := func() *Store {
+		s.Flush()
+		return NewStore(filepath.Join(dir, "memory.json"))
+	}()
 	if got := reloaded.OffenderCount("streamer"); got != 2 {
 		t.Fatalf("persist failed, want 2 got %d", got)
 	}

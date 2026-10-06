@@ -82,9 +82,14 @@ type TwitchIRC struct {
 	token   string
 	emit    func(ChatCommand)
 	sendCh  chan string
+	modCh   chan string
 
 	modMu    sync.RWMutex
 	modError string
+
+	dropMu   sync.Mutex
+	dropChat int
+	dropMod  int
 }
 
 func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIRC {
@@ -94,6 +99,7 @@ func NewTwitchIRC(channel, nick, token string, emit func(ChatCommand)) *TwitchIR
 		token:   token,
 		emit:    emit,
 		sendCh:  make(chan string, 16),
+		modCh:   make(chan string, 64),
 	}
 }
 
@@ -101,17 +107,34 @@ func (t *TwitchIRC) SendMessage(text string) {
 	select {
 	case t.sendCh <- text:
 	default:
+		t.dropMu.Lock()
+		t.dropChat++
+		n := t.dropChat
+		t.dropMu.Unlock()
+		log.Printf("twitch irc chat queue full, dropped message #%d", n)
+	}
+}
+
+func (t *TwitchIRC) sendMod(text string) {
+	select {
+	case t.modCh <- text:
+	default:
+		t.dropMu.Lock()
+		t.dropMod++
+		n := t.dropMod
+		t.dropMu.Unlock()
+		log.Printf("twitch irc mod queue full, DROPPED punishment #%d: %s", n, text)
 	}
 }
 
 // Timeout puts a user into chat jail; the bot must moderate the channel
 func (t *TwitchIRC) Timeout(user string, secs int) {
-	t.SendMessage(fmt.Sprintf("/timeout %s %d", user, secs))
+	t.sendMod(fmt.Sprintf("/timeout %s %d", user, secs))
 }
 
 // Ban removes a user from chat for good; the bot must moderate the channel
 func (t *TwitchIRC) Ban(user string) {
-	t.SendMessage(fmt.Sprintf("/ban %s", user))
+	t.sendMod(fmt.Sprintf("/ban %s", user))
 }
 
 // LastModError reports the latest moderation refusal from Twitch, if any
@@ -219,18 +242,32 @@ func (t *TwitchIRC) listen(ctx context.Context) error {
 }
 
 func (t *TwitchIRC) sendLoop(ctx context.Context, done <-chan struct{}, conn net.Conn) {
+	send := func(text string) {
+		fmt.Fprintf(conn, "PRIVMSG #%s :%s\r\n", t.channel, text)
+		time.Sleep(1200 * time.Millisecond)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-done:
 			return
-		case text, ok := <-t.sendCh:
-			if !ok {
+		case text := <-t.modCh:
+			send(text)
+		default:
+			select {
+			case <-ctx.Done():
 				return
+			case <-done:
+				return
+			case text := <-t.modCh:
+				send(text)
+			case text, ok := <-t.sendCh:
+				if !ok {
+					return
+				}
+				send(text)
 			}
-			fmt.Fprintf(conn, "PRIVMSG #%s :%s\r\n", t.channel, text)
-			time.Sleep(1200 * time.Millisecond)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"errors"
 	"log"
 )
 
@@ -28,12 +29,15 @@ func (s *AutoSynthesizer) Synthesize(ctx context.Context, text string) ([]byte, 
 	if s.secondary != nil {
 		return s.secondary.Synthesize(ctx, text)
 	}
-	return nil, context.DeadlineExceeded
+	return nil, errors.New("no synthesizer configured")
 }
 
 func (s *AutoSynthesizer) SetVoiceProfile(voice, rate string) {
 	type profiler interface{ SetVoiceProfile(string, string) }
 	if p, ok := s.primary.(profiler); ok {
+		p.SetVoiceProfile(voice, rate)
+	}
+	if p, ok := s.secondary.(profiler); ok {
 		p.SetVoiceProfile(voice, rate)
 	}
 }

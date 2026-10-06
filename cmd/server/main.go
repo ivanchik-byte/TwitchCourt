@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +18,6 @@ import (
 	"time"
 
 	"stream-tribunal/internal/ai"
-	"stream-tribunal/internal/audio"
 	"stream-tribunal/internal/bot"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/court"
@@ -203,23 +200,7 @@ func main() {
 			}
 			return
 		}
-		if cfg.Load().Donations.StreamerTrialMin > 0 && d.Amount >= cfg.Load().Donations.StreamerTrialMin {
-			crime := "Донат с требованием суда над стримером"
-			if strings.TrimSpace(d.Message) != "" {
-				crime = "Донат: " + strings.TrimSpace(d.Message)
-			}
-			context := "Донат " + strconv.FormatFloat(d.Amount, 'f', -1, 64) + " " + d.Currency + " от " + donor
-			openStreamerTrial(cfg.Load().Game.StreamerName, crime, context)
-			return
-		}
-		if d.Amount >= cfg.Load().Donations.PlatinumMin && cfg.Load().Donations.PlatinumMin > 0 {
-			crime := "Донат с требованием суда"
-			if strings.TrimSpace(d.Message) != "" {
-				crime = "Донат: " + strings.TrimSpace(d.Message)
-			}
-			context := "Донат " + strconv.FormatFloat(d.Amount, 'f', -1, 64) + " " + d.Currency + " от " + donor
-			openStreamerTrial(cfg.Load().Game.StreamerName, crime, context)
-		}
+		openDonationTrial(cfg.Load(), openStreamerTrial, donor, d.Amount, d.Currency, d.Message)
 	}
 
 	mux := http.NewServeMux()
@@ -1361,6 +1342,9 @@ func main() {
 	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.Load().Server.Host, cfg.Load().Server.Port)
+	if cfg.Load().Server.Secret == "" && cfg.Load().Server.Host != "127.0.0.1" && cfg.Load().Server.Host != "localhost" {
+		log.Printf("WARNING: server on %s without secret: admin API is open to the network", addr)
+	}
 	srv = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -1388,247 +1372,4 @@ func main() {
 		log.Printf("server forced to shutdown: %v", err)
 	}
 	log.Println("server stopped cleanly")
-}
-
-func buildSynthesizer(cfg *config.Config) audio.Synthesizer {
-	fallback, _ := audio.NewPiperDaemon(cfg.TTS)
-
-	if !cfg.TTS.Enabled {
-		return fallback
-	}
-
-	switch cfg.TTS.Engine {
-	case "piper":
-		return fallback
-	case "mock":
-		return fallback
-	case "silero":
-		primary := audio.NewSileroSynthesizer(cfg.TTS.SileroURL, cfg.TTS.SileroJudge)
-		if cfg.TTS.AutoFallback {
-			return audio.NewAutoSynthesizer(primary, fallback)
-		}
-		return primary
-	default:
-		primary := audio.NewEdgeSynthesizer(cfg.TTS.Voice, cfg.TTS.Rate, cfg.TTS.Volume, cfg.TTS.Pitch)
-		if cfg.TTS.AutoFallback {
-			return audio.NewAutoSynthesizer(primary, fallback)
-		}
-		return primary
-	}
-}
-
-func checkSecret(cfg *config.Config, got string) bool {
-	if cfg.Server.Secret == "" {
-		return true
-	}
-	return got != "" && got == cfg.Server.Secret
-}
-
-// isBribe spots donor money marked as a judge payoff
-func isBribe(message string) bool {
-	return strings.Contains(strings.ToLower(message), "взятк")
-}
-
-var judgePhotoExts = map[string]bool{
-	".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
-}
-
-// single judge portrait for the whole tribunal
-func judgePhotoPath() string {
-	return filepath.Join("data", "judge.jpg")
-}
-
-// fallback to the embedded default portrait
-func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
-	serveImageFile(w, r, judgePhotoPath(), "overlay/assets/judge.jpg")
-}
-
-func serveCourtBg(w http.ResponseWriter, r *http.Request) {
-	serveImageFile(w, r, courtBgPath(), "overlay/assets/backgrounds/court_zoom_medium.jpg")
-}
-
-func serveImageFile(w http.ResponseWriter, r *http.Request, dataPath, embedPath string) {
-	if raw, err := os.ReadFile(dataPath); err == nil {
-		w.Header().Set("Content-Type", http.DetectContentType(raw))
-		w.Write(raw)
-		return
-	}
-	raw, err := web.StaticFS.ReadFile(embedPath)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", http.DetectContentType(raw))
-	w.Write(raw)
-}
-
-// saveUpload stores a validated image upload, capping size before buffering.
-func saveUpload(r *http.Request, maxMB int, dest string) error {
-	file, header, err := r.FormFile("photo")
-	if err != nil {
-		return fmt.Errorf("need multipart photo: %w", err)
-	}
-	defer file.Close()
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if !judgePhotoExts[ext] {
-		return fmt.Errorf("want jpg, png or webp")
-	}
-	limit := int64(maxMB) * 1024 * 1024
-	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(raw)) > limit {
-		return fmt.Errorf("photo over %d MB", maxMB)
-	}
-	if kind := http.DetectContentType(raw); !strings.HasPrefix(kind, "image/") {
-		return fmt.Errorf("not an image")
-	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), "upload-*.jpg")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(raw); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dest)
-}
-
-// saveJudgePhoto stores the uploaded judge portrait, max 5 MB, images only.
-func saveJudgePhoto(r *http.Request) error {
-	return saveUpload(r, 5, judgePhotoPath())
-}
-
-// court background: single hall photo, replaceable from settings
-func courtBgPath() string {
-	return filepath.Join("data", "court_bg.jpg")
-}
-
-func saveCourtBg(r *http.Request) error {
-	return saveUpload(r, 8, courtBgPath())
-}
-
-func checkHTTPAuth(cfg *config.Config, r *http.Request) bool {
-	if cfg.Server.Secret == "" {
-		return true
-	}
-	return r.Header.Get("X-Tribunal-Secret") == cfg.Server.Secret
-}
-
-// decodeJSON caps request bodies before parsing (DoS guard).
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	return dec.Decode(dst)
-}
-
-// truncateRunes caps user text fed into TTS and prompts.
-func truncateRunes(s string, max int) string {
-	if r := []rune(s); len(r) > max {
-		return string(r[:max])
-	}
-	return s
-}
-
-// spaHandler serves the Vite SPA bundle with fallback to index.html so
-// client-side routes (/, /modes, /settings) survive full reloads without
-// breaking the WebSocket session on every tab switch.
-func spaHandler(root fs.FS) http.Handler {
-	fileServer := http.FileServer(http.FS(root))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api") || strings.HasPrefix(r.URL.Path, "/ws") {
-			http.NotFound(w, r)
-			return
-		}
-		if r.URL.Path != "/" {
-			if f, err := root.Open(strings.TrimPrefix(r.URL.Path, "/")); err == nil {
-				_ = f.Close()
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-		}
-		index, err := fs.ReadFile(root, "index.html")
-		if err != nil {
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write(index)
-	})
-}
-
-// unbanBoard caches pending pardon appeals between Helix polls
-type unbanBoard struct {
-	mu    sync.Mutex
-	items []bot.UnbanRequest
-}
-
-func newUnbanBoard() *unbanBoard {
-	return &unbanBoard{}
-}
-
-func (b *unbanBoard) list() []bot.UnbanRequest {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	out := make([]bot.UnbanRequest, len(b.items))
-	copy(out, b.items)
-	return out
-}
-
-func (b *unbanBoard) refresh(ctx context.Context, court *bot.UnbanClient) {
-	items, err := court.FetchPending(ctx)
-	if err != nil {
-		log.Printf("unban court refresh: %v", err)
-		return
-	}
-	b.mu.Lock()
-	b.items = items
-	b.mu.Unlock()
-}
-
-func (b *unbanBoard) watch(ctx context.Context, court *bot.UnbanClient) {
-	b.refresh(ctx, court)
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			b.refresh(ctx, court)
-		}
-	}
-}
-
-type actionLimiter struct {
-	mu       sync.Mutex
-	interval time.Duration
-	last     map[string]time.Time
-}
-
-func newActionLimiter(interval time.Duration) *actionLimiter {
-	return &actionLimiter{interval: interval, last: make(map[string]time.Time)}
-}
-
-func (l *actionLimiter) allow(key string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := time.Now()
-	if t, ok := l.last[key]; ok && now.Sub(t) < l.interval {
-		return false
-	}
-	l.last[key] = now
-	if len(l.last) > 4096 {
-		l.last = make(map[string]time.Time, 4096)
-	}
-	return true
 }

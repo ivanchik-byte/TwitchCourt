@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -89,7 +90,7 @@ func (s *Store) AddTrial(r TrialRecord) {
 		s.trials = s.trials[len(s.trials)-maxTrials:]
 	}
 	s.mu.Unlock()
-	s.save()
+	s.saveSoon()
 }
 
 func (s *Store) AddDonation(d DonationRecord) {
@@ -107,7 +108,7 @@ func (s *Store) AddDonation(d DonationRecord) {
 		p.LastSeenAt = d.At
 	}
 	s.mu.Unlock()
-	s.save()
+	s.saveSoon()
 }
 
 func (s *Store) AddComment(author, text string) {
@@ -203,7 +204,7 @@ func (s *Store) SetProfile(p StreamerProfile) {
 	s.profile = p
 	s.profile.AutoNotes = auto
 	s.mu.Unlock()
-	s.save()
+	s.saveSoon()
 }
 
 func (s *Store) NoteForAI(note string) {
@@ -216,7 +217,7 @@ func (s *Store) NoteForAI(note string) {
 		s.profile.AutoNotes = s.profile.AutoNotes[len(s.profile.AutoNotes)-maxAutoNotes:]
 	}
 	s.mu.Unlock()
-	s.save()
+	s.saveSoon()
 }
 
 func (s *Store) RecentTrials(n int) []TrialRecord {
@@ -262,14 +263,12 @@ func (s *Store) TopAccusers(n int) []Participant {
 			best = append(best, *p)
 		}
 	}
-	for i := 0; i < len(best); i++ {
-		for j := i + 1; j < len(best); j++ {
-			if best[j].SueCalls > best[i].SueCalls ||
-				(best[j].SueCalls == best[i].SueCalls && best[j].Votes > best[i].Votes) {
-				best[i], best[j] = best[j], best[i]
-			}
+	sort.Slice(best, func(i, j int) bool {
+		if best[i].SueCalls != best[j].SueCalls {
+			return best[i].SueCalls > best[j].SueCalls
 		}
-	}
+		return best[i].Votes > best[j].Votes
+	})
 	if n > 0 && len(best) > n {
 		best = best[:n]
 	}
@@ -305,6 +304,21 @@ func (s *Store) saveSoon() {
 	})
 }
 
+// Flush forces a pending throttled write to disk immediately.
+// Used by tests and graceful shutdown.
+func (s *Store) Flush() {
+	if s.path == "" {
+		return
+	}
+	s.saveMu.Lock()
+	if s.saveTimer != nil {
+		s.saveTimer.Stop()
+		s.saveTimer = nil
+	}
+	s.saveMu.Unlock()
+	s.save()
+}
+
 func (s *Store) load() {
 	if s.path == "" {
 		return
@@ -333,14 +347,29 @@ func (s *Store) save() {
 	if s.path == "" {
 		return
 	}
+	// Snapshot under read lock so Marshal never races with AddTrial/AddDonation.
 	s.mu.RLock()
-	dump := map[string]any{
-		"trials":       s.trials,
-		"donations":    s.donations,
-		"participants": s.participants,
-		"profile":      s.profile,
+	trials := make([]TrialRecord, len(s.trials))
+	copy(trials, s.trials)
+	donations := make([]DonationRecord, len(s.donations))
+	copy(donations, s.donations)
+	participants := make(map[string]*Participant, len(s.participants))
+	for k, v := range s.participants {
+		cp := *v
+		participants[k] = &cp
 	}
+	profile := s.profile
+	profile.Titles = append([]string(nil), s.profile.Titles...)
+	profile.Traits = append([]string(nil), s.profile.Traits...)
+	profile.RunningGags = append([]string(nil), s.profile.RunningGags...)
+	profile.AutoNotes = append([]string(nil), s.profile.AutoNotes...)
 	s.mu.RUnlock()
+	dump := map[string]any{
+		"trials":       trials,
+		"donations":    donations,
+		"participants": participants,
+		"profile":      profile,
+	}
 	raw, err := json.MarshalIndent(dump, "", "  ")
 	if err != nil {
 		return

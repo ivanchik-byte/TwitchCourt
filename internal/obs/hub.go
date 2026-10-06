@@ -2,8 +2,11 @@ package obs
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -37,12 +40,13 @@ type Hub struct {
 	unregister chan *Client
 	mu         sync.RWMutex
 	onAction   func(action string, payload []byte)
+	dropped    atomic.Int64
 }
 
 func NewHub(actionHandler func(action string, payload []byte)) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte, 128),
+		broadcast:  make(chan []byte, 512),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		onAction:   actionHandler,
@@ -93,6 +97,9 @@ func (h *Hub) BroadcastEvent(eventType EventType, payload interface{}) error {
 	select {
 	case h.broadcast <- raw:
 	default:
+		n := h.dropped.Add(1)
+		log.Printf("obs hub broadcast queue full, dropped %s event #%d", eventType, n)
+		return fmt.Errorf("obs broadcast queue full (dropped #%d)", n)
 	}
 	return nil
 }
