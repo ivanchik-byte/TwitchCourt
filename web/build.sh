@@ -5,7 +5,11 @@
 set -e
 cd "$(dirname "$0")"
 rm -rf compiled
-tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/overlay.ts src/judge.ts
+if command -v tsc >/dev/null 2>&1; then
+  tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/overlay.ts src/judge.ts
+else
+  npx -y -p typescript@5.6 tsc --ignoreConfig --target ES2020 --strict --outDir compiled src/overlay.ts src/judge.ts
+fi
 cat compiled/overlay.js > overlay/overlay.js
 cat compiled/judge.js > overlay/judge.js
 rm -rf compiled

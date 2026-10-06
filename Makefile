@@ -1,4 +1,4 @@
-BINARY := stream-tribunal-server
+BINARY := StreamTribunal
 DIST := dist
 
 .PHONY: run test vet build build-win package-win frontend overlay clean
@@ -18,10 +18,10 @@ test:
 vet:
 	go vet ./...
 
-build: overlay
+build: frontend overlay
 	go build -o $(DIST)/$(BINARY) ./cmd/server
 
-build-win: overlay
+build-win: frontend overlay
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST)/$(BINARY).exe ./cmd/server
 
 package-win: build-win

@@ -14,6 +14,7 @@ interface SpeechRec {
   continuous: boolean
   onresult: ((ev: SpeechResultEvent) => void) | null
   onend: (() => void) | null
+  onerror: ((ev: { error: string }) => void) | null
   start: () => void
   stop: () => void
 }
@@ -50,6 +51,7 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
     rec.lang = 'ru-RU'
     rec.interimResults = true
     rec.continuous = true
+    let micDead = false
     rec.onresult = (ev) => {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const res = ev.results[i]
@@ -68,8 +70,15 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
       }
     }
     // chrome sleeps recognition — restart while defense phase is live
+    // fatal mic errors (denied/captured) stop the loop instead of spinning
+    rec.onerror = (ev) => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') {
+        micDead = true
+        setListening(false)
+      }
+    }
     rec.onend = () => {
-      if (enabled) {
+      if (enabled && !micDead) {
         try {
           rec.start()
         } catch {

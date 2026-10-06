@@ -825,6 +825,8 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 	isGuilty := guilty
 	twist := ""
 	if c.Bribed {
+		// a paid-off judge walks the defendant: the twist must match the votes
+		isGuilty = false
 		twist = "Судья переобулся прямо в зале: взятка принята, весы качнулись к оправданию!"
 	}
 	if !decided {

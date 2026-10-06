@@ -40,7 +40,7 @@ export function GavelStage() {
 
   const open = async (text: string) => {
     const r = await openTrial(nick, text)
-    if (!r.ok && r.status !== 0) toast.error(`Дело не открыто: ${apiNote(r.status)}`)
+    if (!r.ok) toast.error(`Дело не открыто: ${apiNote(r.status)}`)
   }
 
   return (

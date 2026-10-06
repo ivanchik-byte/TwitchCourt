@@ -259,6 +259,17 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.TTS.SileroJudge == "" {
 		cfg.TTS.SileroJudge = "xenia"
 	}
+	// empty strings from yaml must not wipe the smart OS-aware defaults
+	defTTS := DefaultConfig().TTS
+	if cfg.TTS.PiperBinary == "" {
+		cfg.TTS.PiperBinary = defTTS.PiperBinary
+	}
+	if cfg.TTS.ModelPath == "" {
+		cfg.TTS.ModelPath = defTTS.ModelPath
+	}
+	if cfg.TTS.ConfigPath == "" {
+		cfg.TTS.ConfigPath = defTTS.ConfigPath
+	}
 	if cfg.TTS.Voice == "" {
 		cfg.TTS.Voice = "ru-RU-SvetlanaNeural"
 	}

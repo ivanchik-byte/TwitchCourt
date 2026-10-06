@@ -232,9 +232,11 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		status := map[string]interface{}{
-			"status": "online",
-			"state":  engine.GetState(),
-			"port":   cfg.Load().Server.Port,
+			"status":   "online",
+			"state":    engine.GetState(),
+			"port":     cfg.Load().Server.Port,
+			"ai_live":  cfg.Load().AI.APIKey != "" || cfg.Load().AI.Provider == "ollama",
+			"tts_beep": ttsIsBeep(cfg.Load()),
 		}
 		if chat != nil {
 			if modErr, bad := chat.LastModError(); bad {
@@ -263,6 +265,9 @@ func main() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		req.Defendant = truncateRunes(req.Defendant, 64)
+		req.Crime = truncateRunes(req.Crime, 300)
+		req.Context = truncateRunes(req.Context, 1000)
 		if req.Defendant == "" {
 			req.Defendant = cfg.Load().Game.StreamerName
 		}
@@ -436,6 +441,7 @@ func main() {
 				"silero_judge":  cfg.Load().TTS.SileroJudge,
 				"enabled":       cfg.Load().TTS.Enabled,
 				"auto_fallback": cfg.Load().TTS.AutoFallback,
+				"beep":          ttsIsBeep(cfg.Load()),
 				"piper_binary":  cfg.Load().TTS.PiperBinary,
 				"model_path":    cfg.Load().TTS.ModelPath,
 				"config_path":   cfg.Load().TTS.ConfigPath,
@@ -950,6 +956,9 @@ func main() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		req.Donor = truncateRunes(req.Donor, 64)
+		req.Currency = truncateRunes(req.Currency, 16)
+		req.Message = truncateRunes(req.Message, 500)
 		handleDonation(bot.Donation{Donor: req.Donor, Amount: req.Amount, Currency: req.Currency, Message: req.Message})
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -1343,7 +1352,7 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%d", cfg.Load().Server.Host, cfg.Load().Server.Port)
 	if cfg.Load().Server.Secret == "" && cfg.Load().Server.Host != "127.0.0.1" && cfg.Load().Server.Host != "localhost" {
-		log.Printf("WARNING: server on %s without secret: admin API is open to the network", addr)
+		log.Fatalf("refusing to serve on %s without secret: set server.secret or TRIBUNAL_SECRET", addr)
 	}
 	srv = &http.Server{
 		Addr:         addr,

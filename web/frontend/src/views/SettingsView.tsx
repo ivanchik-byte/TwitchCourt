@@ -59,6 +59,7 @@ export function SettingsView() {
     configPath: '',
     speakerId: '0',
     speed: '1.15',
+    beep: false,
   })
 
   const [twitch, setTwitch] = useState({
@@ -109,7 +110,7 @@ export function SettingsView() {
       engine: string; voice: string; rate: string; volume: string; pitch: string
       judge_voice: string; judge_rate: string; silero_url: string; silero_judge: string
       enabled: boolean; auto_fallback: boolean; piper_binary: string; model_path: string
-      config_path: string; speaker_id: number; speed: number
+      config_path: string; speaker_id: number; speed: number; beep?: boolean
       voices?: { edge?: string[]; silero?: string[] }
     }>('/api/tts')
       .then((d) => {
@@ -135,6 +136,7 @@ export function SettingsView() {
           configPath: d.config_path ?? '',
           speakerId: String(d.speaker_id ?? 0),
           speed: String(d.speed ?? 1.15),
+          beep: d.beep ?? false,
         }))
       })
       .catch(() => undefined)
@@ -297,6 +299,11 @@ export function SettingsView() {
 
         <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Синтез речи</h2>
+          {tts.beep && (
+            <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.08] p-2.5 text-xs text-amber-200">
+              Сейчас вместо голоса — писк-заглушка: движок выключен или бинарь/модель не найдены. Проверь движок и пути ниже.
+            </div>
+          )}
           <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-2.5 text-xs text-zinc-300">
             <span className="font-semibold text-emerald-200">Локальный ♀:</span> движок Silero + голос{' '}
             <span className="font-mono text-emerald-200">{tts.sileroJudge || 'xenia'}</span> — самый человеческий русский голос,

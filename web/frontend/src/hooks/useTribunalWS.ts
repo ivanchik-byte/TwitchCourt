@@ -76,6 +76,9 @@ export function useTribunalWS() {
   useEffect(() => {
     let closed = false
     let retry: ReturnType<typeof setTimeout>
+    let failures = 0
+
+    const retryDelay = () => Math.min(2000 * 2 ** failures, 30000) + Math.floor(Math.random() * 500)
 
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
@@ -83,6 +86,7 @@ export function useTribunalWS() {
       wsRef.current = ws
 
       ws.onopen = () => {
+        failures = 0
         setState((s) => ({ ...s, connected: true }))
         pingAt.current = Date.now()
         try {
@@ -93,7 +97,10 @@ export function useTribunalWS() {
       }
       ws.onclose = () => {
         setState((s) => ({ ...s, connected: false, rttMs: null }))
-        if (!closed) retry = setTimeout(connect, 2000)
+        if (!closed) {
+          failures += 1
+          retry = setTimeout(connect, retryDelay())
+        }
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (ev) => {

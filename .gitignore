@@ -17,6 +17,7 @@ dist/
 
 # Local configs and models
 config.yaml
+*.tmp
 models/*.onnx
 models/*.onnx.json
 models/*.bin

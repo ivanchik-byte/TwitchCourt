@@ -25,6 +25,8 @@ export function useHotkeys(map: HotkeyMap, panicCode = 'Escape') {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (inField(e)) return
+      // never hijack browser/OS shortcuts: Ctrl+R must reload, not open a trial
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       const el = e.target as HTMLElement | null
       const m = ref.current
       if (e.code === panicRef.current) {
