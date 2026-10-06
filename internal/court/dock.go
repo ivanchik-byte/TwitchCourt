@@ -108,8 +108,7 @@ func (e *Engine) CurrentDefendant() string {
 	return html.UnescapeString(e.currCase.Defendant)
 }
 
-// AddTestimony files a chat line from the current defendant;
-// returns false when the author is not on the stand
+// AddTestimony records chat testimony from current defendant
 func (e *Engine) AddTestimony(author, text string) bool {
 	clean := strings.TrimSpace(html.UnescapeString(e.filter.Sanitize(text)))
 	if clean == "" {

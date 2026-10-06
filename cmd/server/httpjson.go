@@ -23,9 +23,7 @@ func truncateRunes(s string, max int) string {
 	return s
 }
 
-// spaHandler serves the Vite SPA bundle with fallback to index.html so
-// client-side routes (/, /modes, /settings) survive full reloads without
-// breaking the WebSocket session on every tab switch.
+// spaHandler serves dashboard assets with SPA index fallback
 func spaHandler(root fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

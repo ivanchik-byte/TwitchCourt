@@ -198,7 +198,7 @@ export function SettingsView() {
       toast.success('Фото судьи обновлено')
       setPhotoTick((n) => n + 1)
     } else {
-      toast.error('Загрузка не удалась — проверь секретный ключ')
+      toast.error('Ошибка загрузки: проверьте ключ доступа')
     }
   }
 
@@ -206,14 +206,14 @@ export function SettingsView() {
     <div className="mx-auto max-w-[1100px] space-y-3 p-3">
       <div className="card p-3">
         <div className="min-w-[220px] max-w-prose">
-          <SecretField label="Секретный ключ сервера (применяется при уходе с поля)" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v) }} placeholder="X-Secret" />
+          <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v) }} placeholder="X-Secret" />
         </div>
       </div>
 
       <div className="grid items-start gap-3 md:grid-cols-2">
         <section className="card space-y-2 p-4">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold">ИИ-Мозг</h2>
+            <h2 className="font-semibold">Языковая модель</h2>
             {aiFlags && (
               <span className={`font-mono text-xs ${aiFlags.live ? 'text-emerald-300' : 'text-zinc-500'}`}>
                 {aiFlags.live ? '● live' : '○ mock'}
@@ -264,7 +264,7 @@ export function SettingsView() {
           <div className="flex gap-1.5">
             <button
               onClick={() =>
-                saveSection('ИИ-Мозг', () =>
+                saveSection('Языковая модель', () =>
                   apiPut('/api/ai', {
                     provider: ai.provider,
                     model: ai.model,
@@ -285,14 +285,14 @@ export function SettingsView() {
               onClick={async () => {
                 const r = await apiPostJson<{ ms: number; mock: boolean }>('/api/ai/ping', {})
                 if (!r.ok || !r.data) {
-                  toast.error(`AI пинг: ${apiNote(r.status)}`)
+                  toast.error(`Проверка модели: ${apiNote(r.status)}`)
                   return
                 }
-                toast.success(r.data.mock ? 'AI в mock-режиме — инференса нет' : `AI отвечает: ${r.data.ms}мс до первого токена`)
+                toast.success(r.data.mock ? 'Режим mock: тестовые ответы без внешнего API' : `Ответ получен за ${r.data.ms} мс`)
               }}
               className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
             >
-              Ping AI
+              Тест подключения
             </button>
           </div>
         </section>
@@ -301,13 +301,12 @@ export function SettingsView() {
           <h2 className="font-semibold">Синтез речи</h2>
           {tts.beep && (
             <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.08] p-2.5 text-xs text-amber-200">
-              Сейчас вместо голоса — писк-заглушка: движок выключен или бинарь/модель не найдены. Проверь движок и пути ниже.
+              Включен резервный сигнал: движок синтеза недоступен либо не найден файл модели. Проверьте настройки ниже.
             </div>
           )}
           <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-2.5 text-xs text-zinc-300">
-            <span className="font-semibold text-emerald-200">Локальный ♀:</span> движок Silero + голос{' '}
-            <span className="font-mono text-emerald-200">{tts.sileroJudge || 'xenia'}</span> — самый человеческий русский голос,
-            работает офлайн и грузит ПК только в момент озвучки.
+            <span className="font-semibold text-emerald-200">Локальный голос:</span> Silero ({tts.sileroJudge || 'xenia'}).
+            Работает автономно без внешних сетевых запросов.
           </div>
           <label className={labelCls}>
             Движок
@@ -393,14 +392,14 @@ export function SettingsView() {
           )}
           {tts.engine === 'piper' && (
             <details className="rounded-lg border border-white/10 p-2.5">
-              <summary className="cursor-pointer text-xs text-zinc-300">Piper локально (требует рестарта бинарника при смене путей)</summary>
+              <summary className="cursor-pointer text-xs text-zinc-300">Параметры Piper (при смене путей требуется перезапуск)</summary>
               <div className="mt-2 space-y-2">
                 <label className={labelCls}>
                   Путь к бинарнику
                   <input value={tts.piperBinary} onChange={(e) => setTts({ ...tts, piperBinary: e.target.value })} placeholder="bin/piper" className={inputCls} />
                 </label>
                 <label className={labelCls}>
-                  Модель (.onnx, irina — женский)
+                  Модель (.onnx)
                   <input value={tts.modelPath} onChange={(e) => setTts({ ...tts, modelPath: e.target.value })} className={inputCls} />
                 </label>
                 <label className={labelCls}>
@@ -427,7 +426,7 @@ export function SettingsView() {
             </label>
             <label className="flex items-center gap-1.5">
               <input type="checkbox" checked={tts.autoFallback} onChange={(e) => setTts({ ...tts, autoFallback: e.target.checked })} />
-              Авто-фолбэк
+              Резервный движок при сбое
             </label>
           </div>
           <div className="flex gap-1.5">
@@ -481,8 +480,8 @@ export function SettingsView() {
           </div>
           <SecretField label={`Twitch OAuth${twitchHas.twitch_token ? ' ● задан' : ''}`} value={twitch.token} onChange={(v) => setTwitch({ ...twitch, token: v })} />
           <SecretField label="Twitch Client ID" value={twitch.clientId} onChange={(v) => setTwitch({ ...twitch, clientId: v })} />
-          <SecretField label="Broadcaster ID (для Unban-суда)" value={twitch.broadcasterId} onChange={(v) => setTwitch({ ...twitch, broadcasterId: v })} />
-          <SecretField label="Moderator ID (пусто = как broadcaster)" value={twitch.moderatorId} onChange={(v) => setTwitch({ ...twitch, moderatorId: v })} />
+          <SecretField label="ID стримера (для разбанов)" value={twitch.broadcasterId} onChange={(v) => setTwitch({ ...twitch, broadcasterId: v })} />
+          <SecretField label="ID модератора (по умолчанию равен ID стримера)" value={twitch.moderatorId} onChange={(v) => setTwitch({ ...twitch, moderatorId: v })} />
           <SecretField label={`DonationAlerts токен${twitchHas.donationalerts_token ? ' ● задан' : ''}`} value={twitch.daToken} onChange={(v) => setTwitch({ ...twitch, daToken: v })} />
           <SecretField label={`DonatePay ключ${twitchHas.donatepay_key ? ' ● задан' : ''}`} value={twitch.dpKey} onChange={(v) => setTwitch({ ...twitch, dpKey: v })} />
           <div className="flex flex-wrap gap-3 text-xs text-zinc-300">
@@ -548,7 +547,7 @@ export function SettingsView() {
               <textarea value={profile.traits} onChange={(e) => setProfile({ ...profile, traits: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-sm text-white outline-none" />
             </label>
             <label className={labelCls}>
-              Фирменные приколы (по строке)
+              Коронные фразы (по строке)
               <textarea value={profile.gags} onChange={(e) => setProfile({ ...profile, gags: e.target.value })} rows={3} className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-sm text-white outline-none" />
             </label>
             <label className={labelCls}>
@@ -579,7 +578,7 @@ export function SettingsView() {
 
         <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Фото судьи для оверлея</h2>
-          <p className="text-xs text-zinc-500">Одно фото на весь трибунал. Подпрыгивает, пока судья говорит.</p>
+          <p className="text-xs text-zinc-500">Портрет отображается на оверлее во время речи судьи.</p>
           <label className="block cursor-pointer text-center text-xs text-zinc-400">
             <img
               src={`/api/judge/photo?t=${photoTick}`}
@@ -592,7 +591,7 @@ export function SettingsView() {
                 ;(e.target as HTMLImageElement).style.opacity = '1'
               }}
             />
-            Нажми, чтобы заменить
+            Нажмите для выбора файла
             <input
               type="file"
               accept="image/*"
@@ -631,7 +630,7 @@ export function SettingsView() {
                     toast.success('Фон суда обновлён')
                     setCourtTick((n) => n + 1)
                   } else {
-                    toast.error('Загрузка не удалась — проверь секретный ключ')
+                    toast.error('Ошибка загрузки: проверьте ключ доступа')
                   }
                 }}
               />
@@ -640,10 +639,10 @@ export function SettingsView() {
               onClick={async () => {
                 const res = await apiFetch('/api/court/photo', { method: 'DELETE' })
                 if (res.ok) {
-                  toast.success('Вернули стандартный фон')
+                  toast.success('Установлен стандартный фон')
                   setCourtTick((n) => n + 1)
                 } else {
-                  toast.error('Не вышло — проверь секретный ключ')
+                  toast.error('Ошибка сброса: проверьте ключ доступа')
                 }
               }}
               className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
@@ -723,18 +722,18 @@ export function SettingsView() {
         <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Сервер</h2>
           <p className="tabular font-mono text-sm text-zinc-300">
-            {server.host || '—'}:{server.port || '—'} · секрет {server.secretSet ? 'задан' : 'не задан'}
+            {server.host || '-'}:{server.port || '-'} · ключ доступа {server.secretSet ? 'задан' : 'не задан'}
           </p>
           <p className="text-xs text-zinc-500">
-            Смена host/port/secret — только через config.yaml, нужен рестарт.
+            Параметры host, port и secret настраиваются в config.yaml и требуют перезапуска.
           </p>
           <div>
             <button
               onClick={async () => {
-                if (!window.confirm('Перезапустить сервер? Пульт отключится на несколько секунд. Без процесс-менеджера сервер не поднимется сам!')) return
+                if (!window.confirm('Перезапустить сервер? Панель управления временно потеряет связь.')) return
                 const r = await apiPost('/api/restart', {})
-                if (r.ok) toast.success('Сервер перезапускается… обнови страницу через 5 секунд')
-                else toast.error(`Не вышло: ${apiNote(r.status)}`)
+                if (r.ok) toast.success('Сервер перезапускается. Обновите страницу через несколько секунд.')
+                else toast.error(`Ошибка перезапуска: ${apiNote(r.status)}`)
               }}
               className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-sm"
             >
@@ -766,7 +765,7 @@ export function SettingsView() {
                 <audio controls preload="none" src={`/overlay/sfx/${encodeURIComponent(f.name)}`} className="h-7 w-44" />
               </div>
             ))}
-            {sfx.length === 0 && <p className="text-xs text-zinc-600">Сэмплов нет.</p>}
+            {sfx.length === 0 && <p className="text-xs text-zinc-600">Звуковые эффекты не найдены.</p>}
           </div>
         </section>
       </div>

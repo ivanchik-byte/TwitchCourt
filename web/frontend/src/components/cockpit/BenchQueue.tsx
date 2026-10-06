@@ -8,7 +8,7 @@ export function BenchQueue() {
 
   return (
     <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Скамья подсудимых">
-      <p className="text-[11px] uppercase tracking-widest text-zinc-500">Скамья · !court</p>
+      <p className="text-[11px] uppercase tracking-widest text-zinc-500">Скамья подсудимых (!court)</p>
       <div className="shrink-0 rounded-lg border border-white/10 bg-black/30 p-2.5">
         {t.defendant ? (
           <>
@@ -17,13 +17,13 @@ export function BenchQueue() {
             {t.charge && <p className="text-sm text-zinc-400">{t.charge}</p>}
           </>
         ) : (
-          <p className="text-sm text-zinc-500">Никого на скамье</p>
+          <p className="text-sm text-zinc-500">Скамья свободна</p>
         )}
       </div>
       <ul className="flex min-h-[120px] flex-col gap-1 overflow-y-auto lg:flex-1" aria-label="Очередь !court">
         {pool.length === 0 && !t.defendant && (
           <li className="rounded-lg border border-dashed border-white/10 p-2 text-sm text-zinc-500">
-            Очередь пуста. Ждём !court.
+            Очередь пуста. Ожидание команды !court в чате.
           </li>
         )}
         {pool.map((s) => (
@@ -34,10 +34,10 @@ export function BenchQueue() {
             </span>
             <button
               onClick={() => void pick(s.nick)}
-              aria-label={`Взять на скамью ${s.nick}`}
+              aria-label={`Выбрать ${s.nick}`}
               className="pressable rounded-md border border-white/10 px-2 py-0.5 text-xs text-zinc-300"
             >
-              Взять
+              Выбрать
             </button>
           </li>
         ))}
@@ -51,7 +51,7 @@ export function BenchQueue() {
         </button>
         <button
           onClick={() => void skip()}
-          aria-label="Пропустить (N)"
+          aria-label="Пропустить"
           className="pressable flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-2 text-sm text-zinc-300"
         >
           <SkipForward size={14} /> <span className="keycap">N</span>

@@ -304,8 +304,7 @@ func (s *Store) saveSoon() {
 	})
 }
 
-// Flush forces a pending throttled write to disk immediately.
-// Used by tests and graceful shutdown.
+// Flush flushes pending throttled memory writes to disk immediately.
 func (s *Store) Flush() {
 	if s.path == "" {
 		return

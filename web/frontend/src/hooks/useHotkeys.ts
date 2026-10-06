@@ -36,7 +36,7 @@ export function useHotkeys(map: HotkeyMap, panicCode = 'Escape') {
       }
       switch (e.code) {
         case 'Space':
-          // a focused button already fires on Space — don't double-fire the gavel
+          // focused button handles space natively: avoid double firing gavel
           if (el?.closest?.('button, [role="button"], a')) return
           e.preventDefault()
           m.onGavel?.()

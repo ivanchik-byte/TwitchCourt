@@ -2,9 +2,7 @@ package ai
 
 import "strings"
 
-// ParseVerdict reads the bench ruling: the model must start with
-// either ВИНОВЕН or НЕВИНОВЕН, but soft-heads add preamble, so scan
-// the first 40 runes. НЕВИНОВЕН wins over its own substring.
+// ParseVerdict scans leading runes for guilt keyword; treats НЕВИНОВЕН with precedence.
 func ParseVerdict(text string) (guilty, decided bool) {
 	head := []rune(strings.ToUpper(strings.TrimSpace(text)))
 	if len(head) > 40 {

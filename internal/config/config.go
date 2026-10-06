@@ -307,8 +307,7 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// Clone deep-copies maps and slices so a mutated clone can be published
-// via atomic pointer swap without racing live readers (RCU pattern).
+// Clone creates a deep copy for safe atomic pointer swap (RCU).
 func (c *Config) Clone() *Config {
 	if c == nil {
 		return nil

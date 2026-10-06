@@ -70,7 +70,7 @@ export function useTribunalWS() {
       judgeLine: '',
       verdict: null,
     }))
-    push('local', 'Паника: зал очищен')
+    push('local', 'Экстренный сброс: заседание завершено')
   }, [push])
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export function useTribunalWS() {
               charge: p.state === 'idle' ? '' : (p.charge ?? s.charge),
               timeLeft: typeof p.time_left_sec === 'number' ? p.time_left_sec : s.timeLeft,
             }))
-            push('state_change', `${p.state}${p.defendant ? ` · ${p.defendant}` : ''}${p.charge ? ` — ${p.charge}` : ''}`)
+            push('state_change', `${p.state}${p.defendant ? ` · ${p.defendant}` : ''}${p.charge ? `: ${p.charge}` : ''}`)
             break
           }
           case 'subtitles': {
@@ -150,9 +150,9 @@ export function useTribunalWS() {
             break
           case 'donation': {
             const p = msg.payload as DonationPayload
-            const line = `${p.donor} — ${p.amount} ${p.currency}${p.message ? `: ${p.message}` : ''}${p.opens_trial ? ' (открывает дело)' : ''}`
+            const line = `${p.donor}: ${p.amount} ${p.currency}${p.message ? ` (${p.message})` : ''}${p.opens_trial ? ' [открывает заседание]' : ''}`
             push('donation', line, 'донат')
-            toast(`Донат: ${p.donor} — ${p.amount} ${p.currency}`)
+            toast(`Донат: ${p.donor}: ${p.amount} ${p.currency}`)
             break
           }
           case 'animation':

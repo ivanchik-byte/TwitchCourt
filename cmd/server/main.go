@@ -36,8 +36,7 @@ func main() {
 			log.Fatalf("failed loading configuration: %v", err)
 		}
 	}
-	// RCU config: HTTP handlers publish clones, readers load atomically.
-	// Never mutate cfg.Load().Load() in place — clone, mutate, Save, Store.
+	// atomic config pointer: handlers clone and swap, readers load lock-free
 	var cfg atomic.Pointer[config.Config]
 	cfg.Store(initialCfg)
 
@@ -1231,7 +1230,7 @@ func main() {
 	trySueTrial := func(crime string) {
 		if engine.GetState() != court.StateIdle {
 			if suePending.CompareAndSwap(false, true) {
-				chat.SendMessage("Следующее дело — суд над стримером: " + crime)
+				chat.SendMessage("Следующее дело (суд над стримером): " + crime)
 			}
 			return
 		}

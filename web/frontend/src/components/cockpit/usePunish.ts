@@ -9,12 +9,12 @@ export function useBan() {
   return useCallback(async () => {
     const r = await punish('ban')
     if (!r.ok) {
-      toast.error(`Бан не выдан: ${apiNote(r.status)}`)
+      toast.error(`Блокировка не применена: ${apiNote(r.status)}`)
       return
     }
-    toast('Бан выдан', {
+    toast('Пользователь заблокирован', {
       duration: 5000,
-      action: { label: 'Отмена', onClick: () => void punish('pardon') },
+      action: { label: 'Отменить', onClick: () => void punish('pardon') },
     })
   }, [punish])
 }
@@ -25,7 +25,7 @@ export function usePunishWithToast() {
   return useCallback(
     async (kind: string, secs?: number) => {
       const r = await punish(kind, secs)
-      if (!r.ok) toast.error(`Кара не выставлена: ${apiNote(r.status)}`)
+      if (!r.ok) toast.error(`Наказание не применено: ${apiNote(r.status)}`)
       return r
     },
     [punish],

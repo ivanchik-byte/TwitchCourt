@@ -13,11 +13,11 @@ export interface ApiResult {
 }
 
 export function apiNote(status: number): string {
-  if (status === 401) return 'проверь секретный ключ'
-  if (status === 409) return 'зал занят — дождись конца дела'
-  if (status === 429) return 'слишком часто, подожди немного'
-  if (status === 502) return 'внешний сервис не отвечает'
-  if (status === 0) return 'нет связи с сервером'
+  if (status === 401) return 'проверьте секретный ключ'
+  if (status === 409) return 'зал занят, дождитесь окончания текущего дела'
+  if (status === 429) return 'превышен лимит запросов, повторите позже'
+  if (status === 502) return 'внешний сервис недоступен'
+  if (status === 0) return 'нет соединения с сервером'
   return `ошибка ${status}`
 }
 

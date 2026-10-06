@@ -19,9 +19,7 @@ type UnbanRequest struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// UnbanClient talks to Twitch Helix moderation endpoints.
-// Needs a user token with moderator:read:unban_requests (list)
-// and moderator:manage:unban_requests (resolve).
+// UnbanClient manages Twitch unban requests via Helix API.
 type UnbanClient struct {
 	token         string
 	clientID      string

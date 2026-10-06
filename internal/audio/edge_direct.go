@@ -27,8 +27,7 @@ const (
 // breakTagRe matches our own pause tags, user input stays escaped
 var breakTagRe = regexp.MustCompile(`&lt;break time=&#34;(\d{1,4})ms&#34;/&gt;`)
 
-// rawBreakRe catches every pause spelling before escaping,
-// so model variants like <break time="300ms" /> or bare <break> survive
+// rawBreakRe matches break pause tags before xml escaping
 var rawBreakRe = regexp.MustCompile(`(?i)<break(\s+time="(\d{1,4})ms")?\s*/?>`)
 
 var rawBreakMs = regexp.MustCompile(`(\d{1,4})ms`)

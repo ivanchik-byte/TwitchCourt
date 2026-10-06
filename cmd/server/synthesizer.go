@@ -37,10 +37,7 @@ func buildSynthesizer(cfg *config.Config) audio.Synthesizer {
 	}
 }
 
-// ttsIsBeep reports whether the active voice path is certainly the 440Hz
-// mock beep (disabled engine, mock engine, or piper with missing binary).
-// Edge/Silero with armed fallback may still degrade at runtime — that case
-// is only visible in the server log, so false here means "voice (probably)".
+// ttsIsBeep checks if current tts configuration defaults to mock signal.
 func ttsIsBeep(cfg *config.Config) bool {
 	if !cfg.TTS.Enabled {
 		return true

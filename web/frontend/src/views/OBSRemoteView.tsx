@@ -41,7 +41,7 @@ async function setBounds(obs: OBSWebSocket, scene: string, item: SceneItem | und
 const PRESETS: Preset[] = [
   {
     name: 'Камера крупно',
-    hint: 'Вебка на весь экран, зал скрыт',
+    hint: 'Камера на весь экран, оверлей скрыт',
     apply: async (obs, scene, items, canvas) => {
       const cam = find(items, 'камера', 'camera', 'вебка', 'webcam', 'video capture')
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
@@ -65,7 +65,7 @@ const PRESETS: Preset[] = [
   },
   {
     name: 'Судья в углу',
-    hint: 'Зал + портрет судьи PiP справа внизу',
+    hint: 'Зал суда и портрет судьи в правом нижнем углу',
     apply: async (obs, scene, items, canvas) => {
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       const judge = find(items, 'судья', 'judge')
@@ -118,7 +118,7 @@ export function OBSRemoteView() {
         })),
       )
     } catch {
-      toast.error('OBS не отвечает — проверь соединение')
+      toast.error('OBS не отвечает: проверьте соединение')
     }
   }, [scene])
 
@@ -148,7 +148,7 @@ export function OBSRemoteView() {
         /* keep default canvas */
       }
       setConnected(true)
-      toast.success('OBS подключён')
+      toast.success('OBS подключен')
     } catch {
       try {
         await obs?.disconnect()
@@ -157,7 +157,7 @@ export function OBSRemoteView() {
       }
       obsRef.current = null
       setConnected(false)
-      toast.error('Не подключилось: включи WebSocket-сервер в OBS (Инструменты → WebSocket-сервер) и проверь пароль')
+      toast.error('Не удалось подключиться: включите сервер WebSocket в OBS (Инструменты → Настройки сервера WebSocket) и проверьте пароль')
     }
   }
 
@@ -184,7 +184,7 @@ export function OBSRemoteView() {
       toast.success(p.name)
       void refresh()
     } catch {
-      toast.error('Пресет не применился — проверь имена источников')
+      toast.error('Пресет не применился: проверьте названия источников в сцене')
     }
   }
 
@@ -193,15 +193,15 @@ export function OBSRemoteView() {
       <div className="card space-y-2 p-4">
         <h2 className="font-semibold">OBS Remote</h2>
         <p className="text-xs text-zinc-500">
-          Прямое подключение к OBS (WebSocket-сервер: Инструменты → WebSocket-сервер → Включить + пароль).
-          Без участия бэкенда трибунала.
+          Прямое подключение к OBS WebSocket (Инструменты → Настройки сервера WebSocket).
+          Работает автономно в браузере.
         </p>
         <div className="grid gap-1.5 sm:grid-cols-[1fr_110px_1fr_auto]">
           <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="127.0.0.1" autoComplete="off"
             className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
           <input value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ''))} placeholder="4455" inputMode="numeric"
             className="tabular h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль OBS (только на сессию)" autoComplete="off"
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль OBS (только для текущей сессии)" autoComplete="off"
             className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
           {connected ? (
             <button onClick={() => void disconnect()} className="pressable rounded-lg border border-white/10 px-4 py-1.5 text-sm">
@@ -214,7 +214,7 @@ export function OBSRemoteView() {
           )}
         </div>
         <p className={`font-mono text-xs ${connected ? 'text-emerald-300' : 'text-zinc-500'}`}>
-          {connected ? `● подключено · сцена: ${scene || '—'}` : '○ не подключено'}
+          {connected ? `● подключено · сцена: ${scene || '-'}` : '○ не подключено'}
         </p>
       </div>
 
@@ -246,7 +246,7 @@ export function OBSRemoteView() {
 
           <div className="card space-y-1 p-4">
             <h2 className="font-semibold">Источники сцены</h2>
-            {items.length === 0 && <p className="text-sm text-zinc-600">Пусто.</p>}
+            {items.length === 0 && <p className="text-sm text-zinc-600">Список источников пуст.</p>}
             {items.map((i) => (
               <div key={i.sceneItemId} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
                 <span className={`h-2 w-2 rounded-full ${i.sceneItemEnabled ? 'bg-emerald-400' : 'bg-zinc-600'}`} />

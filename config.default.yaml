@@ -83,7 +83,4 @@ twitch:
   token: ""
   client_id: ""
   broadcaster_id: ""
-  # moderator_id defaults to broadcaster_id; token needs
-  # moderator:read:unban_requests + moderator:manage:unban_requests for Unban Court
-  # NOTE(discord): a third unban format (streamer + discord opponent as second
-  # voice) needs per-speaker audio capture and is parked until then.
+  # moderator_id defaults to broadcaster_id; requires unban_requests scopes

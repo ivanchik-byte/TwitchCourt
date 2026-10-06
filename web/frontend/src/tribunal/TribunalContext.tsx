@@ -29,7 +29,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
       const d = await apiGet<{ pool: PoolSeat[] }>('/api/dock')
       setPool(d.pool ?? [])
     } catch {
-      /* offline — keep last known pool */
+      /* offline: keep last known pool */
     }
   }, [])
 
@@ -39,7 +39,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id)
   }, [refreshDock])
 
-  // queue follows the socket, not the poller: any phase/defendant change re-syncs
+  // queue follows socket events: phase or defendant updates trigger dock refresh
   const phase = t.phase
   const defendant = t.defendant
   useEffect(() => {
@@ -47,11 +47,11 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   }, [phase, defendant, refreshDock])
 
   const gavel = useCallback(() => {
-    // legacy gavel semantics: slam the desk, the judge speaks
+    // trigger gavel desk slam animation and vocal interjection
     tRef.current.send('animation', { name: 'slam' })
     void (async () => {
-      const r = await apiPost('/api/say', { text: 'Суд слушает!' })
-      if (!r.ok) toast.error(`Молоток без голоса: ${apiNote(r.status)}`)
+      const r = await apiPost('/api/say', { text: 'Суд слушает.' })
+      if (!r.ok) toast.error(`Озвучка недоступна: ${apiNote(r.status)}`)
     })()
   }, [])
 
@@ -68,7 +68,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   const pick = useCallback(
     async (nick?: string) => {
       const r = await apiPost('/api/dock/pick', { nick: nick ?? '' })
-      if (!r.ok) toast.error(`Скамья: ${r.status === 401 ? 'проверь секретный ключ' : 'не вышло'}`)
+      if (!r.ok) toast.error(`Скамья: ${r.status === 401 ? 'проверьте секретный ключ' : 'операция не выполнена'}`)
       await refreshDock()
     },
     [refreshDock],
@@ -82,10 +82,10 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
 
   const openTrial = useCallback(async (defendant: string, crime: string, viewer = true): Promise<ApiResult> => {
     if (!defendant.trim()) {
-      toast.error('Впиши ник подсудимого')
+      toast.error('Укажите никнейм подсудимого')
       return { ok: false, status: 0 }
     }
-    return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || 'выбран залом', viewer })
+    return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || 'решение зала', viewer })
   }, [])
 
   const actions = useMemo<TribunalActions>(

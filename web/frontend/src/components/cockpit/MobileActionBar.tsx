@@ -12,7 +12,7 @@ export function MobileActionBar() {
       <div className="flex gap-1.5">
         <button
           onClick={gavel}
-          aria-label="Ударить молотком"
+          aria-label="Удар молотком"
           className="pressable flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/15 px-2 py-2.5 font-bold text-amber-200"
         >
           <Gavel size={16} /> <span className="keycap">Space</span>
@@ -26,21 +26,21 @@ export function MobileActionBar() {
         </button>
         <button
           onClick={() => void punishToast('timeout', 60)}
-          aria-label="Мут 60 секунд (2)"
+          aria-label="Тайм-аут 60 секунд (2)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2.5 py-2.5 text-sm"
         >
           60с
         </button>
         <button
           onClick={() => void punishToast('timeout', 300)}
-          aria-label="Мут 5 минут (3)"
+          aria-label="Тайм-аут 5 минут (3)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2.5 py-2.5 text-sm"
         >
           5м
         </button>
         <button
           onClick={() => void ban()}
-          aria-label="Бан канала (4)"
+          aria-label="Блокировка на канале (4)"
           className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-2.5 py-2.5 text-sm"
         >
           Бан

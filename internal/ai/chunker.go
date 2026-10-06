@@ -24,8 +24,7 @@ func NewSentenceChunker() *SentenceChunker {
 	return &SentenceChunker{}
 }
 
-// NewPhaseChunker drops tags that don't belong to the current trial phase,
-// so the model cannot fire the objection splash in the middle of the charge.
+// NewPhaseChunker filters animation tags outside allowed phase whitelist
 func NewPhaseChunker(banned ...string) *SentenceChunker {
 	c := &SentenceChunker{}
 	if len(banned) > 0 {

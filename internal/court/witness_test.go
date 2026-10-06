@@ -165,8 +165,7 @@ func TestStartViewerTrialBusy(t *testing.T) {
 	}
 }
 
-// mock deliberation never says the magic word: the bench must acquit
-// and run the whole pipeline without hanging
+// verify pipeline acquits and completes when model produces no verdict keyword
 func TestViewerTrialRunsEndToEnd(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Courtroom.DefenseSec = 1

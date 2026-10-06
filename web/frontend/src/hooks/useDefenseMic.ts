@@ -69,8 +69,7 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
         }
       }
     }
-    // chrome sleeps recognition — restart while defense phase is live
-    // fatal mic errors (denied/captured) stop the loop instead of spinning
+    // restart recognition while phase is active; fatal errors abort
     rec.onerror = (ev) => {
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') {
         micDead = true

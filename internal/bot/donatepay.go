@@ -14,8 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// DonatePayWatcher listens to DonatePay donations over Centrifugo.
-// The streamer copies the API key from donatepay.ru/page/api, no OAuth needed.
+// DonatePayWatcher subscribes to donatepay donation events via Centrifugo.
 type DonatePayWatcher struct {
 	apiKey string
 	emit   func(Donation)

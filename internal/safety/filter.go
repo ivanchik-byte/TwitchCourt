@@ -74,8 +74,7 @@ func (f *Filter) compileLocked() {
 		}
 	}
 
-	// one joke word for every match: it must not trigger any pattern,
-	// otherwise replacements cascade into each other (or loop forever)
+	// benign replacement word avoiding secondary filter triggers
 	f.replacement = ""
 	for _, candidate := range defaultReplacements {
 		banned := false

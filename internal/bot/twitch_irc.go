@@ -147,8 +147,7 @@ func (t *TwitchIRC) LastModError() (string, bool) {
 	return t.modError, true
 }
 
-// noteModError remembers moderation refusals so the desk can warn
-// about a missing /mod instead of failing silently
+// noteModError tracks moderation failures for dashboard warnings
 func (t *TwitchIRC) noteModError(line string) {
 	if !strings.Contains(line, "NOTICE") {
 		return

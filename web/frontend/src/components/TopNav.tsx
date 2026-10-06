@@ -11,7 +11,7 @@ const tabs = [
 
 export function TopNav({ wsOk, rtt }: { wsOk: boolean; rtt: number | null }) {
   return (
-    <nav className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur-md" aria-label="Разделы трибунала">
+    <nav className="sticky top-0 z-20 border-b border-white/10 bg-black/70 backdrop-blur-md" aria-label="Навигация">
       <div className="mx-auto flex h-12 max-w-[1600px] items-center gap-2 px-3">
         <span className="font-mono text-xs tracking-widest text-amber-400">TRIBUNAL</span>
         <div className="flex gap-1">

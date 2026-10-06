@@ -12,8 +12,7 @@ import (
 	"time"
 )
 
-// SileroSynthesizer talks to the local Silero sidecar over HTTP.
-// The heavy torch runtime stays in Python, Go only ships WAV bytes.
+// SileroSynthesizer connects to local Python Silero sidecar over HTTP.
 type SileroSynthesizer struct {
 	mu    sync.RWMutex
 	url   string
@@ -35,8 +34,7 @@ func NewSileroSynthesizer(url, voice string) *SileroSynthesizer {
 	}
 }
 
-// SetVoiceProfile switches the Silero speaker; rate is engine-level
-// and ignored here to match the Synthesizer contract.
+// SetVoiceProfile updates Silero speaker name.
 func (s *SileroSynthesizer) SetVoiceProfile(voice, _ string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

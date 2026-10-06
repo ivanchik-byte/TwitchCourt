@@ -12,9 +12,7 @@ func isBribe(message string) bool {
 	return strings.Contains(strings.ToLower(message), "взятк")
 }
 
-// openDonationTrial maps a donation amount to at most one trial.
-// StreamerTrialMin wins when both thresholds match, so a big donation
-// never opens two competing cases.
+// openDonationTrial maps donation amount to a trial; streamer trial takes priority
 func openDonationTrial(cfg *config.Config, open func(defendant, crime, context string) bool, donor string, amount float64, currency, message string) {
 	crime := ""
 	if strings.TrimSpace(message) != "" {

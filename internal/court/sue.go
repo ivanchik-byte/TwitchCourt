@@ -12,8 +12,7 @@ type sueVote struct {
 	at     time.Time
 }
 
-// SueTracker counts unique !sue authors inside a sliding window.
-// The streamer configures how many people trigger a streamer trial.
+// SueTracker tracks unique !sue votes within a sliding window.
 type SueTracker struct {
 	mu    sync.Mutex
 	votes map[string]sueVote
@@ -23,8 +22,7 @@ func NewSueTracker() *SueTracker {
 	return &SueTracker{votes: make(map[string]sueVote)}
 }
 
-// Add records one author's reason, drops votes older than window,
-// and returns the current unique-author count.
+// Add records author vote and returns current unique author count.
 func (s *SueTracker) Add(author, reason string, now time.Time, window time.Duration) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -52,8 +50,7 @@ func (s *SueTracker) Reset() {
 	s.votes = make(map[string]sueVote)
 }
 
-// TopReason picks the crowd's charge: most-voted reason wins,
-// ties go to the longest one, empty reasons are skipped.
+// TopReason returns the most frequent crime reason.
 func (s *SueTracker) TopReason() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

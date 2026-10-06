@@ -40,16 +40,16 @@ export function GavelStage() {
 
   const open = async (text: string) => {
     const r = await openTrial(nick, text)
-    if (!r.ok) toast.error(`Дело не открыто: ${apiNote(r.status)}`)
+    if (!r.ok) toast.error(`Не удалось начать заседание: ${apiNote(r.status)}`)
   }
 
   return (
     <section className="card flex shrink-0 flex-col gap-3 p-4" aria-label="Ход заседания">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-zinc-500">Ход суда</p>
+          <p className="text-[11px] uppercase tracking-widest text-zinc-500">Текущий этап</p>
           <p className="text-lg font-semibold">
-            {t.phase === 'idle' ? 'Зал пуст' : t.phase}
+            {t.phase === 'idle' ? 'Заседание не начато' : t.phase}
             {t.caseTitle && <span className="ml-2 font-mono text-xs text-zinc-500">{t.caseTitle}</span>}
           </p>
         </div>
@@ -67,16 +67,16 @@ export function GavelStage() {
 
       <div className="grid gap-1.5 sm:grid-cols-2">
         <label className="block text-xs text-zinc-400">
-          Ник зрителя
+          Никнейм участника
           <input
-            value={nick} onChange={(e) => setNick(e.target.value)} placeholder="ник" autoComplete="off"
+            value={nick} onChange={(e) => setNick(e.target.value)} placeholder="никнейм" autoComplete="off"
             className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none focus:border-amber-400/50"
           />
         </label>
         <label className="block text-xs text-zinc-400">
-          Статья
+          Пункт обвинения
           <input
-            value={crime} onChange={(e) => setCrime(e.target.value)} placeholder="за что судим" autoComplete="off"
+            value={crime} onChange={(e) => setCrime(e.target.value)} placeholder="причина вызова" autoComplete="off"
             className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none focus:border-amber-400/50"
           />
         </label>
@@ -90,7 +90,7 @@ export function GavelStage() {
         ))}
       </div>
       <button onClick={() => void open(crime)} className="pressable w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
-        Открыть дело
+        Открыть заседание
       </button>
     </section>
   )

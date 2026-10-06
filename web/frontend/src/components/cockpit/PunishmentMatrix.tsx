@@ -11,8 +11,8 @@ export function PunishmentMatrix() {
   const verdicts = useMemo(() => t.stenogram.filter((e) => e.kind === 'verdict'), [t.stenogram])
 
   return (
-    <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Наказание">
-      <p className="text-[11px] uppercase tracking-widest text-zinc-500">Кара · вердикт в 1 клик</p>
+    <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Меры воздействия">
+      <p className="text-[11px] uppercase tracking-widest text-zinc-500">Меры воздействия</p>
       <div className="grid shrink-0 grid-cols-2 gap-1.5">
         <button
           onClick={() => void punishToast('pardon')}
@@ -23,21 +23,21 @@ export function PunishmentMatrix() {
         </button>
         <button
           onClick={() => void punishToast('timeout', 60)}
-          aria-label="Мут 60 секунд (2)"
+          aria-label="Тайм-аут 60 секунд (2)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2 py-2.5 text-sm"
         >
-          Мут 60с <span className="keycap ml-1">2</span>
+          Тайм-аут 60 с <span className="keycap ml-1">2</span>
         </button>
         <button
           onClick={() => void punishToast('timeout', 300)}
-          aria-label="Мут 300 секунд (3)"
+          aria-label="Тайм-аут 300 секунд (3)"
           className="pressable rounded-lg border border-white/10 bg-white/5 px-2 py-2.5 text-sm"
         >
-          Мут 300с <span className="keycap ml-1">3</span>
+          Тайм-аут 300 с <span className="keycap ml-1">3</span>
         </button>
         <button
           onClick={() => void ban()}
-          aria-label="Бан канала (4)"
+          aria-label="Блокировка (4)"
           className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-2 py-2.5 text-sm"
         >
           Бан <span className="keycap ml-1">4</span>
@@ -63,7 +63,7 @@ export function PunishmentMatrix() {
       )}
       <p className="text-[11px] uppercase tracking-widest text-zinc-500">Протокол</p>
       <ul className="min-h-[60px] space-y-1 overflow-y-auto lg:flex-1">
-        {verdicts.length === 0 && <li className="text-sm text-zinc-600">Приговоров пока нет.</li>}
+        {verdicts.length === 0 && <li className="text-sm text-zinc-600">Записи приговоров отсутствуют.</li>}
         {verdicts.map((e) => (
           <li key={e.id} className="rounded-lg bg-white/[0.03] p-1.5 text-sm text-zinc-200">{e.text}</li>
         ))}

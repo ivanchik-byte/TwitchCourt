@@ -37,8 +37,7 @@ func BuildCounterArgumentPrompt(streamerDefense string) string {
 		streamerDefense)
 }
 
-// BuildDeliberationPrompt asks the bench for a ruling.
-// The model must start its answer with either ВИНОВЕН or НЕВИНОВЕН.
+// BuildDeliberationPrompt asks the bench for a ruling starting with verdict keyword.
 func BuildDeliberationPrompt(defendant, crime, testimony string) string {
 	return fmt.Sprintf(`ПОДСУДИМЫЙ: %s
 ОБВИНЕНИЕ: %s
@@ -46,6 +45,6 @@ func BuildDeliberationPrompt(defendant, crime, testimony string) string {
 %s
 
 ЗАДАЧА:
-Вынеси вердикт как Верховный Судья. Первое слово ответа — строго ВИНОВЕН или НЕВИНОВЕН, затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен.»`,
+Вынеси вердикт как Верховный Судья. Первое слово ответа: строго ВИНОВЕН или НЕВИНОВЕН, затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен.»`,
 		defendant, crime, testimony)
 }

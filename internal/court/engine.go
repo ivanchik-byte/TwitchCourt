@@ -136,8 +136,7 @@ func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLas
 	return e.dispatchSpeechChunkWith(ctx, s, index, isLast, speaker, voiceSynth)
 }
 
-// castVoice maps an Edge voice name to the Silero speaker when the
-// Silero engine is active, so one config drives every engine.
+// castVoice maps Edge voice name to Silero speaker when Silero engine is active
 func (e *Engine) castVoice(edge, silero string) string {
 	if e.cfg.Load().TTS.Engine == "silero" && silero != "" {
 		return silero
@@ -228,22 +227,17 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 	return e.startTrialWith(defendant, crime, chatContext, "")
 }
 
-// StartViewerTrial opens an opt-in viewer trial; a guilty verdict
-// puts the viewer into chat jail via TimeoutHook
+// StartViewerTrial opens an opt-in viewer trial
 func (e *Engine) StartViewerTrial(viewer, crime string) error {
 	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
 }
 
-// StartUnbanTrial opens a variant-B pardon trial: the AI defends the banned
-// user from their appeal text, the streamer attacks over the mic, the judge
-// verdicts. Executing the pardon stays manual via /api/unban/resolve.
-// NOTE(discord): a third format (streamer + discord opponent as second voice)
-// needs per-speaker audio capture and is parked until then.
+// StartUnbanTrial opens an unban pardon trial against the streamer
 func (e *Engine) StartUnbanTrial(user, appeal string) error {
 	crime := "Апелляция на разбан: " + appeal
 	chatContext := "UNBAN-ТРИБУНАЛ. Подсудимого нет в чате. " +
-		"ИИ — адвокат: защищает " + user + " и требует разбана. " +
-		"Стример в микрофон — обвинитель: его реплики это атака, а не защита. " +
+		"ИИ адвокат: защищает " + user + " и требует разбана. " +
+		"Стример в микрофон: выступает обвинителем, его реплики это атака, а не защита. " +
 		"Судья выслушивает обе стороны и выносит вердикт."
 	return e.startTrialWith(user, crime, chatContext, "")
 }
@@ -387,8 +381,7 @@ func (e *Engine) clearTrial() {
 	}
 }
 
-// deliberate retires the bench: the judge speaks the ruling aloud,
-// and its first word decides the verdict
+// deliberate evaluates verdict and announces the ruling
 func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (guilty, decided bool) {
 	e.mu.Lock()
 	if e.currCase != c {
@@ -441,8 +434,7 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 	return ai.ParseVerdict(ruling.String())
 }
 
-// caseTestimony bundles everything the bench must weigh.
-// Snapshots case slices under lock so concurrent chat writes can't race the read.
+// caseTestimony snapshots collected testimony slices under lock
 func (e *Engine) caseTestimony(c *TrialCase) string {
 	e.mu.RLock()
 	testimony := append([]string(nil), c.Testimony...)
@@ -658,8 +650,7 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 		e.hub.BroadcastEvent(obs.EventAnimation, obs.AnimationPayload{Name: s.Animation})
 	}
 
-	// user input arrives escaped: unwrap entities before voice and display
-	// (break tags stay intact for Edge SSML, XSS is dead via textContent)
+	// unwrap html entities before voice synthesis and display
 	speechText := html.UnescapeString(s.Text)
 
 	// strip SSML pause tags from subtitle display
@@ -780,8 +771,7 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max]) + "..."
 }
 
-// truncateRunesTail keeps the freshest tail so a new defense line
-// is never dropped in favor of stale text.
+// truncateRunesTail preserves latest runes within the limit
 func truncateRunesTail(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) <= max {
