@@ -47,3 +47,44 @@ func TestFilterSelfTrigger(t *testing.T) {
 		t.Fatal("sanitize hung on self-triggering replacement")
 	}
 }
+
+func TestFilterToggleEnabled(t *testing.T) {
+	filter := NewFilter([]string{"чит"})
+	if filter.Sanitize("игрок юзает чит") == "игрок юзает чит" {
+		t.Fatal("expected sanitized text when filter enabled")
+	}
+
+	filter.SetEnabled(false)
+	raw := "игрок юзает чит & <b>bold</b>"
+	got := filter.Sanitize(raw)
+	if !strings.Contains(got, "чит") {
+		t.Fatalf("expected blacklisted word to remain when disabled, got %s", got)
+	}
+	if strings.Contains(got, "<b>") {
+		t.Fatalf("expected HTML to be escaped even when disabled, got %s", got)
+	}
+}
+
+func TestFilterSetBlacklist(t *testing.T) {
+	filter := NewFilter([]string{"слово1"})
+	if !strings.Contains(filter.Sanitize("тут слово1"), "[банан]") {
+		t.Fatalf("expected слово1 to be replaced")
+	}
+
+	filter.SetBlacklist([]string{"новоеслово"})
+	if strings.Contains(filter.Sanitize("тут слово1"), "[банан]") {
+		t.Fatalf("слово1 should no longer be blacklisted after SetBlacklist")
+	}
+	if !strings.Contains(filter.Sanitize("тут новоеслово"), "[банан]") {
+		t.Fatalf("новоеслово should be blacklisted after SetBlacklist")
+	}
+}
+
+func TestFilterSpecialCharacters(t *testing.T) {
+	filter := NewFilter([]string{"bad+word*", "[test]?"})
+	got := filter.Sanitize("here is bad+word* and [test]?")
+	if strings.Contains(got, "bad+word*") || strings.Contains(got, "[test]?") {
+		t.Fatalf("special characters should be safely escaped and matched, got %s", got)
+	}
+}
+
