@@ -213,7 +213,7 @@ export function SettingsView() {
     <div className="mx-auto max-w-[1100px] space-y-3 p-3">
       <div className="card p-3">
         <div className="min-w-[220px] max-w-prose">
-          <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v) }} placeholder="X-Secret" />
+          <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v); location.reload() }} placeholder="X-Secret" />
         </div>
       </div>
 

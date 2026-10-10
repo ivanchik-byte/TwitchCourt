@@ -1,8 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { useTribunalWS, type Tribunal } from '../hooks/useTribunalWS'
+import { useTribunalWS, type StenogramEntry } from '../hooks/useTribunalWS'
 import { apiGet, apiPost, apiNote, type ApiResult } from '../lib/api'
-import type { PoolSeat } from '../lib/types'
+import type { PoolSeat, VerdictPayload } from '../lib/types'
+
+export interface TribunalPhase {
+  connected: boolean
+  rttMs: number | null
+  retries: number
+  phase: string
+  caseTitle: string
+  defendant: string
+  charge: string
+  timeLeft: number | null
+  verdict: VerdictPayload | null
+}
+
+export interface TribunalFeed {
+  judgeLine: string
+  stenogram: StenogramEntry[]
+}
 
 export interface TribunalActions {
   refreshDock: () => void
@@ -12,9 +29,11 @@ export interface TribunalActions {
   pick: (nick?: string) => Promise<void>
   skip: () => Promise<void>
   openTrial: (defendant: string, crime: string, viewer?: boolean) => Promise<ApiResult>
+  send: (action: string, payload?: Record<string, unknown>) => boolean
 }
 
-const TribunalStateContext = createContext<Tribunal | null>(null)
+const TribunalPhaseContext = createContext<TribunalPhase | null>(null)
+const TribunalFeedContext = createContext<TribunalFeed | null>(null)
 const TribunalPoolContext = createContext<PoolSeat[]>([])
 const TribunalActionsContext = createContext<TribunalActions | null>(null)
 
@@ -40,11 +59,11 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   }, [refreshDock])
 
   // queue follows socket events: phase or defendant updates trigger dock refresh
-  const phase = t.phase
-  const defendant = t.defendant
+  const phaseName = t.phase
+  const defendantName = t.defendant
   useEffect(() => {
     void refreshDock()
-  }, [phase, defendant, refreshDock])
+  }, [phaseName, defendantName, refreshDock])
 
   const gavel = useCallback(() => {
     // trigger gavel desk slam animation and vocal interjection
@@ -56,8 +75,9 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const panic = useCallback(() => {
+    // no local reset: the server broadcasts panic back on receipt,
+    // which clears the UI through the socket (avoids 401 desync)
     tRef.current.send('panic', {})
-    tRef.current.panicReset()
   }, [])
 
   const punish = useCallback(
@@ -75,7 +95,11 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   )
 
   const skip = useCallback(async () => {
-    await apiPost('/api/dock/skip', {})
+    const r = await apiPost('/api/dock/skip', {})
+    if (!r.ok) {
+      toast.error(`Пропуск не удался: ${apiNote(r.status)}`)
+      return
+    }
     tRef.current.panicReset()
     await refreshDock()
   }, [refreshDock])
@@ -88,23 +112,55 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
     return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || '', viewer })
   }, [])
 
+  const send = useCallback((action: string, payload: Record<string, unknown> = {}) => {
+    return tRef.current.send(action, payload)
+  }, [])
+
   const actions = useMemo<TribunalActions>(
-    () => ({ refreshDock, gavel, panic, punish, pick, skip, openTrial }),
-    [refreshDock, gavel, panic, punish, pick, skip, openTrial],
+    () => ({ refreshDock, gavel, panic, punish, pick, skip, openTrial, send }),
+    [refreshDock, gavel, panic, punish, pick, skip, openTrial, send],
+  )
+
+  // split identity: stenogram ticks must not re-render phase consumers
+  const phase = useMemo<TribunalPhase>(
+    () => ({
+      connected: t.connected,
+      rttMs: t.rttMs,
+      retries: t.retries,
+      phase: t.phase,
+      caseTitle: t.caseTitle,
+      defendant: t.defendant,
+      charge: t.charge,
+      timeLeft: t.timeLeft,
+      verdict: t.verdict,
+    }),
+    [t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict],
+  )
+  const feed = useMemo<TribunalFeed>(
+    () => ({ judgeLine: t.judgeLine, stenogram: t.stenogram }),
+    [t.judgeLine, t.stenogram],
   )
 
   return (
-    <TribunalStateContext.Provider value={t}>
-      <TribunalPoolContext.Provider value={pool}>
-        <TribunalActionsContext.Provider value={actions}>{children}</TribunalActionsContext.Provider>
-      </TribunalPoolContext.Provider>
-    </TribunalStateContext.Provider>
+    <TribunalPhaseContext.Provider value={phase}>
+      <TribunalFeedContext.Provider value={feed}>
+        <TribunalPoolContext.Provider value={pool}>
+          <TribunalActionsContext.Provider value={actions}>{children}</TribunalActionsContext.Provider>
+        </TribunalPoolContext.Provider>
+      </TribunalFeedContext.Provider>
+    </TribunalPhaseContext.Provider>
   )
 }
 
-export function useTribunalState(): Tribunal {
-  const v = useContext(TribunalStateContext)
-  if (!v) throw new Error('useTribunalState must be used inside TribunalProvider')
+export function useTribunalPhase(): TribunalPhase {
+  const v = useContext(TribunalPhaseContext)
+  if (!v) throw new Error('useTribunalPhase must be used inside TribunalProvider')
+  return v
+}
+
+export function useTribunalFeed(): TribunalFeed {
+  const v = useContext(TribunalFeedContext)
+  if (!v) throw new Error('useTribunalFeed must be used inside TribunalProvider')
   return v
 }
 

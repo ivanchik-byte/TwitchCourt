@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '../../lib/cn'
-import { useTribunalState } from '../../tribunal/TribunalContext'
+import { useTribunalFeed } from '../../tribunal/TribunalContext'
 import type { TribunalEventType } from '../../lib/types'
 
 function colorFor(kind: TribunalEventType | 'local') {
@@ -19,7 +19,7 @@ function colorFor(kind: TribunalEventType | 'local') {
 }
 
 export function StenogramLog() {
-  const t = useTribunalState()
+  const t = useTribunalFeed()
   const listRef = useRef<HTMLUListElement | null>(null)
 
   useEffect(() => {

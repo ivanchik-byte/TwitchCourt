@@ -87,6 +87,7 @@ namespace Overlay {
   let lipRaf = 0;
   const audioQueue: AudioBuffer[] = [];
   let playing = false;
+  let currentSource: AudioBufferSourceNode | null = null;
 
   function ctx(): AudioContext {
     if (!audioCtx) {
@@ -136,12 +137,14 @@ namespace Overlay {
     const buffer = audioQueue.shift();
     if (!buffer) {
       playing = false;
+      currentSource = null;
       mouth.classList.remove("open");
       return;
     }
     playing = true;
     const ac = ctx();
     const source = ac.createBufferSource();
+    currentSource = source;
     source.buffer = buffer;
     if (analyser) source.connect(analyser);
     else source.connect(ac.destination);
@@ -154,6 +157,12 @@ namespace Overlay {
   function stopAudio(): void {
     audioQueue.length = 0;
     playing = false;
+    try {
+      currentSource?.stop();
+    } catch {
+      /* already ended */
+    }
+    currentSource = null;
     mouth.classList.remove("open");
   }
 
@@ -244,6 +253,7 @@ namespace Overlay {
     void verdict.offsetWidth;
     verdict.classList.add("drop");
     stopCrowd();
+    stopBgm();
     slamVisual();
     thump();
     playSfx("verdict.mp3");
@@ -367,6 +377,7 @@ namespace Overlay {
           startBgm();
           startCrowd();
           hideVerdict();
+          testimony.classList.add("hidden");
           if (msg.payload.case_title) caseNo.textContent = msg.payload.case_title;
           if (msg.payload.charge) charge.textContent = "Обвинение: " + msg.payload.charge;
         }

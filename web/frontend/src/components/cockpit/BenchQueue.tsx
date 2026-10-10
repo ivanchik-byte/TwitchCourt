@@ -1,8 +1,8 @@
 import { Shuffle, SkipForward } from 'lucide-react'
-import { useTribunalActions, useTribunalPool, useTribunalState } from '../../tribunal/TribunalContext'
+import { useTribunalActions, useTribunalPhase, useTribunalPool } from '../../tribunal/TribunalContext'
 
 export function BenchQueue() {
-  const t = useTribunalState()
+  const t = useTribunalPhase()
   const pool = useTribunalPool()
   const { pick, skip } = useTribunalActions()
 

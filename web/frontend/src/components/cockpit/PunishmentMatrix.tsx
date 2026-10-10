@@ -1,14 +1,15 @@
 import { useMemo } from 'react'
 import { cn } from '../../lib/cn'
-import { useTribunalState } from '../../tribunal/TribunalContext'
+import { useTribunalFeed, useTribunalPhase } from '../../tribunal/TribunalContext'
 import { useBan, usePunishWithToast } from './usePunish'
 
 export function PunishmentMatrix() {
-  const t = useTribunalState()
+  const t = useTribunalPhase()
+  const { stenogram } = useTribunalFeed()
   const ban = useBan()
   const punishToast = usePunishWithToast()
 
-  const verdicts = useMemo(() => t.stenogram.filter((e) => e.kind === 'verdict'), [t.stenogram])
+  const verdicts = useMemo(() => stenogram.filter((e) => e.kind === 'verdict'), [stenogram])
 
   return (
     <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Меры воздействия">

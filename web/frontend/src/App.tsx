@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { TopNav } from './components/TopNav'
-import { TribunalProvider, useTribunalState } from './tribunal/TribunalContext'
+import { TribunalProvider, useTribunalPhase } from './tribunal/TribunalContext'
 import { CockpitView } from './views/CockpitView'
 
 const ModesView = lazy(() => import('./views/ModesView').then((m) => ({ default: m.ModesView })))
@@ -11,7 +11,7 @@ const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ de
 const OBSRemoteView = lazy(() => import('./views/OBSRemoteView').then((m) => ({ default: m.OBSRemoteView })))
 
 function Shell() {
-  const t = useTribunalState()
+  const t = useTribunalPhase()
 
   return (
     <div className="flex min-h-[100dvh] flex-col">

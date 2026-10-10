@@ -3,7 +3,7 @@ import { Gavel } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
 import { apiGet, apiNote } from '../../lib/api'
-import { useTribunalActions, useTribunalState } from '../../tribunal/TribunalContext'
+import { useTribunalActions, useTribunalPhase } from '../../tribunal/TribunalContext'
 
 function Timer({ secs }: { secs: number | null }) {
   const [left, setLeft] = useState(secs)
@@ -31,7 +31,7 @@ function Timer({ secs }: { secs: number | null }) {
 }
 
 export function GavelStage() {
-  const t = useTribunalState()
+  const t = useTribunalPhase()
   const { gavel, openTrial } = useTribunalActions()
   const [nick, setNick] = useState('')
   const [crime, setCrime] = useState('')
@@ -90,13 +90,13 @@ export function GavelStage() {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {articles.map((a) => (
-          <button key={a} onClick={() => void open(a)}
-            className="pressable rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-zinc-300 hover:border-amber-400/40">
+          <button key={a} onClick={() => void open(a)} disabled={t.phase !== 'idle'}
+            className="pressable rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-zinc-300 hover:border-amber-400/40 disabled:opacity-40">
             {a}
           </button>
         ))}
       </div>
-      <button onClick={() => void open(crime)} className="pressable w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold">
+      <button onClick={() => void open(crime)} disabled={t.phase !== 'idle'} className="pressable w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold disabled:opacity-40">
         Открыть заседание
       </button>
     </section>

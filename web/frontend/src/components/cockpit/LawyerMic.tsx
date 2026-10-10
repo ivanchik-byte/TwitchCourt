@@ -1,14 +1,16 @@
 import { Mic } from 'lucide-react'
 import { useAudioMeter } from '../../hooks/useAudioMeter'
 import { useDefenseMic } from '../../hooks/useDefenseMic'
-import { useTribunalState } from '../../tribunal/TribunalContext'
+import { useTribunalActions, useTribunalFeed, useTribunalPhase } from '../../tribunal/TribunalContext'
 
 export function LawyerMic() {
-  const t = useTribunalState()
-  const defenseLive = t.phase === 'defense' || t.phase === 'testimony'
+  const { phase } = useTribunalPhase()
+  const { judgeLine } = useTribunalFeed()
+  const { send } = useTribunalActions()
+  const defenseLive = phase === 'defense' || phase === 'testimony'
   const { canvasRef } = useAudioMeter(defenseLive)
   const { transcript, listening, supported } = useDefenseMic(defenseLive, (text) => {
-    t.send('defense', { author: 'стример', text })
+    send('defense', { author: 'стример', text })
   })
 
   return (
@@ -20,7 +22,7 @@ export function LawyerMic() {
       </div>
       <canvas ref={canvasRef} width={480} height={26} className="h-[26px] w-full rounded bg-black/50" />
       <p className="mt-1 min-h-[1.25rem] truncate font-mono text-xs text-cyan-200">{transcript}</p>
-      {t.judgeLine && <p className="mt-1 text-sm text-amber-100/90">{t.judgeLine}</p>}
+      {judgeLine && <p className="mt-1 text-sm text-amber-100/90">{judgeLine}</p>}
     </section>
   )
 }
