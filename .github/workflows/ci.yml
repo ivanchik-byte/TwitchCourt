@@ -17,6 +17,9 @@ jobs:
       - run: go vet ./...
       - run: go test ./... -race -count=1
       - run: go build ./...
+      - name: verify windows compilation
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/server
+
 
   frontend:
     runs-on: ubuntu-latest

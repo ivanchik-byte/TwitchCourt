@@ -1,0 +1,68 @@
+version: '3'
+
+vars:
+  BINARY: StreamTribunal
+  DIST: dist
+
+tasks:
+  default:
+    cmds:
+      - task: run
+
+  run:
+    desc: Run server locally
+    cmds:
+      - go run ./cmd/server
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./... -count=1
+
+  test-race:
+    desc: Run unit tests with race detector (requires gcc)
+    cmds:
+      - go test ./... -race -count=1
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  frontend:
+    desc: Build frontend dashboard (React + Vite)
+    dir: web/frontend
+    cmds:
+      - npm ci --no-audit --no-fund
+      - npm run build
+
+  overlay:
+    desc: Compile TypeScript overlay files
+    cmds:
+      - npx -y -p typescript@5.6 tsc --ignoreConfig --target ES2020 --strict --outDir web/compiled web/src/overlay.ts web/src/judge.ts
+      - cp web/compiled/overlay.js web/overlay/overlay.js
+      - cp web/compiled/judge.js web/overlay/judge.js
+      - rm -rf web/compiled
+
+  build:
+    desc: Build binary for current platform
+    deps: [frontend, overlay]
+    cmds:
+      - mkdir -p {{.DIST}}
+      - go build -o {{.DIST}}/{{.BINARY}} ./cmd/server
+
+  build-win:
+    desc: Build Windows binary
+    deps: [frontend, overlay]
+    env:
+      CGO_ENABLED: '0'
+      GOOS: 'windows'
+      GOARCH: 'amd64'
+    cmds:
+      - mkdir -p {{.DIST}}
+      - go build -ldflags="-s -w" -o {{.DIST}}/{{.BINARY}}.exe ./cmd/server
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.DIST}} web/compiled
