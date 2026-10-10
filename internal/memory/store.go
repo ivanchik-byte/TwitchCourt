@@ -67,6 +67,7 @@ type Store struct {
 	participants map[string]*Participant
 	comments     []Comment
 	profile      StreamerProfile
+	usedCases    []string
 	saveMu       sync.Mutex
 	saveTimer    *time.Timer
 }
@@ -126,6 +127,7 @@ func (s *Store) AddComment(author, text string) {
 		p.LastSeenAt = now
 	}
 	s.mu.Unlock()
+	s.saveSoon()
 }
 
 func (s *Store) AddSueCall(author string) {
@@ -286,6 +288,52 @@ func (s *Store) RecentComments(n int) []Comment {
 	return out
 }
 
+// MarkCaseUsed records a played case id (deck no-repeat survives restarts).
+func (s *Store) MarkCaseUsed(id string) {
+	if id == "" {
+		return
+	}
+	s.mu.Lock()
+	for _, have := range s.usedCases {
+		if have == id {
+			s.mu.Unlock()
+			return
+		}
+	}
+	s.usedCases = append(s.usedCases, id)
+	s.mu.Unlock()
+	s.saveSoon()
+}
+
+// UsedCases snapshots played case ids.
+func (s *Store) UsedCases() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]string(nil), s.usedCases...)
+}
+
+// ResetUsedCases clears played case ids.
+func (s *Store) ResetUsedCases() {
+	s.mu.Lock()
+	s.usedCases = nil
+	s.mu.Unlock()
+	s.saveSoon()
+}
+
+// UnmarkCaseUsed returns one case id to the unplayed pile.
+func (s *Store) UnmarkCaseUsed(id string) {
+	s.mu.Lock()
+	kept := s.usedCases[:0]
+	for _, have := range s.usedCases {
+		if have != id {
+			kept = append(kept, have)
+		}
+	}
+	s.usedCases = kept
+	s.mu.Unlock()
+	s.saveSoon()
+}
+
 // saveSoon throttles writes to at most one disk flush per second
 func (s *Store) saveSoon() {
 	if s.path == "" {
@@ -331,6 +379,7 @@ func (s *Store) load() {
 		Donations    []DonationRecord        `json:"donations"`
 		Participants map[string]*Participant `json:"participants"`
 		Profile      StreamerProfile         `json:"profile"`
+		UsedCases    []string                `json:"used_cases"`
 	}
 	if err := json.Unmarshal(raw, &dump); err != nil {
 		_ = os.WriteFile(s.path+".bak", raw, 0o644)
@@ -340,6 +389,7 @@ func (s *Store) load() {
 	s.donations = dump.Donations
 	s.participants = dump.Participants
 	s.profile = dump.Profile
+	s.usedCases = dump.UsedCases
 }
 
 func (s *Store) save() {
@@ -362,12 +412,14 @@ func (s *Store) save() {
 	profile.Traits = append([]string(nil), s.profile.Traits...)
 	profile.RunningGags = append([]string(nil), s.profile.RunningGags...)
 	profile.AutoNotes = append([]string(nil), s.profile.AutoNotes...)
+	usedCases := append([]string(nil), s.usedCases...)
 	s.mu.RUnlock()
 	dump := map[string]any{
 		"trials":       trials,
 		"donations":    donations,
 		"participants": participants,
 		"profile":      profile,
+		"used_cases":   usedCases,
 	}
 	raw, err := json.MarshalIndent(dump, "", "  ")
 	if err != nil {

@@ -18,6 +18,8 @@ type Config struct {
 	Game      GameConfig      `yaml:"game"`
 	Twitch    TwitchConfig    `yaml:"twitch"`
 	Donations DonationsConfig `yaml:"donations"`
+	Chat      ChatConfig      `yaml:"chat"`
+	Prompts   PromptsConfig   `yaml:"prompts"`
 }
 
 type ServerConfig struct {
@@ -27,12 +29,14 @@ type ServerConfig struct {
 }
 
 type AIConfig struct {
-	Provider    string  `yaml:"provider"`
-	APIKey      string  `yaml:"api_key"`
-	Model       string  `yaml:"model"`
-	Temperature float64 `yaml:"temperature"`
-	Stream      bool    `yaml:"stream"`
-	BaseURL     string  `yaml:"base_url"`
+	Provider    string         `yaml:"provider"`
+	APIKey      string         `yaml:"api_key"`
+	Model       string         `yaml:"model"`
+	Temperature float64        `yaml:"temperature"`
+	Stream      bool           `yaml:"stream"`
+	BaseURL     string         `yaml:"base_url"`
+	MockLines   []string       `yaml:"mock_lines"`
+	ExtraBody   map[string]any `yaml:"extra_body"`
 }
 
 type TTSConfig struct {
@@ -64,6 +68,100 @@ type CourtroomConfig struct {
 	SueWindowSec int      `yaml:"sue_window_sec"`
 	Articles     []string `yaml:"articles"`
 	Punishments  []string `yaml:"punishments"`
+	// spoken templates, all optional: empty = that line stays silent
+	StandbyIndictment   string         `yaml:"standby_indictment"`
+	StandbyDeliberation string         `yaml:"standby_deliberation"`
+	StandbyObjection    string         `yaml:"standby_objection"`
+	SilentDefense       string         `yaml:"silent_defense"`
+	WitnessIntro        string         `yaml:"witness_intro"`
+	WitnessOutro        string         `yaml:"witness_outro"`
+	EmptyTestimony      string         `yaml:"empty_testimony"`
+	BribeTwist          string         `yaml:"bribe_twist"`
+	UndecidedTwist      string         `yaml:"undecided_twist"`
+	WitnessLine         string         `yaml:"witness_line"`
+	TestimonyPrefix     string         `yaml:"testimony_prefix"`
+	DefensePrefix       string         `yaml:"defense_prefix"`
+	SnitchPrefix        string         `yaml:"snitch_prefix"`
+	PenaltyTimeout      string         `yaml:"penalty_timeout"`
+	PenaltyPardon       string         `yaml:"penalty_pardon"`
+	PenaltyBan          string         `yaml:"penalty_ban"`
+	PenaltyPrefix       string         `yaml:"penalty_prefix"`
+	CasesFile           string         `yaml:"cases_file"`
+	CasesGen            CasesGenConfig `yaml:"cases_gen"`
+}
+
+// CasesGenConfig drives background case generation.
+type CasesGenConfig struct {
+	Enabled bool `yaml:"enabled"`
+	Batch   int  `yaml:"batch"`
+	LowMark int  `yaml:"low_mark"`
+}
+
+type ChatConfig struct {
+	QueueJoined    string `yaml:"queue_joined"`
+	QueueLeft      string `yaml:"queue_left"`
+	SelfTrial      string `yaml:"self_trial"`
+	VerdictLine    string `yaml:"verdict_line"`
+	StreamerNext   string `yaml:"streamer_next"`
+	DonateCrime    string `yaml:"donate_crime"`
+	DonateStreamer string `yaml:"donate_streamer"`
+	DonateViewer   string `yaml:"donate_viewer"`
+	DonateContext  string `yaml:"donate_context"`
+	SueContext     string `yaml:"sue_context"`
+	DefaultCrime   string `yaml:"default_crime"`
+	StreamerCrime  string `yaml:"streamer_crime"`
+}
+
+// PromptsConfig holds the editable persona side of the court.
+// Format invariants (verdict keyword, limits, animation tags) stay in code.
+type PromptsConfig struct {
+	JudgeStrict      string `yaml:"judge_strict"`
+	JudgeCynical     string `yaml:"judge_cynical"`
+	Prosody          string `yaml:"prosody"`
+	TaskIndictment   string `yaml:"task_indictment"`
+	TaskCounter      string `yaml:"task_counter"`
+	TaskDeliberation string `yaml:"task_deliberation"`
+	BribeNote        string `yaml:"bribe_note"`
+	CondemnNote      string `yaml:"condemn_note"`
+	GenPrompt        string `yaml:"gen_prompt"`
+}
+
+// DefaultPrompts is the strong built-in bench: editable persona side.
+// Format invariants (verdict keyword, limits, animation tags) live in code.
+func DefaultPrompts() PromptsConfig {
+	return PromptsConfig{
+		JudgeStrict: `Ты Верховный Судья трибунала. Сухой, педантичный, неподкупный.
+Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+Первое предложение: назови факт и статью обвинения.
+Второе: задай подсудимому прямой вопрос, на который он должен ответить.
+Каждый раз новый заход: меняй образы, сравнения и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.`,
+		JudgeCynical: `Ты продажный Судья трибунала. Вальяжный, циничный, открыто намекаешь, что решение зависит от щедрости зала.
+Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+Первое предложение: лениво перескажи обвинение и назови цену вопроса.
+Второе: подмигни чату и потребуй показаний и донатов.
+Каждый раз новый заход: меняй образы и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.`,
+		Prosody: `АУДИО-РЕЖИССУРА:
+- Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."
+- Тире для смысловых ударов, междометия для живости: "Кхм...", "Позвольте!", "Ого!"
+- Знак + перед ударной гласной в спорных словах: вин+овен, в+аша честь, казн+ить. Правило только для движка Silero, остальные его не понимают.
+- Не чаще одного <break time="300ms" /> на реплику, только перед кульминацией.`,
+		TaskIndictment: `ЗАДАЧА:
+Открой судебное заседание. Громко объяви номер дела, назови статью обвинения и сатирически уничтожь аргументы защиты перед присяжными. Если подсудимый рецидивист, припомни прошлые приговоры. Если есть взятка донатом, отреагируй на нее одной язвительной фразой. Закончи реплику вопросом или требованием ответа! Никаких бытовых штампов: ни бутербродов, ни кружек, ни носков.`,
+		TaskCounter: `ЗАДАЧА:
+Мгновенно прерви стримера! Найди слабое место в его оправдании и высмей его перед чатом в 2 предложениях. Без бытовых штампов.`,
+		TaskDeliberation: `ЗАДАЧА:
+Вынеси вердикт как Верховный Судья. Затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен». Мотив обязан опираться на конкретные показания из дела, а не на общие слова. Никаких бытовых штампов.`,
+		BribeNote:   `На столе взятка: {donor} суёт {amount} {currency}{message}. Ты живой судья, а не автомат: делай с этим что хочешь — прими и оправдай, гордо откажи, разозлись, высмей взяткодателя, обидься на мелочность, устрой сцену. Никаких рамок, это ролевая игра — главное чтобы чату было смешно. Своё решение отрази в вердикте и репликах.`,
+		CondemnNote: `ВНИМАНИЕ: в показаниях есть запретная тема. Осуди её от имени суда одной уничтожающей фразой, затем высмей автора так, чтобы чат лег — но сам запретную тему не смакуй и не повторяй дословно.`,
+		GenPrompt: `Ты генератор дел для сатирического стрим-суда. Придумай {count} дел.
+Каждое дело — свои рамки из списка, строго по порядку:
+{axes}
+Уже были, НЕ повторять ни тему, ни объект, ни приём: {banlist}
+Формат ответа: JSON-массив, каждый элемент {"title": "...", "crime": "...", "context": "..."}.
+Правила: PG-13, без мата, политики, реального насилия и дискриминации. Каждое дело — свежая бытовая или абсурдная провинность из жизни стрима. Никаких бутербродов, кружек и носков. Только JSON, без пояснений.`,
+	}
 }
 
 type DonationsConfig struct {
@@ -71,6 +169,7 @@ type DonationsConfig struct {
 	DefaultMin       float64            `yaml:"default_min"`
 	PlatinumMin      float64            `yaml:"platinum_min"`
 	StreamerTrialMin float64            `yaml:"streamer_trial_min"`
+	BribeMin         float64            `yaml:"bribe_min"`
 	MinAmounts       map[string]float64 `yaml:"min_amounts"`
 	DonationAlerts   WidgetSource       `yaml:"donationalerts"`
 	DonatePay        KeySource          `yaml:"donatepay"`
@@ -95,6 +194,8 @@ type SafetyConfig struct {
 	FilterEnabled   bool     `yaml:"filter_enabled"`
 	CustomBlacklist []string `yaml:"custom_blacklist"`
 	PanicHotkey     string   `yaml:"panic_hotkey"`
+	BanConfirm      bool     `yaml:"ban_confirm"`
+	BribeWords      []string `yaml:"bribe_words"`
 }
 
 type GameConfig struct {
@@ -129,6 +230,11 @@ func DefaultConfig() *Config {
 			Model:       "llama-3.3-70b-versatile",
 			Temperature: 0.85,
 			Stream:      true,
+			MockLines: []string{
+				"Вердикт: НЕВИНОВЕН. Суд открывает заседание! ",
+				"Слушается дело, зал шумит. ",
+				"[slam] Решение оглашено. Суд окончен. ",
+			},
 		},
 		TTS: TTSConfig{
 			Enabled:      true,
@@ -141,7 +247,7 @@ func DefaultConfig() *Config {
 			JudgeVoice:   "ru-RU-SvetlanaNeural",
 			JudgeRate:    "-10%",
 			SileroURL:    "http://127.0.0.1:7892",
-			SileroJudge:  "xenia",
+			SileroJudge:  "kseniya",
 			PiperBinary:  binaryName,
 			ModelPath:    filepath.Join("models", "ru_irina.onnx"),
 			ConfigPath:   filepath.Join("models", "ru_irina.onnx.json"),
@@ -149,36 +255,30 @@ func DefaultConfig() *Config {
 			Speed:        1.15,
 		},
 		Courtroom: CourtroomConfig{
-			Theme:        "ace_attorney",
-			JudgeName:    "Судья",
-			JudgeStyle:   "strict",
-			DefenseSec:   20,
-			TestimonySec: 25,
-			SueThreshold: 5,
-			SueWindowSec: 600,
-			Articles: []string{
-				"Слив катки",
-				"Токсичность в чате",
-				"Опоздание",
-				"Байт на бан",
-				"Духота в голосовом",
-			},
-			Punishments: []string{
-				"10 приседаний в прямом эфире",
-				"Минута молчания с рукой на сердце",
-				"Ч/б фильтр на вебку до конца стрима",
-			},
+			Theme:               "ace_attorney",
+			JudgeName:           "Судья",
+			JudgeStyle:          "strict",
+			DefenseSec:          20,
+			TestimonySec:        25,
+			SueThreshold:        5,
+			SueWindowSec:        600,
+			Articles:            []string{},
+			Punishments:         []string{},
+			StandbyIndictment:   "Суд разбирает бумаги. Заседание продолжается!",
+			StandbyDeliberation: "Суд удаляется на совещание.",
+			StandbyObjection:    "Протест принят. Суд продолжает!",
 		},
 		Safety: SafetyConfig{
 			FilterEnabled:   true,
 			CustomBlacklist: []string{},
-			PanicHotkey:     "F12",
+			PanicHotkey:     "f12",
 		},
 		Game: GameConfig{
 			StreamerName: "Стример",
 			MemoryPath:   "data/memory.json",
 			DonateToken:  "",
 		},
+		Prompts: DefaultPrompts(),
 		Twitch: TwitchConfig{
 			Channel: "",
 			Nick:    "tribunal_bot",
@@ -247,6 +347,35 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Twitch.ModeratorID == "" {
 		cfg.Twitch.ModeratorID = cfg.Twitch.BroadcasterID
 	}
+	// old config files without prompts inherit the strong bench
+	defPrompts := DefaultPrompts()
+	if cfg.Prompts.JudgeStrict == "" {
+		cfg.Prompts.JudgeStrict = defPrompts.JudgeStrict
+	}
+	if cfg.Prompts.JudgeCynical == "" {
+		cfg.Prompts.JudgeCynical = defPrompts.JudgeCynical
+	}
+	if cfg.Prompts.Prosody == "" {
+		cfg.Prompts.Prosody = defPrompts.Prosody
+	}
+	if cfg.Prompts.TaskIndictment == "" {
+		cfg.Prompts.TaskIndictment = defPrompts.TaskIndictment
+	}
+	if cfg.Prompts.TaskCounter == "" {
+		cfg.Prompts.TaskCounter = defPrompts.TaskCounter
+	}
+	if cfg.Prompts.TaskDeliberation == "" {
+		cfg.Prompts.TaskDeliberation = defPrompts.TaskDeliberation
+	}
+	if cfg.Prompts.BribeNote == "" {
+		cfg.Prompts.BribeNote = defPrompts.BribeNote
+	}
+	if cfg.Prompts.CondemnNote == "" {
+		cfg.Prompts.CondemnNote = defPrompts.CondemnNote
+	}
+	if cfg.Prompts.GenPrompt == "" {
+		cfg.Prompts.GenPrompt = defPrompts.GenPrompt
+	}
 
 	switch cfg.TTS.Engine {
 	case "edge", "piper", "mock", "silero":
@@ -257,7 +386,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.TTS.SileroURL = "http://127.0.0.1:7892"
 	}
 	if cfg.TTS.SileroJudge == "" {
-		cfg.TTS.SileroJudge = "xenia"
+		cfg.TTS.SileroJudge = "kseniya"
 	}
 	// empty strings from yaml must not wipe the smart OS-aware defaults
 	defTTS := DefaultConfig().TTS
@@ -307,6 +436,30 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// deepCopyMap copies nested maps/slices so RCU clones never share references.
+func deepCopyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = deepCopyValue(v)
+	}
+	return out
+}
+
+func deepCopyValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		return deepCopyMap(t)
+	case []any:
+		cp := make([]any, len(t))
+		for i, e := range t {
+			cp[i] = deepCopyValue(e)
+		}
+		return cp
+	default:
+		return v
+	}
+}
+
 // Clone creates a deep copy for safe atomic pointer swap (RCU).
 func (c *Config) Clone() *Config {
 	if c == nil {
@@ -325,8 +478,17 @@ func (c *Config) Clone() *Config {
 	if c.Courtroom.Articles != nil {
 		out.Courtroom.Articles = append([]string(nil), c.Courtroom.Articles...)
 	}
+	if c.AI.MockLines != nil {
+		out.AI.MockLines = append([]string(nil), c.AI.MockLines...)
+	}
+	if c.AI.ExtraBody != nil {
+		out.AI.ExtraBody = deepCopyMap(c.AI.ExtraBody)
+	}
 	if c.Safety.CustomBlacklist != nil {
 		out.Safety.CustomBlacklist = append([]string(nil), c.Safety.CustomBlacklist...)
+	}
+	if c.Safety.BribeWords != nil {
+		out.Safety.BribeWords = append([]string(nil), c.Safety.BribeWords...)
 	}
 	return &out
 }

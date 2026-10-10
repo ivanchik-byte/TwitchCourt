@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { getSecret } from '../lib/api'
 import type { DonationPayload, StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
@@ -41,6 +41,7 @@ let seq = 1
 
 export function useTribunalWS() {
   const [state, setState] = useState<TribunalState>(initial)
+  const [retries, setRetries] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
   const pingAt = useRef(0)
 
@@ -82,23 +83,45 @@ export function useTribunalWS() {
 
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
-      const ws = new WebSocket(proto + location.host + '/ws')
+      const secret = getSecret()
+      const ws = new WebSocket(proto + location.host + '/ws' + (secret ? `?secret=${encodeURIComponent(secret)}` : ''))
       wsRef.current = ws
+      let heartbeat: ReturnType<typeof setInterval> | undefined
+      let pongWait: ReturnType<typeof setTimeout> | undefined
 
-      ws.onopen = () => {
-        failures = 0
-        setState((s) => ({ ...s, connected: true }))
+      const ping = () => {
+        if (ws.readyState !== WebSocket.OPEN) return
         pingAt.current = Date.now()
         try {
           ws.send(JSON.stringify({ action: 'ping', payload: {} }))
         } catch {
-          /* hub drops unknown actions silently */
+          return
         }
+        clearTimeout(pongWait)
+        // no pong in 5s = dead socket, close it so backoff reconnects
+        pongWait = setTimeout(() => {
+          try {
+            ws.close()
+          } catch {
+            /* already gone */
+          }
+        }, 5000)
+      }
+
+      ws.onopen = () => {
+        failures = 0
+        setRetries(0)
+        setState((s) => ({ ...s, connected: true }))
+        ping()
+        heartbeat = setInterval(ping, 10000)
       }
       ws.onclose = () => {
+        clearInterval(heartbeat)
+        clearTimeout(pongWait)
         setState((s) => ({ ...s, connected: false, rttMs: null }))
         if (!closed) {
           failures += 1
+          setRetries(failures)
           retry = setTimeout(connect, retryDelay())
         }
       }
@@ -111,10 +134,10 @@ export function useTribunalWS() {
           return
         }
         if (msg.type === 'pong') {
+          clearTimeout(pongWait)
           setState((s) => ({ ...s, rttMs: Date.now() - pingAt.current }))
           return
-        }
-        switch (msg.type) {
+        }        switch (msg.type) {
           case 'state_change': {
             const p = msg.payload as StateChangePayload
             setState((s) => ({
@@ -170,7 +193,9 @@ export function useTribunalWS() {
     }
   }, [panicReset, push])
 
-  return { ...state, send, push, panicReset }
+  // stable identity: pool refreshes re-render the provider but must not
+  // cascade into every state consumer
+  return useMemo(() => ({ ...state, retries, send, push, panicReset }), [state, retries, send, push, panicReset])
 }
 
 export type Tribunal = ReturnType<typeof useTribunalWS>

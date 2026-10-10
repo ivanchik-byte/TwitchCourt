@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"stream-tribunal/internal/ai"
 	"stream-tribunal/internal/audio"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/memory"
@@ -56,13 +55,19 @@ func TestAddWitnessActive(t *testing.T) {
 }
 
 func TestBuildWitnessInterludeEmpty(t *testing.T) {
-	if got := buildWitnessInterlude(nil); got != "" {
+	e := newWitnessEngine()
+	if got := e.buildWitnessInterlude(nil); got != "" {
 		t.Fatalf("empty witnesses must render nothing, got %q", got)
 	}
 }
 
 func TestBuildWitnessInterlude(t *testing.T) {
-	got := buildWitnessInterlude([]Witness{
+	e := newWitnessEngine()
+	cfg := config.DefaultConfig()
+	cfg.Courtroom.WitnessIntro = "Суд приобщает"
+	cfg.Courtroom.WitnessOutro = "Показания приобщены"
+	e.SwapConfig(cfg)
+	got := e.buildWitnessInterlude([]Witness{
 		{Donor: "ivan", Amount: 150, Currency: "RUB", Message: "убил курицу по дороге"},
 		{Donor: "maria", Amount: 5, Currency: "USD", Message: ""},
 	})
@@ -75,7 +80,8 @@ func TestBuildWitnessInterlude(t *testing.T) {
 }
 
 func TestBuildWitnessInterludeUnescapes(t *testing.T) {
-	got := buildWitnessInterlude([]Witness{
+	e := newWitnessEngine()
+	got := e.buildWitnessInterlude([]Witness{
 		{Donor: "ivan", Amount: 10, Currency: "RUB", Message: "рыба &amp; мясо"},
 	})
 	if strings.Contains(got, "&amp;") {
@@ -131,6 +137,9 @@ func TestAddDefenseCapsLength(t *testing.T) {
 
 func TestFallbackDefense(t *testing.T) {
 	e := newWitnessEngine()
+	cfg := config.DefaultConfig()
+	cfg.Courtroom.SilentDefense = "молчит как партизан"
+	e.SwapConfig(cfg)
 	if got := e.fallbackDefense(); got != "молчит как партизан" {
 		t.Fatalf("empty transcript fallback: %q", got)
 	}
@@ -170,7 +179,7 @@ func TestViewerTrialRunsEndToEnd(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Courtroom.DefenseSec = 1
 	voice, _ := audio.NewPiperDaemon(cfg.TTS)
-	e := NewEngine(cfg, obs.NewHub(nil), ai.NewClient(cfg.AI), voice, safety.NewFilter(nil))
+	e := NewEngine(cfg, obs.NewHub(nil), mustAIClient(t, cfg.AI), voice, safety.NewFilter(nil))
 	e.AttachMemory(memory.NewStore(""))
 	e.SetPunishments([]string{"присесть 10 раз"})
 
@@ -225,18 +234,18 @@ func TestFinalizeVerdictJailsViewer(t *testing.T) {
 
 func TestAddBribeOnce(t *testing.T) {
 	e := newWitnessEngine()
-	if e.AddBribe("ivan", 150, "RUB") {
+	if e.AddBribe("ivan", 150, "RUB", "возьми") {
 		t.Fatal("idle court must reject bribes")
 	}
 	e.state = StateIndictment
 	e.currCase = &TrialCase{Defendant: "streamer"}
-	if !e.AddBribe("ivan", 150, "RUB") {
+	if !e.AddBribe("ivan", 150, "RUB", "возьми") {
 		t.Fatal("active court must accept the first bribe")
 	}
-	if e.AddBribe("maria", 500, "RUB") {
+	if e.AddBribe("maria", 500, "RUB", "и мою возьми") {
 		t.Fatal("second bribe must be rejected")
 	}
-	if !e.currCase.Bribed {
-		t.Fatal("bribe flag not set")
+	if e.currCase.Bribe == nil || e.currCase.Bribe.Donor != "ivan" || e.currCase.Bribe.Amount != 150 {
+		t.Fatalf("bribe offer not stored: %+v", e.currCase.Bribe)
 	}
 }

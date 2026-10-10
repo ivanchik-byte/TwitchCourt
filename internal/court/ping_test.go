@@ -11,7 +11,7 @@ import (
 )
 
 func TestPingAIMock(t *testing.T) {
-	e := NewEngine(nil, obs.NewHub(nil), ai.NewClient(config.AIConfig{}), nil, safety.NewFilter(nil))
+	e := NewEngine(nil, obs.NewHub(nil), mustAIClient(t, config.AIConfig{}), nil, safety.NewFilter(nil))
 	ms, mock, err := e.PingAI(context.Background())
 	if err != nil {
 		t.Fatalf("mock ping must not fail: %v", err)
@@ -29,6 +29,15 @@ func TestPingAINoClient(t *testing.T) {
 	if _, _, err := e.PingAI(context.Background()); err == nil {
 		t.Fatal("missing client must fail the ping")
 	}
+}
+
+func mustAIClient(t *testing.T, cfg config.AIConfig) *ai.Client {
+	t.Helper()
+	c, err := ai.NewClient(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
 }
 
 func TestStartUnbanTrialBusy(t *testing.T) {

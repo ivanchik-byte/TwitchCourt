@@ -177,6 +177,8 @@ func (w *DonatePayWatcher) handleMessage(raw []byte) {
 }
 
 func (w *DonatePayWatcher) fetchUserID(ctx context.Context) (int, error) {
+	// DonatePay v1 takes access_token in query by API design (TLS only);
+	// the v2 socket token below already goes in body. Key never hits our logs.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://donatepay.ru/api/v1/user?access_token="+w.apiKey, nil)
 	if err != nil {

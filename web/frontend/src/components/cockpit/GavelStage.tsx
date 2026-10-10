@@ -6,11 +6,18 @@ import { apiGet, apiNote } from '../../lib/api'
 import { useTribunalActions, useTribunalState } from '../../tribunal/TribunalContext'
 
 function Timer({ secs }: { secs: number | null }) {
-  if (secs == null) return <span className="timer-digits tabular text-zinc-500">--:--</span>
-  const m = Math.floor(secs / 60)
-  const s = secs % 60
-  const urgent = secs <= 5
-  const warn = secs <= 15
+  const [left, setLeft] = useState(secs)
+  useEffect(() => {
+    setLeft(secs)
+    if (secs == null) return
+    const id = setInterval(() => setLeft((s) => (s != null && s > 0 ? s - 1 : s)), 1000)
+    return () => clearInterval(id)
+  }, [secs])
+  if (left == null) return <span className="timer-digits tabular text-zinc-500">--:--</span>
+  const m = Math.floor(left / 60)
+  const s = left % 60
+  const urgent = left <= 5
+  const warn = left <= 15
   return (
     <span
       className={cn(

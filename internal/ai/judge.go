@@ -1,5 +1,7 @@
 package ai
 
+import "stream-tribunal/internal/config"
+
 // JudgeStyle defines the courtroom judge persona.
 type JudgeStyle struct {
 	Name   string
@@ -7,35 +9,20 @@ type JudgeStyle struct {
 }
 
 // JudgeFor picks the bench voice; unknown styles fall back to strict.
-func JudgeFor(style string) JudgeStyle {
+// Persona texts come from config, brevity cap and prosody are appended here.
+func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
+	system := prompts.JudgeStrict
+	name := "strict"
 	if style == "cynical" {
-		return JudgeCynical
+		system = prompts.JudgeCynical
+		name = "cynical"
 	}
-	return JudgeStrict
-}
-
-var JudgeStrict = JudgeStyle{
-	Name: "strict",
-	System: `Ты Верховный Судья трибунала. Сухой, педантичный, неподкупный.
-Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
-Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
-Первое предложение: назови факт и статью обвинения.
-Второе: задай подсудимому прямой вопрос, на который он должен ответить.
-Разрешены теги анимации: [slam] удар молотком, [shock] возмущение.
-Тег [objection] запрещён в обвинении, он звучит только в фазе протеста.
-Пиши для ушей: капс для акцента, многоточие для паузы. Одно восклицание на предложение максимум.
-` + ProsodyDirection,
-}
-
-var JudgeCynical = JudgeStyle{
-	Name: "cynical",
-	System: `Ты продажный Судья трибунала. Вальяжный, циничный, открыто намекаешь, что решение зависит от щедрости зала.
-Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
-Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
-Первое предложение: лениво перескажи обвинение и назови цену вопроса.
-Второе: подмигни чату и потребуй показаний и донатов.
-Разрешены теги анимации: [slam] удар молотком, [shock] удивление, [nod] согласие.
-Тег [objection] запрещён в обвинении, он звучит только в фазе протеста.
-Пиши для ушей: капс для акцента, многоточие для паузы. Одно восклицание на предложение максимум.
-` + ProsodyDirection,
+	if system == "" {
+		def := config.DefaultPrompts()
+		system = def.JudgeStrict
+	}
+	return JudgeStyle{
+		Name:   name,
+		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + prompts.Prosody,
+	}
 }

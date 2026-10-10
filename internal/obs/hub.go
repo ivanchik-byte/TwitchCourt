@@ -1,10 +1,14 @@
 package obs
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,8 +26,29 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 64 * 1024,
+	// local only: same host, loopback, or empty (OBS/curl). keeps random sites out.
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		u, err := url.Parse(origin)
+		if err != nil || u.Hostname() == "" {
+			return false
+		}
+		originHost := strings.ToLower(u.Hostname())
+		reqHost := strings.ToLower(r.Host)
+		if h, _, err := net.SplitHostPort(reqHost); err == nil {
+			reqHost = h
+		}
+		if originHost == reqHost {
+			return true
+		}
+		switch originHost {
+		case "localhost", "127.0.0.1", "::1":
+			return true
+		}
+		return false
 	},
 }
 
@@ -41,6 +66,8 @@ type Hub struct {
 	mu         sync.RWMutex
 	onAction   func(action string, payload []byte)
 	dropped    atomic.Int64
+	// Secret gates the WS upgrade when set (nil = open LAN board).
+	Secret func() string
 }
 
 func NewHub(actionHandler func(action string, payload []byte)) *Hub {
@@ -105,6 +132,13 @@ func (h *Hub) BroadcastEvent(eventType EventType, payload interface{}) error {
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	if h.Secret != nil && h.Secret() != "" {
+		got := r.URL.Query().Get("secret")
+		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(h.Secret())) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -134,9 +168,20 @@ func (c *Client) readPump() {
 		return nil
 	})
 
+	windowStart := time.Now()
+	windowCount := 0
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
+			break
+		}
+		// flood guard: >30 actions/sec per socket = goodbye
+		now := time.Now()
+		if now.Sub(windowStart) >= time.Second {
+			windowStart, windowCount = now, 0
+		}
+		windowCount++
+		if windowCount > 30 {
 			break
 		}
 

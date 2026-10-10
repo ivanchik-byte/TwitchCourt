@@ -6,6 +6,7 @@ import { TribunalProvider, useTribunalState } from './tribunal/TribunalContext'
 import { CockpitView } from './views/CockpitView'
 
 const ModesView = lazy(() => import('./views/ModesView').then((m) => ({ default: m.ModesView })))
+const CasesView = lazy(() => import('./views/CasesView').then((m) => ({ default: m.CasesView })))
 const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ default: m.SettingsView })))
 const OBSRemoteView = lazy(() => import('./views/OBSRemoteView').then((m) => ({ default: m.OBSRemoteView })))
 
@@ -14,12 +15,12 @@ function Shell() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
-      <TopNav wsOk={t.connected} rtt={t.rttMs} />
+      <TopNav wsOk={t.connected} rtt={t.rttMs} retries={t.retries} />
       <main className="min-h-0 flex-1">
         <Suspense fallback={<p className="p-4 text-sm text-zinc-500">Загрузка…</p>}>
           <Routes>
             <Route path="/" element={<CockpitView />} />
-            <Route path="/modes" element={<ModesView />} />
+            <Route path="/cases" element={<CasesView />} />            <Route path="/modes" element={<ModesView />} />
             <Route path="/obs" element={<OBSRemoteView />} />
             <Route path="/settings" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />

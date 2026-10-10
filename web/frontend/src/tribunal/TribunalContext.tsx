@@ -85,7 +85,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
       toast.error('Укажите никнейм подсудимого')
       return { ok: false, status: 0 }
     }
-    return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || 'решение зала', viewer })
+    return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || '', viewer })
   }, [])
 
   const actions = useMemo<TribunalActions>(

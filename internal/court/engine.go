@@ -20,6 +20,7 @@ import (
 	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/obs"
 	"stream-tribunal/internal/safety"
+	"stream-tribunal/internal/tmpl"
 )
 
 type State string
@@ -43,7 +44,16 @@ type TrialCase struct {
 	Defense     string
 	Viewer      string
 	Testimony   []string
-	Bribed      bool
+	Bribe       *BribeOffer
+}
+
+// BribeOffer is donor money on the table: the bench decides what to do
+// with it (take, refuse, or punish the cheapskate), never a keyword flip.
+type BribeOffer struct {
+	Donor    string
+	Amount   float64
+	Currency string
+	Message  string
 }
 
 // Witness represents a donation queued as trial testimony.
@@ -52,6 +62,7 @@ type Witness struct {
 	Amount   float64
 	Currency string
 	Message  string
+	Flagged  bool
 }
 
 const maxWitnessMessageRunes = 140
@@ -78,6 +89,7 @@ type Engine struct {
 	pool              []PoolSeat
 	pendingPunishment Punishment
 	cancelFn          context.CancelFunc
+	cases             *CaseDeck
 }
 
 func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
@@ -232,6 +244,22 @@ func (e *Engine) StartViewerTrial(viewer, crime string) error {
 	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
 }
 
+// StartCaseTrial opens a trial from a deck card: full details go to the bench.
+// viewer=true keeps the opt-in punishment path for viewer defendants.
+func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) error {
+	context := strings.TrimSpace(card.Context)
+	if d := strings.TrimSpace(card.Details); d != "" {
+		if context != "" {
+			context += "\n"
+		}
+		context += "МАТЕРИАЛЫ ДЕЛА:\n" + d
+	}
+	if viewer {
+		return e.startTrialWith(defendant, card.Crime, context, defendant)
+	}
+	return e.startTrialWith(defendant, card.Crime, context, "")
+}
+
 // StartUnbanTrial opens an unban pardon trial against the streamer
 func (e *Engine) StartUnbanTrial(user, appeal string) error {
 	crime := "Апелляция на разбан: " + appeal
@@ -253,10 +281,10 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 	e.cancelFn = cancel
 	e.state = StateIndictment
 	e.currCase = &TrialCase{
-		Defendant:   e.filter.Sanitize(defendant),
-		Crime:       e.filter.Sanitize(crime),
-		ChatContext: e.filter.Sanitize(chatContext),
-		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle),
+		Defendant:   e.filter.Sanitize(truncateRunes(defendant, 80)),
+		Crime:       e.filter.Sanitize(truncateRunes(crime, 300)),
+		ChatContext: e.filter.Sanitize(truncateRunes(chatContext, 1000)),
+		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
 		Viewer:      e.filter.Sanitize(viewer),
 	}
 	currentCase := e.currCase
@@ -274,11 +302,13 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 }
 
 func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
+	defer e.finishTrial()
+
 	smart := ""
 	if e.recall != nil {
 		smart = e.recall.SmartContext(c.Defendant)
 	}
-	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart)
+	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart, e.cfg.Load().Prompts.TaskIndictment)
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: c.Judge.System},
 		{Role: "user", Content: prompt},
@@ -317,14 +347,16 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 		return nil
 	})
 
-	// the show goes on even when the model chokes: a standby line keeps the timing
+	// model choked: speak the configured standby line, if any, and move on
 	if err != nil {
-		log.Printf("indictment stream failed, using standby: %v", err)
-		for _, s := range chunker.Feed("Суд отклоняет возню и продолжает заседание! ") {
-			select {
-			case <-ctx.Done():
-			case speechQueue <- queued{chunk: s, index: chunkIndex}:
-				chunkIndex++
+		log.Printf("indictment stream failed: %v", err)
+		if standby := e.cfg.Load().Courtroom.StandbyIndictment; standby != "" {
+			for _, s := range chunker.Feed(standby + " ") {
+				select {
+				case <-ctx.Done():
+				case speechQueue <- queued{chunk: s, index: chunkIndex}:
+					chunkIndex++
+				}
 			}
 		}
 	}
@@ -369,13 +401,13 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	}
 
 	e.finalizeVerdict(ctx, c, guilty, decided)
-	e.clearTrial()
 }
 
-func (e *Engine) clearTrial() {
+// finishTrial releases the trial context; safe to call twice
+func (e *Engine) finishTrial() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.state == StateIdle && e.cancelFn != nil {
+	if e.cancelFn != nil {
 		e.cancelFn()
 		e.cancelFn = nil
 	}
@@ -394,42 +426,94 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateDeliberation)})
 
 	testimony := e.caseTestimony(c)
+	e.mu.RLock()
+	var bribe *BribeOffer
+	if c.Bribe != nil {
+		cp := *c.Bribe
+		bribe = &cp
+	}
+	e.mu.RUnlock()
+	if bribe != nil {
+		whisper := ""
+		if strings.TrimSpace(html.UnescapeString(bribe.Message)) != "" {
+			whisper = " и шепчет: «" + truncateRunes(html.UnescapeString(bribe.Message), maxTestimonyRunes) + "»"
+		}
+		note := tmpl.Fill(e.cfg.Load().Prompts.BribeNote, map[string]string{
+			"donor":    html.UnescapeString(bribe.Donor),
+			"amount":   strconv.FormatFloat(bribe.Amount, 'f', -1, 64),
+			"currency": bribe.Currency,
+			"message":  whisper,
+		})
+		if strings.TrimSpace(note) != "" {
+			testimony += "\n" + note
+		}
+	}
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: c.Judge.System},
-		{Role: "user", Content: ai.BuildDeliberationPrompt(c.Defendant, c.Crime, testimony)},
+		{Role: "user", Content: ai.BuildDeliberationPromptWithTask(c.Defendant, c.Crime, testimony, e.cfg.Load().Prompts.TaskDeliberation)},
 	}
 	var ruling strings.Builder
 	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
 	index := startIndex
+
+	// slow TTS must not block the SSE reader, or the 15s budget burns and the verdict parses undecided
+	type queued struct {
+		chunk ai.SentenceChunk
+		index int
+	}
+	speechQueue := make(chan queued, 16)
+	speechDone := make(chan struct{})
+	judgeName := e.cfg.Load().Courtroom.JudgeName
+	judgeVoice := e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge)
+	judgeRate := e.cfg.Load().TTS.JudgeRate
+	go func() {
+		defer close(speechDone)
+		for item := range speechQueue {
+			if err := e.speak(ctx, item.chunk, item.index, false, judgeName, judgeVoice, judgeRate); err != nil {
+				log.Printf("deliberation speech failed: %v", err)
+				return
+			}
+		}
+	}()
+
 	streamErr := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		ruling.WriteString(delta)
 		for _, s := range chunker.Feed(delta) {
-			if err := e.speak(ctx, s, index, false,
-				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
-				return err
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case speechQueue <- queued{chunk: s, index: index}:
+				index++
 			}
-			index++
 		}
 		return nil
 	})
 	if streamErr != nil {
 		log.Printf("deliberation stream failed, verdict undecided: %v", streamErr)
 		if ctx.Err() == nil {
-			standby := "Судья запнулся. Решение откладывается."
-			for _, s := range chunker.Feed(standby + " ") {
-				if err := e.speak(ctx, s, index, false,
-					e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
-					log.Printf("standby speech failed: %v", err)
+			if standby := e.cfg.Load().Courtroom.StandbyDeliberation; standby != "" {
+				for _, s := range chunker.Feed(standby + " ") {
+					select {
+					case <-ctx.Done():
+					case speechQueue <- queued{chunk: s, index: index}:
+						index++
+					}
 				}
-				index++
 			}
 		}
 	}
 	if last := chunker.Flush(); last != nil {
-		if err := e.speak(ctx, *last, index, false,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
-			log.Printf("deliberation flush speech failed: %v", err)
+		select {
+		case <-ctx.Done():
+		case speechQueue <- queued{chunk: *last, index: index}:
+			index++
 		}
+	}
+	close(speechQueue)
+
+	select {
+	case <-ctx.Done():
+	case <-speechDone:
 	}
 	return ai.ParseVerdict(ruling.String())
 }
@@ -441,10 +525,14 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 	defense := c.Defense
 	witnesses := append([]Witness(nil), c.Witnesses...)
 	e.mu.RUnlock()
+	cfg := e.cfg.Load()
 	parts := []string{}
 	for _, t := range testimony {
 		if t = strings.TrimSpace(t); t != "" {
-			parts = append(parts, "Подсудимый: "+t)
+			if p := cfg.Courtroom.TestimonyPrefix; p != "" {
+				t = p + t
+			}
+			parts = append(parts, t)
 		}
 	}
 	if e.recall != nil {
@@ -468,17 +556,33 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 			snitches = snitches[len(snitches)-3:]
 		}
 		if len(snitches) > 0 {
-			parts = append(parts, "Доносы зала: "+strings.Join(snitches, " / "))
+			joined := strings.Join(snitches, " / ")
+			if p := cfg.Courtroom.SnitchPrefix; p != "" {
+				joined = p + joined
+			}
+			parts = append(parts, joined)
 		}
 	}
 	if d := strings.TrimSpace(html.UnescapeString(defense)); d != "" {
-		parts = append(parts, "Защита: "+d)
+		if p := cfg.Courtroom.DefensePrefix; p != "" {
+			d = p + d
+		}
+		parts = append(parts, d)
 	}
-	if w := buildWitnessInterlude(witnesses); w != "" {
+	if w := e.buildWitnessInterlude(witnesses); w != "" {
 		parts = append(parts, w)
 	}
+	for _, w := range witnesses {
+		if w.Flagged {
+			// banned topic arrived via donation: not dropped, the bench condemns it
+			if note := cfg.Prompts.CondemnNote; note != "" {
+				parts = append(parts, note)
+			}
+			break
+		}
+	}
 	if len(parts) == 0 {
-		return "Подсудимый молчал, зал шумел."
+		return e.cfg.Load().Courtroom.EmptyTestimony
 	}
 	return strings.Join(parts, "\n")
 }
@@ -556,40 +660,68 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: c.Judge.System},
-		{Role: "user", Content: ai.BuildCounterArgumentPrompt(defense)},
+		{Role: "user", Content: ai.BuildCounterArgumentPromptWithTask(defense, e.cfg.Load().Prompts.TaskCounter)},
 	}
 	chunker := ai.NewSentenceChunker()
 	index := startIndex
+	// same deal as deliberation: queue speech, don't block the reader
+	type queuedObjection struct {
+		chunk ai.SentenceChunk
+		index int
+	}
+	objQueue := make(chan queuedObjection, 16)
+	objDone := make(chan struct{})
+	objJudge := e.cfg.Load().Courtroom.JudgeName
+	objVoice := e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge)
+	objRate := e.cfg.Load().TTS.JudgeRate
+	go func() {
+		defer close(objDone)
+		for item := range objQueue {
+			if err := e.speak(ctx, item.chunk, item.index, false, objJudge, objVoice, objRate); err != nil {
+				log.Printf("objection speech failed: %v", err)
+				return
+			}
+		}
+	}()
+	pushObj := func(s ai.SentenceChunk) {
+		select {
+		case <-ctx.Done():
+		case objQueue <- queuedObjection{chunk: s, index: index}:
+			index++
+		}
+	}
 	if err := e.currentAI().StreamCompletion(ctx, messages, func(delta string) error {
 		for _, s := range chunker.Feed(delta) {
-			if err := e.speak(ctx, s, index, false,
-				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
-				return err
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case objQueue <- queuedObjection{chunk: s, index: index}:
+				index++
 			}
-			index++
 		}
 		return nil
 	}); err != nil {
-		log.Printf("objection stream failed, using standby: %v", err)
+		log.Printf("objection stream failed: %v", err)
 		if ctx.Err() == nil {
-			if serr := e.speak(ctx, ai.SentenceChunk{Text: "Суд не расслышал оправданий и продолжает!", Animation: "objection"}, index, false,
-				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); serr != nil {
-				log.Printf("objection standby speech failed: %v", serr)
+			if standby := e.cfg.Load().Courtroom.StandbyObjection; standby != "" {
+				pushObj(ai.SentenceChunk{Text: standby, Animation: "objection"})
 			}
 		}
 	}
 	if last := chunker.Flush(); last != nil {
-		if err := e.speak(ctx, *last, index, false,
-			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
-			log.Printf("objection flush speech failed: %v", err)
-		}
+		pushObj(*last)
+	}
+	close(objQueue)
+	select {
+	case <-ctx.Done():
+	case <-objDone:
 	}
 }
 
 // fallbackDefense feeds recent chat lines when the streamer stayed silent
 func (e *Engine) fallbackDefense() string {
 	if e.recall == nil {
-		return "молчит как партизан"
+		return e.cfg.Load().Courtroom.SilentDefense
 	}
 	lines := e.recall.RecentComments(3)
 	parts := make([]string, 0, len(lines))
@@ -601,7 +733,7 @@ func (e *Engine) fallbackDefense() string {
 		parts = append(parts, author+": "+html.UnescapeString(l.Text))
 	}
 	if len(parts) == 0 {
-		return "молчит как партизан"
+		return e.cfg.Load().Courtroom.SilentDefense
 	}
 	return strings.Join(parts, " / ")
 }
@@ -713,6 +845,15 @@ func (e *Engine) AddChatComment(author, text string) {
 
 // AddWitness queues testimony; returns false when no trial is active
 func (e *Engine) AddWitness(donor string, amount float64, currency, message string) bool {
+	return e.addWitness(donor, amount, currency, message, false)
+}
+
+// AddFlaggedWitness queues testimony marked for the bench to condemn
+func (e *Engine) AddFlaggedWitness(donor string, amount float64, currency, message string) bool {
+	return e.addWitness(donor, amount, currency, message, true)
+}
+
+func (e *Engine) addWitness(donor string, amount float64, currency, message string, flagged bool) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -729,6 +870,7 @@ func (e *Engine) AddWitness(donor string, amount float64, currency, message stri
 		Amount:   amount,
 		Currency: strings.TrimSpace(currency),
 		Message:  e.filter.Sanitize(message),
+		Flagged:  flagged,
 	}
 	e.currCase.Witnesses = append(e.currCase.Witnesses, w)
 	if len(e.currCase.Witnesses) > maxWitnesses {
@@ -741,26 +883,29 @@ func (e *Engine) AddWitness(donor string, amount float64, currency, message stri
 	return true
 }
 
-func buildWitnessInterlude(witnesses []Witness) string {
+func (e *Engine) buildWitnessInterlude(witnesses []Witness) string {
 	if len(witnesses) == 0 {
 		return ""
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Суд приобщает показания свидетелей. ")
+	if intro := e.cfg.Load().Courtroom.WitnessIntro; intro != "" {
+		sb.WriteString(intro + " ")
+	}
 	for _, w := range witnesses {
 		amount := strconv.FormatFloat(w.Amount, 'f', -1, 64)
-		sb.WriteString("Свидетель " + w.Donor + " вносит " + amount)
-		if w.Currency != "" {
-			sb.WriteString(" " + w.Currency)
+		line := tmpl.Fill(e.cfg.Load().Courtroom.WitnessLine, map[string]string{
+			"donor": w.Donor, "amount": amount, "currency": w.Currency,
+			"message": truncateRunes(html.UnescapeString(w.Message), maxWitnessMessageRunes),
+		})
+		if strings.TrimSpace(line) != "" {
+			sb.WriteString(line + " ")
 		}
-		if strings.TrimSpace(html.UnescapeString(w.Message)) != "" {
-			sb.WriteString(" и заявляет: " + truncateRunes(html.UnescapeString(w.Message), maxWitnessMessageRunes))
-		}
-		sb.WriteString(". ")
 	}
-	sb.WriteString("Показания приобщены к делу!")
-	return sb.String()
+	if outro := e.cfg.Load().Courtroom.WitnessOutro; outro != "" {
+		sb.WriteString(outro)
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 func truncateRunes(s string, max int) string {
@@ -783,25 +928,29 @@ func truncateRunesTail(s string, max int) string {
 func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return buildWitnessInterlude(c.Witnesses)
+	return e.buildWitnessInterlude(c.Witnesses)
 }
 
-// AddBribe flags donor money; first bribe per trial wins
-func (e *Engine) AddBribe(donor string, amount float64, currency string) bool {
+// AddBribe puts donor money on the table; first offer per trial wins.
+// The bench judges the offer, it never flips the verdict by itself.
+func (e *Engine) AddBribe(donor string, amount float64, currency, message string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.state == StateIdle || e.currCase == nil || e.currCase.Bribed {
+	if e.state == StateIdle || e.currCase == nil || e.currCase.Bribe != nil {
 		return false
 	}
-	e.currCase.Bribed = true
+	e.currCase.Bribe = &BribeOffer{Donor: donor, Amount: amount, Currency: currency, Message: message}
 	return true
 }
 
 // verdictSentence packs the penalty and the twist into one gavel line
-func verdictSentence(verdict, penalty, twist string) string {
+func verdictSentence(prefix, penalty, twist string) string {
 	parts := []string{}
 	if penalty != "" {
-		parts = append(parts, "Наказание суда: "+penalty+".")
+		if prefix != "" {
+			penalty = prefix + penalty
+		}
+		parts = append(parts, penalty+".")
 	}
 	if twist != "" {
 		parts = append(parts, twist)
@@ -814,41 +963,46 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 	e.state = StateVerdict
 	isGuilty := guilty
 	twist := ""
-	if c.Bribed {
-		// a paid-off judge walks the defendant: the twist must match the votes
-		isGuilty = false
-		twist = "Судья переобулся прямо в зале: взятка принята, весы качнулись к оправданию!"
+	if c.Bribe != nil && !isGuilty {
+		// the bench took the money: mark the acquittal, nothing more
+		twist = e.cfg.Load().Courtroom.BribeTwist
 	}
 	if !decided {
 		isGuilty = false
 		if twist != "" {
 			twist += " "
 		}
-		twist += "Судья не решился и отпустил подсудимого."
+		twist += e.cfg.Load().Courtroom.UndecidedTwist
 	}
+	twist = strings.TrimSpace(twist)
 	verdictStr := "НЕВИНОВЕН"
 	guiltyVotes := 0
-	innocentVotes := 1
-	if isGuilty {
-		verdictStr = "ВИНОВЕН"
-		guiltyVotes = 1
-		innocentVotes = 0
+	innocentVotes := 0
+	totalVotes := 0
+	if decided {
+		totalVotes = 1
+		if isGuilty {
+			verdictStr = "ВИНОВЕН"
+			guiltyVotes = 1
+		} else {
+			innocentVotes = 1
+		}
 	}
-	totalVotes := 1
 	witnessCount := len(c.Witnesses)
 	defendant := c.Defendant
 	crime := c.Crime
 	viewer := html.UnescapeString(c.Viewer)
 	penalty := ""
 	punish := e.pendingPunishment
+	courtCfg := e.cfg.Load().Courtroom
 	if isGuilty && viewer != "" {
 		switch punish.Kind {
 		case "pardon":
-			penalty = "помилован лично стримером"
+			penalty = tmpl.Fill(courtCfg.PenaltyPardon, nil)
 		case "ban":
-			penalty = "изгнан из чата навсегда"
+			penalty = tmpl.Fill(courtCfg.PenaltyBan, nil)
 		default:
-			penalty = "одиночная камера: мут на " + strconv.Itoa(punish.Secs) + " секунд"
+			penalty = tmpl.Fill(courtCfg.PenaltyTimeout, map[string]string{"secs": strconv.Itoa(punish.Secs)})
 		}
 	} else if isGuilty && e.deck != nil {
 		penalty = e.deck.Draw()
@@ -880,7 +1034,7 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 	}
 
 	// the ruling itself was spoken during deliberation: only the penalty lands now
-	if sentence := verdictSentence(verdictStr, penalty, twist); sentence != "" {
+	if sentence := verdictSentence(e.cfg.Load().Courtroom.PenaltyPrefix, penalty, twist); sentence != "" {
 		if err := e.speak(ctx, ai.SentenceChunk{Text: sentence, Animation: "slam"}, 0, true,
 			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
 			log.Printf("verdict sentence speech failed: %v", err)
@@ -903,6 +1057,11 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 		switch punish.Kind {
 		case "pardon":
 		case "ban":
+			// ban_confirm=true: verdict never auto-bans, streamer clicks it by hand
+			if e.cfg.Load().Safety.BanConfirm {
+				log.Printf("ban on %s needs manual confirm, skipping auto-ban", viewer)
+				break
+			}
 			e.TimeoutHook(viewer, 0, true, "Решение суда: "+penalty)
 		default:
 			e.TimeoutHook(viewer, punish.Secs, false, "Решение суда: "+penalty)

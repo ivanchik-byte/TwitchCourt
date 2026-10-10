@@ -4,12 +4,20 @@ server:
   secret: ""
 
 ai:
-  provider: "groq"
+  provider: "groq" # groq, cerebras, ollama or any label with base_url (custom routers)
   api_key: ""
   model: "llama-3.3-70b-versatile"
   temperature: 0.85
   stream: true
-  base_url: ""
+  base_url: "" # e.g. https://llm.onerouter.pro/v1 — wins over provider presets
+  extra_body: {} # router params merged into the request root, e.g. {provider: {service_tier: standard}}
+  # mock_lines: what the judge says with no API key (mock mode).
+  # Empty = silent bench, every trial ends undecided (acquittal).
+  # To get a mock verdict, include ВИНОВЕН or НЕВИНОВЕН within the first 40 characters.
+  mock_lines:
+    - "Вердикт: НЕВИНОВЕН. Суд открывает заседание! "
+    - "Слушается дело, зал шумит. "
+    - "[slam] Решение оглашено. Суд окончен. "
 
 tts:
   enabled: true
@@ -22,7 +30,7 @@ tts:
   judge_voice: "ru-RU-SvetlanaNeural"
   judge_rate: "-10%"
   silero_url: "http://127.0.0.1:7892"
-  silero_judge: "xenia"
+  silero_judge: "kseniya"
   piper_binary: ""
   model_path: "models/ru_irina.onnx"
   config_path: "models/ru_irina.onnx.json"
@@ -37,22 +45,41 @@ courtroom:
   testimony_sec: 25
   sue_threshold: 5
   sue_window_sec: 600
-  articles:
-    - "Слив катки"
-    - "Токсичность в чате"
-    - "Опоздание"
-    - "Байт на бан"
-    - "Духота в голосовом"
-  punishments:
-    - "10 приседаний в прямом эфире"
-    - "Минута молчания с рукой на сердце"
-    - "Ч/б фильтр на вебку до конца стрима"
+  # articles: charge templates, shown as chips in the cockpit and modes.
+  articles: []
+  # punishments: penalty deck for guilty non-viewers, drawn at random.
+  punishments: []
+  # spoken templates below: empty = that line stays silent.
+  standby_indictment: "Суд разбирает бумаги. Заседание продолжается!"
+  standby_deliberation: "Суд удаляется на совещание."
+  standby_objection: "Протест принят. Суд продолжает!"
+  silent_defense: "" # used as defense when the streamer says nothing
+  witness_intro: "" # e.g. "Суд приобщает показания свидетелей."
+  witness_outro: "" # e.g. "Показания приобщены к делу!"
+  empty_testimony: "" # deliberation context when nobody said a word
+  bribe_twist: "" # appended to the verdict when a bribe flips it
+  undecided_twist: "" # appended when the model gives no verdict
+  # line templates below use {placeholders}; empty = plain values, no decoration
+  witness_line: "" # e.g. "Свидетель {donor} вносит {amount} {currency} и заявляет: {message}"
+  testimony_prefix: "" # e.g. "Подсудимый: "
+  defense_prefix: "" # e.g. "Защита: "
+  snitch_prefix: "" # e.g. "Доносы зала: "
+  penalty_timeout: "" # e.g. "одиночная камера: мут на {secs} секунд"
+  penalty_pardon: "" # e.g. "помилован лично стримером"
+  penalty_ban: "" # e.g. "изгнан из чата навсегда"
+  penalty_prefix: "" # e.g. "Наказание суда: "
+  cases_file: "cases.yaml"
+  cases_gen:
+    enabled: true # background top-up + sync fallback when the deck runs dry
+    batch: 5
+    low_mark: 3 # refill when fewer remain unplayed
 
 donations:
   token: ""
   default_min: 100
   platinum_min: 500
   streamer_trial_min: 0
+  bribe_min: 0 # donations at/above this look like bribes even with no hint words; 0 = only words count
   min_amounts:
     RUB: 100
     USD: 2
@@ -60,7 +87,7 @@ donations:
     BITS: 200
   donationalerts:
     enabled: true
-    token: ""
+    token: "" # canonical widget token; donations.token is a legacy alias
   donatepay:
     enabled: true
     api_key: ""
@@ -70,7 +97,9 @@ donations:
 safety:
   filter_enabled: true
   custom_blacklist: []
-  panic_hotkey: "F12"
+  panic_hotkey: "f12"
+  ban_confirm: false # true = never auto-ban on verdict, streamer bans by hand
+  bribe_words: [] # e.g. ["взятк"]: donor money that sways the judge; empty = bribes off
 
 game:
   streamer_name: "Стример"
@@ -83,4 +112,62 @@ twitch:
   token: ""
   client_id: ""
   broadcaster_id: ""
-  # moderator_id defaults to broadcaster_id; requires unban_requests scopes
+  moderator_id: "" # empty = same as broadcaster_id; needs unban_requests scopes
+
+# prompts: editable persona side. Format rules (verdict keyword, limits, tags)
+# stay in code and survive any edit here. strengths: keep PG-13 + anti-stamp rules.
+prompts:
+  judge_strict: |
+    Ты Верховный Судья трибунала. Сухой, педантичный, неподкупный.
+    Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+    Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+    Первое предложение: назови факт и статью обвинения.
+    Второе: задай подсудимому прямой вопрос, на который он должен ответить.
+    Каждый раз новый заход: меняй образы, сравнения и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.
+  judge_cynical: |
+    Ты продажный Судья трибунала. Вальяжный, циничный, открыто намекаешь, что решение зависит от щедрости зала.
+    Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+    Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+    Первое предложение: лениво перескажи обвинение и назови цену вопроса.
+    Второе: подмигни чату и потребуй показаний и донатов.
+    Каждый раз новый заход: меняй образы и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.
+  prosody: |
+    АУДИО-РЕЖИССУРА:
+    - Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."
+    - Тире для смысловых ударов, междометия для живости: "Кхм...", "Позвольте!", "Ого!"
+    - Знак + перед ударной гласной в спорных словах: вин+овен, в+аша честь, казн+ить. Правило только для движка Silero, остальные его не понимают.
+    - Не чаще одного <break time="300ms" /> на реплику, только перед кульминацией.
+  task_indictment: |
+    ЗАДАЧА:
+    Открой судебное заседание. Громко объяви номер дела, назови статью обвинения и сатирически уничтожь аргументы защиты перед присяжными. Если подсудимый рецидивист, припомни прошлые приговоры. Если есть взятка донатом, отреагируй на нее одной язвительной фразой. Закончи реплику вопросом или требованием ответа! Никаких бытовых штампов: ни бутербродов, ни кружек, ни носков.
+  task_counter: |
+    ЗАДАЧА:
+    Мгновенно прерви стримера! Найди слабое место в его оправдании и высмей его перед чатом в 2 предложениях. Без бытовых штампов.
+  task_deliberation: |
+    ЗАДАЧА:
+    Вынеси вердикт как Верховный Судья. Затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен». Мотив обязан опираться на конкретные показания из дела, а не на общие слова. Никаких бытовых штампов.
+  bribe_note: "На столе взятка: {donor} суёт {amount} {currency}{message}. Ты живой судья, а не автомат: делай с этим что хочешь — прими и оправдай, гордо откажи, разозлись, высмей взяткодателя, обидься на мелочность, устрой сцену. Никаких рамок, это ролевая игра — главное чтобы чату было смешно. Своё решение отрази в вердикте и репликах."
+  condemn_note: |
+    ВНИМАНИЕ: в показаниях есть запретная тема. Осуди её от имени суда одной уничтожающей фразой, затем высмей автора так, чтобы чат лег — но сам запретную тему не смакуй и не повторяй дословно.
+  gen_prompt: |
+    Ты генератор дел для сатирического стрим-суда. Придумай {count} дел.
+    Каждое дело — свои рамки из списка, строго по порядку:
+    {axes}
+    Уже были, НЕ повторять ни тему, ни объект, ни приём: {banlist}
+    Формат ответа: JSON-массив, каждый элемент {"title": "...", "crime": "...", "context": "..."}.
+    Правила: PG-13, без мата, политики, реального насилия и дискриминации. Каждое дело — свежая бытовая или абсурдная провинность из жизни стрима. Никаких бутербродов, кружек и носков. Только JSON, без пояснений.
+
+# chat: bot replies in Twitch chat. Empty = that reply stays silent.
+chat:
+  queue_joined: "" # e.g. "{author} в очереди на скамью, номер {position}"
+  queue_left: "" # e.g. "{author} вышел из очереди"
+  self_trial: "" # e.g. "Зритель {author} сам сел на скамью. Доносы: !snitch <текст>"
+  verdict_line: "" # e.g. "Вердикт суда: {verdict} ({guilty}-{innocent}). Наказание: {penalty} {twist}"
+  streamer_next: "" # e.g. "Следующее дело (суд над стримером): {crime}"
+  donate_crime: "" # e.g. "Донат: {message}"
+  donate_streamer: "" # fallback crime for streamer-threshold donations
+  donate_viewer: "" # fallback crime for platinum donations
+  donate_context: "" # e.g. "Донат {amount} {currency} от {donor}"
+  sue_context: "" # context for !sue flashmob trials
+  default_crime: "" # used when a trial opens with no charge
+  streamer_crime: "" # used for manual streamer trials with no charge

@@ -1,19 +1,26 @@
 package ai
 
-import "fmt"
+import (
+	"fmt"
 
-// Prosody instructions for TTS generation (ellipses, stress marks, pauses)
-const ProsodyDirection = `АУДИО-РЕЖИССУРА:
-- Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."
-- Тире для смысловых ударов, междометия для живости: "Кхм...", "Позвольте!", "Ого!"
-- Знак + перед ударной гласной в спорных словах: вин+овен, в+аша честь, казн+ить. Правило только для движка Silero, остальные его не понимают.
-- Не чаще одного <break time="300ms" /> на реплику, только перед кульминацией.`
+	"stream-tribunal/internal/config"
+)
+
+// Invariants are parser and format rules the desk must not break:
+// persona texts in config can change the tone, never these lines.
+const invariantTags = `Разрешены теги анимации: [slam] удар молотком, [shock] возмущение.
+Тег [objection] запрещён в обвинении, он звучит только в фазе протеста.`
+
+const invariantDeliberation = `Первое слово ответа: строго ВИНОВЕН или НЕВИНОВЕН, затем мотив.`
+
+const invariantObjection = `Реплика обязана начинаться с тега [objection].`
 
 func BuildIndictmentPrompt(defendant, crime, chatContext string) string {
-	return BuildIndictmentPromptWithMemory(defendant, crime, chatContext, "")
+	def := config.DefaultPrompts()
+	return BuildIndictmentPromptWithMemory(defendant, crime, chatContext, "", def.TaskIndictment)
 }
 
-func BuildIndictmentPromptWithMemory(defendant, crime, chatContext, smartContext string) string {
+func BuildIndictmentPromptWithMemory(defendant, crime, chatContext, smartContext, task string) string {
 	memory := ""
 	if smartContext != "" {
 		memory = "ИСТОРИЯ И КОНТЕКСТ:\n" + smartContext + "\n\n"
@@ -23,28 +30,37 @@ func BuildIndictmentPromptWithMemory(defendant, crime, chatContext, smartContext
 КОНТЕКСТ ИЗ ЧАТА:
 %s
 
-%sЗАДАЧА:
-Откройте судебное заседание. Громко объявите номер дела, назовите статью обвинения и сатирически уничтожьте аргументы стримера перед присяжными. Если подсудимый рецидивист, припомните прошлые приговоры. Если есть взятка донатом, отреагируйте на нее одной язвительной фразой. Закончите реплику вопросом или требованием ответа!`,
-		defendant, crime, chatContext, memory)
+%s%sЗАДАЧА:
+%s`,
+		defendant, crime, chatContext, memory, invariantTags+"\n\n", task)
 }
 
 func BuildCounterArgumentPrompt(streamerDefense string) string {
+	def := config.DefaultPrompts()
+	return BuildCounterArgumentPromptWithTask(streamerDefense, def.TaskCounter)
+}
+
+func BuildCounterArgumentPromptWithTask(streamerDefense, task string) string {
 	return fmt.Sprintf(`ОПРАВДАНИЕ СТРИМЕРА: "%s"
 
-ЗАДАЧА:
-Мгновенно прервите стримера через [objection]! Реплика обязана начинаться с тега [objection].
-Найдите слабое место в его оправдании и высмейте его перед чатом в 2 предложениях.`,
-		streamerDefense)
+%sЗАДАЧА:
+%s`,
+		streamerDefense, invariantObjection+"\n\n", task)
 }
 
 // BuildDeliberationPrompt asks the bench for a ruling starting with verdict keyword.
 func BuildDeliberationPrompt(defendant, crime, testimony string) string {
+	def := config.DefaultPrompts()
+	return BuildDeliberationPromptWithTask(defendant, crime, testimony, def.TaskDeliberation)
+}
+
+func BuildDeliberationPromptWithTask(defendant, crime, testimony, task string) string {
 	return fmt.Sprintf(`ПОДСУДИМЫЙ: %s
 ОБВИНЕНИЕ: %s
 ПОКАЗАНИЯ И ЗАЩИТА:
 %s
 
-ЗАДАЧА:
-Вынеси вердикт как Верховный Судья. Первое слово ответа: строго ВИНОВЕН или НЕВИНОВЕН, затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен.»`,
-		defendant, crime, testimony)
+%sЗАДАЧА:
+%s`,
+		defendant, crime, testimony, invariantDeliberation+"\n\n", task)
 }

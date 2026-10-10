@@ -26,9 +26,10 @@
         window.clearTimeout(bangTimer);
         bangTimer = window.setTimeout(() => img.classList.remove("bang"), 700);
     }
+    let failures = 0;
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        const ws = new WebSocket(protocol + "//" + location.host + "/ws");
+        const ws = new WebSocket(protocol + "//" + location.host + "/ws" + location.search);
         ws.onmessage = (event) => {
             let msg;
             try {
@@ -51,8 +52,13 @@
                 stopTalking();
             }
         };
+        ws.onopen = () => {
+            failures = 0;
+        };
         ws.onclose = () => {
-            window.setTimeout(connect, 2000);
+            failures += 1;
+            const delay = Math.min(2000 * 2 ** failures, 30000) + Math.floor(Math.random() * 500);
+            window.setTimeout(connect, delay);
         };
     }
     connect();

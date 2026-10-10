@@ -45,6 +45,7 @@ export function ModesView() {
       defense_sec: number; testimony_sec: number; streamer_trial_min: number
       sue_threshold: number; sue_window_sec: number; judge_style: string; articles?: string[]
       platinum_min: number; judge_name: string; theme: string
+      default_min: number; min_amounts?: Record<string, number>
     }>('/api/settings')
       .then((d) => {
         if (typeof d.defense_sec === 'number') setDefenseSec(d.defense_sec)
@@ -57,13 +58,6 @@ export function ModesView() {
         if (typeof d.judge_name === 'string') setJudgeName(d.judge_name)
         if (typeof d.theme === 'string') setTheme(d.theme)
         if (Array.isArray(d.articles)) setArticles(d.articles.join('\n'))
-      })
-      .catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    void apiGet<{ default_min: number; streamer_trial_min: number; min_amounts?: Record<string, number> }>('/api/settings')
-      .then((d) => {
         const chips = new Set<number>()
         for (const v of [d.default_min, d.streamer_trial_min]) {
           if (typeof v === 'number' && v > 0) chips.add(v)
@@ -80,7 +74,7 @@ export function ModesView() {
     }
     const r = await apiPost('/api/trial', {
       defendant: defendant.trim(),
-      crime: crime.trim() || (mode === 'streamer' ? 'суд над стримером' : 'решение зала'),
+      crime: crime.trim(),
       context: context.trim() || undefined,
       viewer: mode !== 'streamer',
     })
@@ -290,7 +284,8 @@ export function ModesView() {
               Нет активных заявок. Убедитесь, что токен модератора указан в настройках.
             </p>
           ) : (
-            <table className="w-full text-left text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="text-xs text-zinc-500">
                   <th scope="col" className="py-1 pr-2">Пользователь</th>
@@ -332,6 +327,7 @@ export function ModesView() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

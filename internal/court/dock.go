@@ -98,6 +98,24 @@ func (e *Engine) PickNick(nick string) (PoolSeat, bool) {
 	return PoolSeat{}, false
 }
 
+// ReturnSeat puts a pulled seat back at the head of the line
+func (e *Engine) ReturnSeat(seat PoolSeat) {
+	if strings.TrimSpace(seat.Nick) == "" {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, s := range e.pool {
+		if strings.EqualFold(s.Nick, seat.Nick) {
+			return
+		}
+	}
+	if len(e.pool) >= maxPool {
+		return
+	}
+	e.pool = append([]PoolSeat{seat}, e.pool...)
+}
+
 // CurrentDefendant names who is on the stand right now
 func (e *Engine) CurrentDefendant() string {
 	e.mu.RLock()

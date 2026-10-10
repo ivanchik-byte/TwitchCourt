@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,6 +25,7 @@ import (
 	"stream-tribunal/internal/memory"
 	"stream-tribunal/internal/obs"
 	"stream-tribunal/internal/safety"
+	"stream-tribunal/internal/tmpl"
 	"stream-tribunal/web"
 )
 
@@ -46,10 +48,14 @@ func main() {
 	voice := buildSynthesizer(cfg.Load())
 	defer voice.Close()
 
-	aiClient := ai.NewClient(cfg.Load().AI)
+	aiClient, err := ai.NewClient(cfg.Load().AI)
+	if err != nil {
+		log.Fatalf("bad ai config: %v", err)
+	}
 	recall := memory.NewStore(cfg.Load().Game.MemoryPath)
 
-	unbanCourt := bot.NewUnbanClient(cfg.Load().Twitch.Token, cfg.Load().Twitch.ClientID, cfg.Load().Twitch.BroadcasterID, cfg.Load().Twitch.ModeratorID)
+	var unbanCourt atomic.Pointer[bot.UnbanClient]
+	unbanCourt.Store(bot.NewUnbanClient(cfg.Load().Twitch.Token, cfg.Load().Twitch.ClientID, cfg.Load().Twitch.BroadcasterID, cfg.Load().Twitch.ModeratorID))
 	unbanBoard := newUnbanBoard()
 
 	var startWatchers func()
@@ -144,11 +150,26 @@ func main() {
 
 	go hub.Run()
 
+	hub.Secret = func() string { return cfg.Load().Server.Secret }
 	engine = court.NewEngine(cfg.Load(), hub, aiClient, voice, filter)
 	engine.AttachMemory(recall)
 	engine.SetPunishments(cfg.Load().Courtroom.Punishments)
+	casesFile := cfg.Load().Courtroom.CasesFile
+	if casesFile == "" {
+		casesFile = "cases.yaml"
+	}
+	if err := engine.LoadCases(casesFile); err != nil {
+		log.Printf("case deck unavailable: %v", err)
+	}
 
-	var chat *bot.TwitchIRC
+	var chat atomic.Pointer[bot.TwitchIRC]
+
+	// announce skips empty lines: unconfigured chat templates stay silent
+	announce := func(text string) {
+		if strings.TrimSpace(text) != "" {
+			chat.Load().SendMessage(text)
+		}
+	}
 
 	// streamer trials are rare events now: manual starts and platinum donations only
 	openStreamerTrial := func(defendant, crime, context string) bool {
@@ -193,9 +214,15 @@ func main() {
 			recall.NoteForAI("меценат " + donor + " любит взятки и ждет снисхождения")
 		}
 		// queue donation as testimony during active trial instead of competing
-		if engine.AddWitness(donor, d.Amount, d.Currency, d.Message) {
-			if isBribe(d.Message) {
-				engine.AddBribe(donor, d.Amount, d.Currency)
+		queued := false
+		if safety.Banned(d.Message) {
+			queued = engine.AddFlaggedWitness(donor, d.Amount, d.Currency, d.Message)
+		} else {
+			queued = engine.AddWitness(donor, d.Amount, d.Currency, d.Message)
+		}
+		if queued {
+			if isBribe(cfg.Load(), d.Amount, d.Message) {
+				engine.AddBribe(donor, d.Amount, d.Currency, d.Message)
 			}
 			return
 		}
@@ -237,8 +264,8 @@ func main() {
 			"ai_live":  cfg.Load().AI.APIKey != "" || cfg.Load().AI.Provider == "ollama",
 			"tts_beep": ttsIsBeep(cfg.Load()),
 		}
-		if chat != nil {
-			if modErr, bad := chat.LastModError(); bad {
+		if modChat := chat.Load(); modChat != nil {
+			if modErr, bad := modChat.LastModError(); bad {
 				status["chat_mod_error"] = modErr
 			}
 		}
@@ -269,6 +296,9 @@ func main() {
 		req.Context = truncateRunes(req.Context, 1000)
 		if req.Defendant == "" {
 			req.Defendant = cfg.Load().Game.StreamerName
+		}
+		if req.Crime == "" {
+			req.Crime = cfg.Load().Chat.DefaultCrime
 		}
 		var trialErr error
 		if req.Viewer {
@@ -337,13 +367,14 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		aiStatus := func() map[string]any {
 			return map[string]any{
-				"provider":    cfg.Load().AI.Provider,
-				"model":       cfg.Load().AI.Model,
-				"temperature": cfg.Load().AI.Temperature,
-				"stream":      cfg.Load().AI.Stream,
-				"base_url":    cfg.Load().AI.BaseURL,
-				"has_key":     cfg.Load().AI.APIKey != "",
-				"live":        cfg.Load().AI.APIKey != "" || cfg.Load().AI.Provider == "ollama",
+				"provider":       cfg.Load().AI.Provider,
+				"model":          cfg.Load().AI.Model,
+				"temperature":    cfg.Load().AI.Temperature,
+				"stream":         cfg.Load().AI.Stream,
+				"base_url":       cfg.Load().AI.BaseURL,
+				"has_key":        cfg.Load().AI.APIKey != "",
+				"has_extra_body": len(cfg.Load().AI.ExtraBody) > 0,
+				"live":           cfg.Load().AI.APIKey != "" || cfg.Load().AI.Provider == "ollama" || strings.TrimSpace(cfg.Load().AI.BaseURL) != "",
 			}
 		}
 		switch r.Method {
@@ -359,12 +390,13 @@ func main() {
 				return
 			}
 			var req struct {
-				Provider    *string  `json:"provider"`
-				APIKey      *string  `json:"api_key"`
-				Model       *string  `json:"model"`
-				Temperature *float64 `json:"temperature"`
-				Stream      *bool    `json:"stream"`
-				BaseURL     *string  `json:"base_url"`
+				Provider    *string        `json:"provider"`
+				APIKey      *string        `json:"api_key"`
+				Model       *string        `json:"model"`
+				Temperature *float64       `json:"temperature"`
+				Stream      *bool          `json:"stream"`
+				BaseURL     *string        `json:"base_url"`
+				ExtraBody   map[string]any `json:"extra_body"`
 			}
 			if err := decodeJSON(w, r, &req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -372,13 +404,11 @@ func main() {
 			}
 			next := cfg.Load().Clone()
 			if req.Provider != nil {
-				switch *req.Provider {
-				case "groq", "cerebras", "ollama":
-					next.AI.Provider = *req.Provider
-				default:
-					http.Error(w, "want provider groq, cerebras or ollama", http.StatusBadRequest)
+				if strings.TrimSpace(*req.Provider) == "" {
+					http.Error(w, "want non-empty provider", http.StatusBadRequest)
 					return
 				}
+				next.AI.Provider = strings.TrimSpace(*req.Provider)
 			}
 			if req.APIKey != nil {
 				next.AI.APIKey = *req.APIKey
@@ -390,16 +420,113 @@ func main() {
 				next.AI.Temperature = *req.Temperature
 			}
 			if req.BaseURL != nil {
-				next.AI.BaseURL = *req.BaseURL
+				next.AI.BaseURL = strings.TrimSpace(*req.BaseURL)
 			}
 			if req.Stream != nil {
 				next.AI.Stream = *req.Stream
 			}
+			if req.ExtraBody != nil {
+				if len(req.ExtraBody) > 32 {
+					http.Error(w, "extra_body too large", http.StatusBadRequest)
+					return
+				}
+				next.AI.ExtraBody = req.ExtraBody
+			}
+			if _, err := ai.ResolveEndpoint(next.AI.Provider, next.AI.BaseURL); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			if !publish(w, next) {
 				return
 			}
-			engine.SetAI(ai.NewClient(next.AI))
+			client, err := ai.NewClient(next.AI)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			engine.SetAI(client)
 			json.NewEncoder(w).Encode(aiStatus())
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/prompts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		promptsStatus := func() map[string]any {
+			p := cfg.Load().Prompts
+			return map[string]any{
+				"judge_strict": p.JudgeStrict, "judge_cynical": p.JudgeCynical,
+				"prosody": p.Prosody, "task_indictment": p.TaskIndictment,
+				"task_counter": p.TaskCounter, "task_deliberation": p.TaskDeliberation,
+				"bribe_note": p.BribeNote, "condemn_note": p.CondemnNote,
+				"gen_prompt": p.GenPrompt,
+			}
+		}
+		switch r.Method {
+		case http.MethodGet:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			json.NewEncoder(w).Encode(promptsStatus())
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				Reset            bool    `json:"reset"`
+				JudgeStrict      *string `json:"judge_strict"`
+				JudgeCynical     *string `json:"judge_cynical"`
+				Prosody          *string `json:"prosody"`
+				TaskIndictment   *string `json:"task_indictment"`
+				TaskCounter      *string `json:"task_counter"`
+				TaskDeliberation *string `json:"task_deliberation"`
+				BribeNote        *string `json:"bribe_note"`
+				CondemnNote      *string `json:"condemn_note"`
+				GenPrompt        *string `json:"gen_prompt"`
+			}
+			if err := decodeJSON(w, r, &req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			next := cfg.Load().Clone()
+			if req.Reset {
+				next.Prompts = config.DefaultPrompts()
+			} else {
+				if req.JudgeStrict != nil {
+					next.Prompts.JudgeStrict = *req.JudgeStrict
+				}
+				if req.JudgeCynical != nil {
+					next.Prompts.JudgeCynical = *req.JudgeCynical
+				}
+				if req.Prosody != nil {
+					next.Prompts.Prosody = *req.Prosody
+				}
+				if req.TaskIndictment != nil {
+					next.Prompts.TaskIndictment = *req.TaskIndictment
+				}
+				if req.TaskCounter != nil {
+					next.Prompts.TaskCounter = *req.TaskCounter
+				}
+				if req.TaskDeliberation != nil {
+					next.Prompts.TaskDeliberation = *req.TaskDeliberation
+				}
+				if req.BribeNote != nil {
+					next.Prompts.BribeNote = *req.BribeNote
+				}
+				if req.CondemnNote != nil {
+					next.Prompts.CondemnNote = *req.CondemnNote
+				}
+				if req.GenPrompt != nil {
+					next.Prompts.GenPrompt = *req.GenPrompt
+				}
+			}
+			if !publish(w, next) {
+				return
+			}
+			json.NewEncoder(w).Encode(promptsStatus())
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -602,11 +729,11 @@ func main() {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
-		if err := unbanCourt.Resolve(ctx, req.ID, req.Approve, req.Text); err != nil {
+		if err := unbanCourt.Load().Resolve(ctx, req.ID, req.Approve, req.Text); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		unbanBoard.refresh(context.Background(), unbanCourt)
+		unbanBoard.refresh(context.Background(), unbanCourt.Load())
 		w.WriteHeader(http.StatusAccepted)
 	})
 
@@ -696,9 +823,10 @@ func main() {
 		}
 		crime := seat.Reason
 		if crime == "" {
-			crime = "выбран залом"
+			crime = cfg.Load().Chat.DefaultCrime
 		}
 		if err := engine.StartViewerTrial(seat.Nick, crime); err != nil {
+			engine.ReturnSeat(seat)
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -719,14 +847,197 @@ func main() {
 		if seat, ok := engine.PickRandom(); ok {
 			crime := seat.Reason
 			if crime == "" {
-				crime = "выбран залом"
+				crime = cfg.Load().Chat.DefaultCrime
 			}
 			if err := engine.StartViewerTrial(seat.Nick, crime); err == nil {
 				json.NewEncoder(w).Encode(map[string]any{"defendant": seat.Nick})
 				return
 			}
+			engine.ReturnSeat(seat)
 		}
 		json.NewEncoder(w).Encode(map[string]any{"defendant": ""})
+	})
+
+	mux.HandleFunc("/api/cases", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		deck := engine.CaseDeck()
+		if deck == nil {
+			http.Error(w, "no case deck", http.StatusConflict)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			used := map[string]bool{}
+			for _, id := range recall.UsedCases() {
+				used[id] = true
+			}
+			type cardView struct {
+				court.CaseCard
+				Used bool `json:"used"`
+			}
+			list := deck.List()
+			out := make([]cardView, 0, len(list))
+			for _, c := range list {
+				out = append(out, cardView{CaseCard: c, Used: used[c.ID]})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"cases": out, "remaining": deck.Remaining()})
+		case http.MethodPost:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var req struct {
+				Title   string   `json:"title"`
+				Crime   string   `json:"crime"`
+				Context string   `json:"context"`
+				Tags    []string `json:"tags"`
+			}
+			if err := decodeJSON(w, r, &req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			card, err := deck.Add(req.Title, req.Crime, req.Context, req.Tags, "hand")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(card)
+		case http.MethodDelete:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if err := deck.Delete(r.URL.Query().Get("id")); err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/cases/draw", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		deck := engine.CaseDeck()
+		if deck == nil {
+			http.Error(w, "no case deck", http.StatusConflict)
+			return
+		}
+		var req struct {
+			Target string `json:"target"`
+			Start  bool   `json:"start"`
+		}
+		if err := decodeJSON(w, r, &req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		defendant := ""
+		viewer := true
+		if req.Target == "streamer" {
+			viewer = false
+			defendant = cfg.Load().Game.StreamerName
+		} else {
+			authors := engine.RecentAuthors(10)
+			if len(authors) == 0 {
+				http.Error(w, "chat is silent: pick a defendant or try the streamer", http.StatusConflict)
+				return
+			}
+			defendant = authors[rand.Intn(len(authors))]
+		}
+		if defendant == "" {
+			http.Error(w, "no defendant", http.StatusConflict)
+			return
+		}
+		card, ok := deck.Draw()
+		if !ok && cfg.Load().Courtroom.CasesGen.Enabled {
+			batch := cfg.Load().Courtroom.CasesGen.Batch
+			if batch <= 0 {
+				batch = 5
+			}
+			if n, err := engine.GenerateCases(batch); err != nil {
+				http.Error(w, "deck is empty, generation failed: "+err.Error(), http.StatusConflict)
+				return
+			} else if n > 0 {
+				card, ok = deck.Draw()
+			}
+		}
+		if !ok {
+			http.Error(w, "deck is empty", http.StatusConflict)
+			return
+		}
+		if req.Start {
+			if trialErr := engine.StartCaseTrial(defendant, card, viewer); trialErr != nil {
+				deck.Return(card)
+				http.Error(w, trialErr.Error(), http.StatusConflict)
+				return
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"case": card, "defendant": defendant, "remaining": deck.Remaining(),
+		})
+		go engine.EnsureRefill()
+	})
+
+	mux.HandleFunc("/api/cases/reset", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		deck := engine.CaseDeck()
+		if deck == nil {
+			http.Error(w, "no case deck", http.StatusConflict)
+			return
+		}
+		deck.Reset()
+		json.NewEncoder(w).Encode(map[string]any{"remaining": deck.Remaining()})
+	})
+
+	mux.HandleFunc("/api/cases/generate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Count int `json:"count"`
+		}
+		if err := decodeJSON(w, r, &req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		n, err := engine.GenerateCases(req.Count)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		deck := engine.CaseDeck()
+		remaining := 0
+		if deck != nil {
+			remaining = deck.Remaining()
+		}
+		json.NewEncoder(w).Encode(map[string]any{"added": n, "remaining": remaining})
 	})
 
 	mux.HandleFunc("/api/punish", func(w http.ResponseWriter, r *http.Request) {
@@ -842,7 +1153,7 @@ func main() {
 				return
 			}
 			donateGate.SetMinimums(next.Donations.MinAmounts, next.Donations.DefaultMin)
-			unbanCourt = bot.NewUnbanClient(next.Twitch.Token, next.Twitch.ClientID, next.Twitch.BroadcasterID, next.Twitch.ModeratorID)
+			unbanCourt.Store(bot.NewUnbanClient(next.Twitch.Token, next.Twitch.ClientID, next.Twitch.BroadcasterID, next.Twitch.ModeratorID))
 			startWatchers()
 			json.NewEncoder(w).Encode(integrationsStatus())
 		default:
@@ -1088,6 +1399,7 @@ func main() {
 				"filter_enabled":   cfg.Load().Safety.FilterEnabled,
 				"custom_blacklist": cfg.Load().Safety.CustomBlacklist,
 				"panic_hotkey":     cfg.Load().Safety.PanicHotkey,
+				"ban_confirm":      cfg.Load().Safety.BanConfirm,
 			}
 		}
 		switch r.Method {
@@ -1106,6 +1418,7 @@ func main() {
 				FilterEnabled   *bool    `json:"filter_enabled"`
 				CustomBlacklist []string `json:"custom_blacklist"`
 				PanicHotkey     *string  `json:"panic_hotkey"`
+				BanConfirm      *bool    `json:"ban_confirm"`
 			}
 			if err := decodeJSON(w, r, &req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -1132,6 +1445,9 @@ func main() {
 					http.Error(w, "want panic_hotkey escape, f9, f12 or p", http.StatusBadRequest)
 					return
 				}
+			}
+			if req.BanConfirm != nil {
+				next.Safety.BanConfirm = *req.BanConfirm
 			}
 			if !publish(w, next) {
 				return
@@ -1230,13 +1546,13 @@ func main() {
 	trySueTrial := func(crime string) {
 		if engine.GetState() != court.StateIdle {
 			if suePending.CompareAndSwap(false, true) {
-				chat.SendMessage("Следующее дело (суд над стримером): " + crime)
+				announce(tmpl.Fill(cfg.Load().Chat.StreamerNext, map[string]string{"crime": crime}))
 			}
 			return
 		}
 		suePending.Store(false)
 		sueTracker.Reset()
-		openStreamerTrial(cfg.Load().Game.StreamerName, crime, "флешмоб !sue в чате")
+		openStreamerTrial(cfg.Load().Game.StreamerName, crime, cfg.Load().Chat.SueContext)
 	}
 
 	// chatHandler routes every chat line; chat itself is rebuilt on token change
@@ -1244,17 +1560,19 @@ func main() {
 		switch cmd.Kind {
 		case bot.CommandCourt:
 			if joined, pos := engine.JoinPool(cmd.Author, cmd.Argument); joined {
-				chat.SendMessage(cmd.Author + " в очереди на скамью, номер " + strconv.Itoa(pos))
+				announce(tmpl.Fill(cfg.Load().Chat.QueueJoined, map[string]string{
+					"author": cmd.Author, "position": strconv.Itoa(pos),
+				}))
 			}
 		case bot.CommandLeave:
 			if engine.LeavePool(cmd.Author) {
-				chat.SendMessage(cmd.Author + " вышел из очереди")
+				announce(tmpl.Fill(cfg.Load().Chat.QueueLeft, map[string]string{"author": cmd.Author}))
 			}
 		case bot.CommandCrime:
 			if cmd.Argument != "" {
 				engine.AddChatComment(cmd.Author, "!crime "+cmd.Argument)
 				if err := engine.StartViewerTrial(cmd.Author, cmd.Argument); err == nil {
-					chat.SendMessage("Зритель " + cmd.Author + " сам сел на скамью. Доносы принимаются: !snitch <текст>")
+					announce(tmpl.Fill(cfg.Load().Chat.SelfTrial, map[string]string{"author": cmd.Author}))
 				}
 			}
 		case bot.CommandSnitch:
@@ -1308,11 +1626,11 @@ func main() {
 			log.Println("twitch bits watcher started")
 		}
 		if cfg.Load().Twitch.Token != "" && cfg.Load().Twitch.ClientID != "" && cfg.Load().Twitch.BroadcasterID != "" {
-			go unbanBoard.watch(wctx, unbanCourt)
+			go unbanBoard.watch(wctx, unbanCourt.Load())
 			log.Println("unban court watcher started")
 		}
-		chat = bot.NewTwitchIRC(cfg.Load().Twitch.Channel, cfg.Load().Twitch.Nick, cfg.Load().Twitch.Token, chatHandler)
-		go chat.Run(wctx)
+		chat.Store(bot.NewTwitchIRC(cfg.Load().Twitch.Channel, cfg.Load().Twitch.Nick, cfg.Load().Twitch.Token, chatHandler))
+		go chat.Load().Run(wctx)
 		if cfg.Load().Twitch.Token != "" && cfg.Load().Twitch.Channel != "" {
 			log.Printf("twitch chat on #%s as %s", cfg.Load().Twitch.Channel, cfg.Load().Twitch.Nick)
 		}
@@ -1320,27 +1638,24 @@ func main() {
 	startWatchers()
 
 	engine.VerdictHook = func(verdict, penalty string, guilty, innocent int, twist string) {
-		text := "Вердикт суда: " + verdict + " (" + strconv.Itoa(guilty) + "-" + strconv.Itoa(innocent) + ")"
-		if penalty != "" {
-			text += ". Наказание: " + penalty
-		}
-		if twist != "" {
-			text += " " + twist
-		}
-		chat.SendMessage(text)
+		announce(tmpl.Fill(cfg.Load().Chat.VerdictLine, map[string]string{
+			"verdict": verdict,
+			"guilty":  strconv.Itoa(guilty), "innocent": strconv.Itoa(innocent),
+			"penalty": penalty, "twist": twist,
+		}))
 		if suePending.CompareAndSwap(true, false) {
 			crime := sueTracker.TopReason()
 			sueTracker.Reset()
-			openStreamerTrial(cfg.Load().Game.StreamerName, crime, "флешмоб !sue в чате")
+			openStreamerTrial(cfg.Load().Game.StreamerName, crime, cfg.Load().Chat.SueContext)
 		}
 	}
 
 	engine.TimeoutHook = func(user string, secs int, ban bool, reason string) {
 		if ban {
-			chat.Ban(user)
+			chat.Load().Ban(user)
 			return
 		}
-		chat.Timeout(user, secs)
+		chat.Load().Timeout(user, secs)
 	}
 
 	engine.SetPunishments(cfg.Load().Courtroom.Punishments)

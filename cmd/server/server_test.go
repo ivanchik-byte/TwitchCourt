@@ -185,14 +185,23 @@ func TestSPAHandler(t *testing.T) {
 }
 
 func TestDonationLogic(t *testing.T) {
-	if !isBribe("это вам на взятку, ваша честь") {
+	bribeCfg := &config.Config{}
+	bribeCfg.Safety.BribeWords = []string{"взятк"}
+	bribeCfg.Donations.BribeMin = 500
+	if !isBribe(bribeCfg, 10, "это вам на взятку, ваша честь") {
 		t.Fatal("isBribe should match 'взятку'")
 	}
-	if !isBribe("ВЗЯТКА судье") {
+	if !isBribe(bribeCfg, 10, "ВЗЯТКА судье") {
 		t.Fatal("isBribe should match uppercase 'ВЗЯТКА'")
 	}
-	if isBribe("просто поддержать стрим") {
+	if isBribe(bribeCfg, 10, "просто поддержать стрим") {
 		t.Fatal("isBribe should not match regular donation")
+	}
+	if !isBribe(bribeCfg, 1000, "просто поддержать стрим") {
+		t.Fatal("big money without a hint must count as worth noticing")
+	}
+	if isBribe(&config.Config{}, 1000000, "просто поддержать стрим") {
+		t.Fatal("empty bribe words and no minimum must disable bribes")
 	}
 
 	cfg := &config.Config{
@@ -202,6 +211,9 @@ func TestDonationLogic(t *testing.T) {
 		},
 		Game: config.GameConfig{
 			StreamerName: "IvanStreamer",
+		},
+		Chat: config.ChatConfig{
+			DonateCrime: "Донат: {message}",
 		},
 	}
 
