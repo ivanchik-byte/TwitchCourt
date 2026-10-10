@@ -32,12 +32,12 @@ func openDonationTrial(cfg *config.Config, open func(defendant, crime, context s
 		"currency": currency,
 	})
 	switch {
-	case cfg.Donations.StreamerTrialMin > 0 && amount >= cfg.Donations.StreamerTrialMin:
+	case cfg.Donations.StreamerTrialMin > 0 && amount >= cfg.Donations.StreamerTrialMin,
+		cfg.Donations.PlatinumMin > 0 && amount >= cfg.Donations.PlatinumMin:
+		// big money puts the streamer on the bench (documented behavior)
 		if crime == "" {
 			crime = tmpl.Fill(cfg.Chat.DonateStreamer, vars)
 		}
-		open(cfg.Game.StreamerName, crime, context)
-	case cfg.Donations.PlatinumMin > 0 && amount >= cfg.Donations.PlatinumMin:
 		if crime == "" {
 			crime = tmpl.Fill(cfg.Chat.DonateViewer, vars)
 		}

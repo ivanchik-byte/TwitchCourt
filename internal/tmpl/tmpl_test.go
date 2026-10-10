@@ -9,12 +9,18 @@ func TestFillSubstitutes(t *testing.T) {
 	}
 }
 
-func TestFillEmptyStaysPlain(t *testing.T) {
-	got := Fill("", map[string]string{"donor": "ivan", "amount": "150"})
-	if got != "150 ivan" {
-		t.Fatalf("empty template must join values, got %q", got)
+func TestFillEmptyStaysSilent(t *testing.T) {
+	if got := Fill("", map[string]string{"donor": "ivan", "amount": "150"}); got != "" {
+		t.Fatalf("empty template must render nothing, got %q", got)
 	}
-	if Fill("", map[string]string{"a": "", "b": " "}) != "" {
-		t.Fatal("empty values must render nothing")
+	if got := Fill("  ", nil); got != "" {
+		t.Fatalf("blank template must render nothing, got %q", got)
+	}
+}
+
+func TestFillMissingKeyLeftAlone(t *testing.T) {
+	got := Fill("дело {crime}", map[string]string{"other": "x"})
+	if got != "дело {crime}" {
+		t.Fatalf("missing keys must stay visible for debugging, got %q", got)
 	}
 }

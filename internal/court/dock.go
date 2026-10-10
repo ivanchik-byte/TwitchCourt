@@ -187,6 +187,7 @@ func (e *Engine) AbortTrial() bool {
 		e.cancelFn()
 		e.cancelFn = nil
 	}
+	e.trialGen++
 	if e.state == StateIdle {
 		e.mu.Unlock()
 		return false

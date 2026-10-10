@@ -66,6 +66,7 @@ type Store struct {
 	donations    []DonationRecord
 	participants map[string]*Participant
 	comments     []Comment
+	transcript   []string
 	profile      StreamerProfile
 	usedCases    []string
 	saveMu       sync.Mutex
@@ -159,16 +160,16 @@ func (s *Store) AddSpeechLine(text string) {
 		return
 	}
 	s.mu.Lock()
-	s.comments = append(s.comments, Comment{At: time.Now(), Author: "прокурор", Text: text})
-	if len(s.comments) > maxComments {
-		s.comments = s.comments[len(s.comments)-maxComments:]
+	s.transcript = append(s.transcript, text)
+	if len(s.transcript) > maxComments {
+		s.transcript = s.transcript[len(s.transcript)-maxComments:]
 	}
 	s.mu.Unlock()
 }
 
 func (s *Store) ClearTranscript() {
 	s.mu.Lock()
-	s.comments = nil
+	s.transcript = nil
 	s.mu.Unlock()
 }
 
@@ -380,6 +381,7 @@ func (s *Store) load() {
 		Participants map[string]*Participant `json:"participants"`
 		Profile      StreamerProfile         `json:"profile"`
 		UsedCases    []string                `json:"used_cases"`
+		Comments     []Comment               `json:"comments"`
 	}
 	if err := json.Unmarshal(raw, &dump); err != nil {
 		_ = os.WriteFile(s.path+".bak", raw, 0o644)
@@ -390,6 +392,7 @@ func (s *Store) load() {
 	s.participants = dump.Participants
 	s.profile = dump.Profile
 	s.usedCases = dump.UsedCases
+	s.comments = dump.Comments
 }
 
 func (s *Store) save() {
@@ -413,6 +416,8 @@ func (s *Store) save() {
 	profile.RunningGags = append([]string(nil), s.profile.RunningGags...)
 	profile.AutoNotes = append([]string(nil), s.profile.AutoNotes...)
 	usedCases := append([]string(nil), s.usedCases...)
+	comments := make([]Comment, len(s.comments))
+	copy(comments, s.comments)
 	s.mu.RUnlock()
 	dump := map[string]any{
 		"trials":       trials,
@@ -420,6 +425,7 @@ func (s *Store) save() {
 		"participants": participants,
 		"profile":      profile,
 		"used_cases":   usedCases,
+		"comments":     comments,
 	}
 	raw, err := json.MarshalIndent(dump, "", "  ")
 	if err != nil {

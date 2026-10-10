@@ -66,6 +66,7 @@ func TestBuildWitnessInterlude(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Courtroom.WitnessIntro = "Суд приобщает"
 	cfg.Courtroom.WitnessOutro = "Показания приобщены"
+	cfg.Courtroom.WitnessLine = "Свидетель {donor} вносит {amount} {currency} и заявляет: {message}"
 	e.SwapConfig(cfg)
 	got := e.buildWitnessInterlude([]Witness{
 		{Donor: "ivan", Amount: 150, Currency: "RUB", Message: "убил курицу по дороге"},
@@ -81,6 +82,9 @@ func TestBuildWitnessInterlude(t *testing.T) {
 
 func TestBuildWitnessInterludeUnescapes(t *testing.T) {
 	e := newWitnessEngine()
+	cfg := config.DefaultConfig()
+	cfg.Courtroom.WitnessLine = "Свидетель {donor} вносит {amount} {currency} и заявляет: {message}"
+	e.SwapConfig(cfg)
 	got := e.buildWitnessInterlude([]Witness{
 		{Donor: "ivan", Amount: 10, Currency: "RUB", Message: "рыба &amp; мясо"},
 	})
@@ -229,6 +233,23 @@ func TestFinalizeVerdictJailsViewer(t *testing.T) {
 	}
 	if e.GetState() != StateIdle {
 		t.Fatalf("court must rest after verdict, got %q", e.GetState())
+	}
+}
+
+func TestFinishTrialIgnoresStaleGeneration(t *testing.T) {
+	e := newWitnessEngine()
+	ctxB, cancelB := context.WithCancel(context.Background())
+	e.mu.Lock()
+	e.cancelFn = cancelB
+	e.trialGen = 2
+	e.mu.Unlock()
+	e.finishTrial(1)
+	if ctxB.Err() != nil {
+		t.Fatal("stale pipeline must not kill the new trial")
+	}
+	e.finishTrial(2)
+	if ctxB.Err() == nil {
+		t.Fatal("own generation must release its context")
 	}
 }
 

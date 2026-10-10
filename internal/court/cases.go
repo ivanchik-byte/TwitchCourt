@@ -35,6 +35,7 @@ type CaseDeck struct {
 	recall    *memory.Store
 	all       []CaseCard
 	remaining []CaseCard
+	fileMu    sync.Mutex
 }
 
 func NewCaseDeck(path string, recall *memory.Store) *CaseDeck {
@@ -47,7 +48,9 @@ func (d *CaseDeck) Path() string {
 
 // Reload re-reads the file and rebuilds the remaining pile minus used ids.
 func (d *CaseDeck) Reload() error {
+	d.fileMu.Lock()
 	raw, err := os.ReadFile(d.path)
+	d.fileMu.Unlock()
 	if err != nil {
 		if os.IsNotExist(err) {
 			d.mu.Lock()
@@ -169,6 +172,7 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 	if err != nil {
 		return CaseCard{}, err
 	}
+	d.fileMu.Lock()
 	// flow-style `cases: []` can't take appended block items: normalize once
 	if raw, err := os.ReadFile(d.path); err == nil && strings.Contains(string(raw), "cases: []") {
 		fixed := strings.Replace(string(raw), "cases: []", "cases:", 1)
@@ -176,9 +180,9 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 	}
 	f, err := os.OpenFile(d.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
+		d.fileMu.Unlock()
 		return CaseCard{}, err
 	}
-	defer f.Close()
 	ls := strings.Split(strings.TrimRight(string(block), "\n"), "\n")
 	// shift the whole item under `cases:`: dash by 2, continuations match it
 	ls[0] = "  " + ls[0]
@@ -187,8 +191,11 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 			ls[i] = "  " + ls[i]
 		}
 	}
-	if _, err := f.WriteString("\n" + strings.Join(ls, "\n") + "\n"); err != nil {
-		return CaseCard{}, err
+	_, werr := f.WriteString("\n" + strings.Join(ls, "\n") + "\n")
+	f.Close()
+	d.fileMu.Unlock()
+	if werr != nil {
+		return CaseCard{}, werr
 	}
 	_ = d.Reload()
 	return card, nil
@@ -217,8 +224,11 @@ func (d *CaseDeck) Delete(id string) error {
 		return err
 	}
 	out := casesHeader + string(raw)
-	if err := os.WriteFile(d.path, []byte(out), 0o644); err != nil {
-		return err
+	d.fileMu.Lock()
+	werr := os.WriteFile(d.path, []byte(out), 0o644)
+	d.fileMu.Unlock()
+	if werr != nil {
+		return werr
 	}
 	return d.Reload()
 }

@@ -213,7 +213,8 @@ func TestDonationLogic(t *testing.T) {
 			StreamerName: "IvanStreamer",
 		},
 		Chat: config.ChatConfig{
-			DonateCrime: "Донат: {message}",
+			DonateCrime:   "Донат: {message}",
+			DonateContext: "Донат {amount} {currency} от {donor}",
 		},
 	}
 

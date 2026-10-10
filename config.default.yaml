@@ -59,7 +59,7 @@ courtroom:
   empty_testimony: "" # deliberation context when nobody said a word
   bribe_twist: "" # appended to the verdict when a bribe flips it
   undecided_twist: "" # appended when the model gives no verdict
-  # line templates below use {placeholders}; empty = plain values, no decoration
+  # line templates below use {placeholders}; empty = that line stays silent
   witness_line: "" # e.g. "Свидетель {donor} вносит {amount} {currency} и заявляет: {message}"
   testimony_prefix: "" # e.g. "Подсудимый: "
   defense_prefix: "" # e.g. "Защита: "

@@ -52,29 +52,49 @@ func (c *UnbanClient) headers(req *http.Request) {
 	req.Header.Set("Client-Id", c.clientID)
 }
 
-// FetchPending returns appeals awaiting a verdict.
+// FetchPending returns appeals awaiting a verdict, walking Helix pages.
 func (c *UnbanClient) FetchPending(ctx context.Context) ([]UnbanRequest, error) {
 	if !c.configured() {
 		return nil, fmt.Errorf("unban court not configured")
 	}
-	query := url.Values{}
-	query.Set("broadcaster_id", c.broadcasterID)
-	query.Set("moderator_id", c.moderatorID)
-	query.Set("status", "pending")
-	query.Set("first", "20")
+	out := make([]UnbanRequest, 0, 100)
+	cursor := ""
+	for page := 0; page < 5; page++ {
+		query := url.Values{}
+		query.Set("broadcaster_id", c.broadcasterID)
+		query.Set("moderator_id", c.moderatorID)
+		query.Set("status", "pending")
+		query.Set("first", "100")
+		if cursor != "" {
+			query.Set("after", cursor)
+		}
+		pageItems, next, err := c.fetchPage(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pageItems...)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	return out, nil
+}
+
+func (c *UnbanClient) fetchPage(ctx context.Context, query url.Values) ([]UnbanRequest, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		c.apiBase+"/moderation/unban_requests?"+query.Encode(), nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	c.headers(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("helix unban list status %d", resp.StatusCode)
+		return nil, "", fmt.Errorf("helix unban list status %d", resp.StatusCode)
 	}
 	var envelope struct {
 		Data []struct {
@@ -85,9 +105,12 @@ func (c *UnbanClient) FetchPending(ctx context.Context) ([]UnbanRequest, error) 
 			Text      string `json:"text"`
 			CreatedAt string `json:"created_at"`
 		} `json:"data"`
+		Pagination struct {
+			Cursor string `json:"cursor"`
+		} `json:"pagination"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	out := make([]UnbanRequest, 0, len(envelope.Data))
 	for _, item := range envelope.Data {
@@ -104,7 +127,7 @@ func (c *UnbanClient) FetchPending(ctx context.Context) ([]UnbanRequest, error) 
 			CreatedAt: item.CreatedAt,
 		})
 	}
-	return out, nil
+	return out, envelope.Pagination.Cursor, nil
 }
 
 // Resolve approves or denies one appeal; the verdict lands on Twitch at once.

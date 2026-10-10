@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,6 +38,7 @@ func (w *EventSubWatcher) Run(ctx context.Context) {
 	if w.token == "" || w.clientID == "" || w.broadcasterID == "" {
 		return
 	}
+	url := "wss://eventsub.wss.twitch.tv/ws"
 	backoff := 5 * time.Second
 	for {
 		select {
@@ -44,7 +46,13 @@ func (w *EventSubWatcher) Run(ctx context.Context) {
 			return
 		default:
 		}
-		if err := w.listen(ctx); err != nil {
+		if err := w.listen(ctx, url); err != nil {
+			var re *reconnectError
+			if errors.As(err, &re) {
+				url = re.url
+				log.Printf("eventsub: reconnecting to new session")
+				continue
+			}
 			log.Printf("eventsub error: %v", err)
 		}
 		select {
@@ -67,8 +75,12 @@ type eventsubEnvelope struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-func (w *EventSubWatcher) listen(ctx context.Context) error {
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, "wss://eventsub.wss.twitch.tv/ws", nil)
+type reconnectError struct{ url string }
+
+func (e *reconnectError) Error() string { return "eventsub reconnect to " + e.url }
+
+func (w *EventSubWatcher) listen(ctx context.Context, url string) error {
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -97,7 +109,9 @@ func (w *EventSubWatcher) listen(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		w.handleMessage(raw)
+		if url := w.handleMessage(raw); url != "" {
+			return &reconnectError{url: url}
+		}
 	}
 }
 
@@ -120,22 +134,38 @@ func parseSessionWelcome(raw []byte) (string, error) {
 	return payload.Session.ID, nil
 }
 
-func (w *EventSubWatcher) handleMessage(raw []byte) {
+func (w *EventSubWatcher) handleMessage(raw []byte) string {
 	var env eventsubEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return
+		return ""
 	}
 	switch env.Metadata.MessageType {
 	case "notification":
 		if w.duplicate(env.Metadata.MessageID) {
-			return
+			return ""
 		}
 		if event, ok := parseCheerEvent(env.Payload); ok {
 			w.emit(event)
 		}
 	case "session_reconnect":
+		if url := parseReconnectURL(env.Payload); url != "" {
+			return url
+		}
 		log.Printf("eventsub: server asked to reconnect")
 	}
+	return ""
+}
+
+func parseReconnectURL(payload []byte) string {
+	var msg struct {
+		Session struct {
+			ReconnectURL string `json:"reconnect_url"`
+		} `json:"session"`
+	}
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		return ""
+	}
+	return msg.Session.ReconnectURL
 }
 
 func (w *EventSubWatcher) duplicate(id string) bool {

@@ -417,6 +417,15 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Courtroom.DefenseSec <= 0 {
 		cfg.Courtroom.DefenseSec = 20
 	}
+	if cfg.Courtroom.DefenseSec < 5 || cfg.Courtroom.DefenseSec > 120 {
+		cfg.Courtroom.DefenseSec = 20
+	}
+	if cfg.Courtroom.TestimonySec <= 0 {
+		cfg.Courtroom.TestimonySec = 25
+	}
+	if cfg.Courtroom.TestimonySec < 5 || cfg.Courtroom.TestimonySec > 120 {
+		cfg.Courtroom.TestimonySec = 25
+	}
 	if cfg.Courtroom.SueThreshold < 0 {
 		cfg.Courtroom.SueThreshold = 5
 	}

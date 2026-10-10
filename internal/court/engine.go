@@ -89,6 +89,7 @@ type Engine struct {
 	pool              []PoolSeat
 	pendingPunishment Punishment
 	cancelFn          context.CancelFunc
+	trialGen          uint64
 	cases             *CaseDeck
 }
 
@@ -226,6 +227,7 @@ func (e *Engine) TriggerPanic() {
 		e.cancelFn()
 		e.cancelFn = nil
 	}
+	e.trialGen++
 	e.state = StateIdle
 	e.currCase = nil
 	e.mu.Unlock()
@@ -279,6 +281,8 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancelFn = cancel
+	e.trialGen++
+	gen := e.trialGen
 	e.state = StateIndictment
 	e.currCase = &TrialCase{
 		Defendant:   e.filter.Sanitize(truncateRunes(defendant, 80)),
@@ -297,12 +301,12 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 		Charge:    currentCase.Crime,
 	})
 
-	go e.runTrialPipeline(ctx, currentCase)
+	go e.runTrialPipeline(ctx, currentCase, gen)
 	return nil
 }
 
-func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
-	defer e.finishTrial()
+func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64) {
+	defer e.finishTrial(gen)
 
 	smart := ""
 	if e.recall != nil {
@@ -403,10 +407,14 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase) {
 	e.finalizeVerdict(ctx, c, guilty, decided)
 }
 
-// finishTrial releases the trial context; safe to call twice
-func (e *Engine) finishTrial() {
+// finishTrial releases the trial context, but only for its own generation:
+// a stale pipeline must never kill a newer trial.
+func (e *Engine) finishTrial(gen uint64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.trialGen != gen {
+		return
+	}
 	if e.cancelFn != nil {
 		e.cancelFn()
 		e.cancelFn = nil
@@ -453,7 +461,8 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 		{Role: "user", Content: ai.BuildDeliberationPromptWithTask(c.Defendant, c.Crime, testimony, e.cfg.Load().Prompts.TaskDeliberation)},
 	}
 	var ruling strings.Builder
-	chunker := ai.NewPhaseChunker("slam", "objection", "desk_slam", "shock", "nod")
+	// verdict keeps slam/shock/nod alive; only objection stays banned here
+	chunker := ai.NewPhaseChunker("objection")
 	index := startIndex
 
 	// slow TTS must not block the SSE reader, or the 15s budget burns and the verdict parses undecided

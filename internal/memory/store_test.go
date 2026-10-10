@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestSpeechLinesStayOutOfChat(t *testing.T) {
+	s := NewStore("")
+	s.AddComment("ivan", "он точно сам в лаву прыгнул")
+	s.AddSpeechLine("Суд слушает дело номер 404!")
+	for _, c := range s.RecentComments(10) {
+		if c.Author == "прокурор" {
+			t.Fatalf("judge speech must not pollute chat buffer: %+v", c)
+		}
+	}
+	s.ClearTranscript()
+	if got := len(s.RecentComments(10)); got != 1 {
+		t.Fatalf("clearing transcript must keep chat, got %d", got)
+	}
+}
+
+func TestCommentsPersist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "memory.json")
+	s := NewStore(path)
+	s.AddComment("ivan", "he did it")
+	s.Flush()
+	reloaded := NewStore(path)
+	comments := reloaded.RecentComments(10)
+	if len(comments) != 1 || comments[0].Author != "ivan" {
+		t.Fatalf("comments must survive restart: %+v", comments)
+	}
+}
+
 func TestOffenderCount(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(filepath.Join(dir, "memory.json"))

@@ -193,6 +193,9 @@ func main() {
 	var voiceMu sync.Mutex
 
 	handleDonation := func(d bot.Donation) {
+		if d.Amount <= 0 {
+			return
+		}
 		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message})
 		event := bot.DonationEvent{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message}
 		passed := donateGate.Pass(event)

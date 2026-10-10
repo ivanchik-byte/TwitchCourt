@@ -34,7 +34,7 @@ func (s *SueTracker) Add(author, reason string, now time.Time, window time.Durat
 			delete(s.votes, a)
 		}
 	}
-	s.votes[author] = sueVote{reason: strings.TrimSpace(reason), at: now}
+	s.votes[strings.ToLower(author)] = sueVote{reason: strings.TrimSpace(reason), at: now}
 	return len(s.votes)
 }
 

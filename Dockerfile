@@ -18,10 +18,14 @@ RUN sh web/build.sh
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/StreamTribunal ./cmd/server
 
 FROM alpine:3.20
+RUN adduser -D -h /app tribunal
 WORKDIR /app
 COPY --from=server /out/StreamTribunal ./StreamTribunal
 COPY config.default.yaml ./config.yaml
 COPY README.md LICENSE ./
+RUN chown -R tribunal:tribunal /app
+USER tribunal
 VOLUME ["/app/data"]
 EXPOSE 7890
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:7890/api/status || exit 1
 ENTRYPOINT ["./StreamTribunal"]
