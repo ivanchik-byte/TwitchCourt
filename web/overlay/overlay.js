@@ -27,6 +27,7 @@
     let lipRaf = 0;
     const audioQueue = [];
     let playing = false;
+    let currentSource = null;
     function ctx() {
         if (!audioCtx) {
             const Impl = window.AudioContext ||
@@ -74,12 +75,14 @@
         const buffer = audioQueue.shift();
         if (!buffer) {
             playing = false;
+            currentSource = null;
             mouth.classList.remove("open");
             return;
         }
         playing = true;
         const ac = ctx();
         const source = ac.createBufferSource();
+        currentSource = source;
         source.buffer = buffer;
         if (analyser)
             source.connect(analyser);
@@ -93,6 +96,13 @@
     function stopAudio() {
         audioQueue.length = 0;
         playing = false;
+        try {
+            currentSource?.stop();
+        }
+        catch {
+            /* already ended */
+        }
+        currentSource = null;
         mouth.classList.remove("open");
     }
     function thump(when) {
@@ -179,6 +189,7 @@
         void verdict.offsetWidth;
         verdict.classList.add("drop");
         stopCrowd();
+        stopBgm();
         slamVisual();
         thump();
         playSfx("verdict.mp3");
@@ -297,6 +308,7 @@
                     startBgm();
                     startCrowd();
                     hideVerdict();
+                    testimony.classList.add("hidden");
                     if (msg.payload.case_title)
                         caseNo.textContent = msg.payload.case_title;
                     if (msg.payload.charge)

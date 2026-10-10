@@ -5,5 +5,4 @@ Shipped files (keep the total under ~700 KB):
   verdict.mp3   - triple gavel knock ("silence in the hall"), played on verdicts.
   objection.mp3 - the "OBJECTION!" shout, played on [objection] tags.
   crowd.mp3     - hushed courtroom crowd bed, looped quietly under trials.
-  typewriter.mp3 - short loop under the indictment subtitles (optional).
   bgm.mp3       - tense courtroom loop, starts with the trial, stops on idle (optional).
