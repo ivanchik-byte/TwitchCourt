@@ -75,9 +75,13 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const panic = useCallback(() => {
-    // no local reset: the server broadcasts panic back on receipt,
-    // which clears the UI through the socket (avoids 401 desync)
-    tRef.current.send('panic', {})
+    // server echo clears the UI on receipt; REST fallback covers a dead socket
+    if (tRef.current.send('panic', {})) return
+    void (async () => {
+      const r = await apiPost('/api/panic', {})
+      if (r.ok) tRef.current.panicReset()
+      else toast.error(`Паника не прошла: ${apiNote(r.status)}`)
+    })()
   }, [])
 
   const punish = useCallback(

@@ -36,12 +36,39 @@ export function CasesView() {
     void refresh()
   }, [refresh])
 
-  const draw = async () => {
+  const waitGeneration = async (): Promise<boolean> => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 2000))
+      try {
+        const st = await apiGet<{ running: boolean; added: number; error?: string }>('/api/cases/generate')
+        if (!st.running) {
+          if (st.error) {
+            toast.error(`Генерация не удалась: ${st.error}`)
+            return false
+          }
+          toast.success(`Добавлено дел: ${st.added}`)
+          await refresh()
+          return true
+        }
+      } catch {
+        return false
+      }
+    }
+    toast.error('Генерация затянулась, проверь позже')
+    return false
+  }
+
+  const draw = async (retry = true) => {
     const r = await apiPostJson<{ case: CaseCard; defendant: string; remaining: number }>('/api/cases/draw', {
       target,
       start: true,
     })
     if (!r.ok || !r.data) {
+      if (r.status === 409 && retry) {
+        toast('Колода пуста, генерирую…')
+        if (await waitGeneration()) await draw(false)
+        return
+      }
       toast.error(`Дело не вытянуто: ${apiNote(r.status)}`)
       return
     }
@@ -80,14 +107,13 @@ export function CasesView() {
   }
 
   const generate = async () => {
-    toast('Генерирую дела…')
-    const r = await apiPostJson<{ added: number; remaining: number }>('/api/cases/generate', {})
-    if (!r.ok || !r.data) {
-      toast.error(`Не сгенерировано: ${apiNote(r.status)}`)
+    const r = await apiPostJson('/api/cases/generate', {})
+    if (!r.ok) {
+      toast.error(`Не запущено: ${apiNote(r.status)}`)
       return
     }
-    toast.success(`Добавлено дел: ${r.data.added}`)
-    void refresh()
+    toast('Генерирую дела…')
+    void waitGeneration()
   }
 
   return (
