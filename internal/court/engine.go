@@ -84,11 +84,15 @@ type Engine struct {
 	TimeoutHook       func(user string, secs int, ban bool, reason string)
 	mu                sync.RWMutex
 	speakMu           sync.Mutex
+	sayMu             sync.Mutex
+	genMu             sync.Mutex
+	genJob            GenJob
 	state             State
 	currCase          *TrialCase
 	pool              []PoolSeat
 	pendingPunishment Punishment
 	cancelFn          context.CancelFunc
+	trialCancel       context.CancelFunc
 	trialGen          uint64
 	cases             *CaseDeck
 }
@@ -227,6 +231,10 @@ func (e *Engine) TriggerPanic() {
 		e.cancelFn()
 		e.cancelFn = nil
 	}
+	if e.trialCancel != nil {
+		e.trialCancel()
+		e.trialCancel = nil
+	}
 	e.trialGen++
 	e.state = StateIdle
 	e.currCase = nil
@@ -280,7 +288,11 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// whole-trial deadline: phases, TTS and verdict must fit, never hang.
+	// Parent cancel still wins (panic/abort), timeout just bounds the tail.
+	trialCtx, trialCancel := context.WithTimeout(ctx, 6*time.Minute)
 	e.cancelFn = cancel
+	e.trialCancel = trialCancel
 	e.trialGen++
 	gen := e.trialGen
 	e.state = StateIndictment
@@ -301,7 +313,7 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 		Charge:    currentCase.Crime,
 	})
 
-	go e.runTrialPipeline(ctx, currentCase, gen)
+	go e.runTrialPipeline(trialCtx, currentCase, gen)
 	return nil
 }
 
@@ -374,20 +386,24 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 
 	select {
 	case <-ctx.Done():
+		e.restIdle(gen)
 		return
 	case <-speechDone:
 	}
 
 	e.runTestimonyWindow(ctx, c)
 	if ctx.Err() != nil {
+		e.restIdle(gen)
 		return
 	}
 	defense := e.runDefenseWindow(ctx, c)
 	if ctx.Err() != nil {
+		e.restIdle(gen)
 		return
 	}
 	e.runObjection(ctx, c, chunkIndex+1, defense)
 	if ctx.Err() != nil {
+		e.restIdle(gen)
 		return
 	}
 
@@ -401,10 +417,24 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 
 	guilty, decided := e.deliberate(ctx, c, chunkIndex+1)
 	if ctx.Err() != nil {
+		e.restIdle(gen)
 		return
 	}
 
 	e.finalizeVerdict(ctx, c, guilty, decided)
+}
+
+// restIdle parks a cancelled pipeline: never leave the bench stuck mid-phase.
+func (e *Engine) restIdle(gen uint64) {
+	e.mu.Lock()
+	if e.trialGen != gen || e.state == StateIdle {
+		e.mu.Unlock()
+		return
+	}
+	e.state = StateIdle
+	e.currCase = nil
+	e.mu.Unlock()
+	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateIdle)})
 }
 
 // finishTrial releases the trial context, but only for its own generation:
@@ -418,6 +448,10 @@ func (e *Engine) finishTrial(gen uint64) {
 	if e.cancelFn != nil {
 		e.cancelFn()
 		e.cancelFn = nil
+	}
+	if e.trialCancel != nil {
+		e.trialCancel()
+		e.trialCancel = nil
 	}
 }
 
@@ -827,16 +861,19 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 	return nil
 }
 
-// Say speaks immediately using the judge voice (gavel interjections)
+// Say speaks immediately using the judge voice (gavel interjections).
+// Interjections serialize among themselves and never claim stream end.
 func (e *Engine) Say(text string) {
 	clean := e.filter.Sanitize(text)
 	if clean == "" {
 		return
 	}
 	go func() {
+		e.sayMu.Lock()
+		defer e.sayMu.Unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		if err := e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, 0, true,
+		if err := e.speak(ctx, ai.SentenceChunk{Text: clean, Animation: "slam"}, -1, false,
 			e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
 			log.Printf("gavel interjection speech failed: %v", err)
 		}
@@ -948,7 +985,12 @@ func (e *Engine) AddBribe(donor string, amount float64, currency, message string
 	if e.state == StateIdle || e.currCase == nil || e.currCase.Bribe != nil {
 		return false
 	}
-	e.currCase.Bribe = &BribeOffer{Donor: donor, Amount: amount, Currency: currency, Message: message}
+	e.currCase.Bribe = &BribeOffer{
+		Donor:    e.filter.Sanitize(donor),
+		Amount:   amount,
+		Currency: strings.TrimSpace(currency),
+		Message:  e.filter.Sanitize(truncateRunes(message, 200)),
+	}
 	return true
 }
 

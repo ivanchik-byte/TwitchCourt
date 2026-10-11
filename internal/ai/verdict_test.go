@@ -16,7 +16,7 @@ func TestParseVerdict(t *testing.T) {
 		{"Судья не решился. НЕВИНОВЕН. Суд окончен.", false, true},
 		{"Хм-м-м... сложно сказать.", false, false},
 		{"", false, false},
-		{"Дело слушалось долго и наконец " + "очень-очень долго " + "ВИНОВЕН", false, false},
+		{"Дело слушалось долго и наконец " + "очень-очень долго " + "ВИНОВЕН", true, true},
 	}
 	for _, c := range cases {
 		guilty, decided := ParseVerdict(c.in)

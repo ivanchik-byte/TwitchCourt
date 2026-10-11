@@ -1,12 +1,16 @@
 package main
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/tmpl"
 )
+
+// validNick gates moderation targets: Twitch logins only, no IRC smuggling.
+var validNick = regexp.MustCompile(`^[A-Za-z0-9_]{3,25}$`)
 
 // isBribe spots donor money worth the bench's attention: a hint in words
 // or a sum big enough to notice. Deliberately loose, the judge decides.

@@ -166,8 +166,11 @@ func main() {
 
 	// announce skips empty lines: unconfigured chat templates stay silent
 	announce := func(text string) {
-		if strings.TrimSpace(text) != "" {
-			chat.Load().SendMessage(text)
+		if strings.TrimSpace(text) == "" {
+			return
+		}
+		if c := chat.Load(); c != nil {
+			c.SendMessage(text)
 		}
 	}
 
@@ -965,20 +968,17 @@ func main() {
 			return
 		}
 		card, ok := deck.Draw()
-		if !ok && cfg.Load().Courtroom.CasesGen.Enabled {
-			batch := cfg.Load().Courtroom.CasesGen.Batch
-			if batch <= 0 {
-				batch = 5
-			}
-			if n, err := engine.GenerateCases(batch); err != nil {
-				http.Error(w, "deck is empty, generation failed: "+err.Error(), http.StatusConflict)
-				return
-			} else if n > 0 {
-				card, ok = deck.Draw()
-			}
-		}
 		if !ok {
-			http.Error(w, "deck is empty", http.StatusConflict)
+			if cfg.Load().Courtroom.CasesGen.Enabled {
+				batch := cfg.Load().Courtroom.CasesGen.Batch
+				if batch <= 0 {
+					batch = 5
+				}
+				engine.GenerateCasesAsync(batch)
+				http.Error(w, "deck is empty, generation started", http.StatusConflict)
+			} else {
+				http.Error(w, "deck is empty", http.StatusConflict)
+			}
 			return
 		}
 		if req.Start {
@@ -1015,6 +1015,45 @@ func main() {
 
 	mux.HandleFunc("/api/cases/generate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			st := engine.GenStatus()
+			remaining := 0
+			if deck := engine.CaseDeck(); deck != nil {
+				remaining = deck.Remaining()
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"running": st.Running, "added": st.Added,
+				"error": st.Error, "remaining": remaining,
+			})
+		case http.MethodPost:
+			var req struct {
+				Count int `json:"count"`
+			}
+			if err := decodeJSON(w, r, &req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if req.Count <= 0 {
+				req.Count = cfg.Load().Courtroom.CasesGen.Batch
+			}
+			if !engine.GenerateCasesAsync(req.Count) {
+				http.Error(w, "generation already running", http.StatusConflict)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(map[string]any{"started": true})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/panic", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -1023,24 +1062,8 @@ func main() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		var req struct {
-			Count int `json:"count"`
-		}
-		if err := decodeJSON(w, r, &req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-		n, err := engine.GenerateCases(req.Count)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		deck := engine.CaseDeck()
-		remaining := 0
-		if deck != nil {
-			remaining = deck.Remaining()
-		}
-		json.NewEncoder(w).Encode(map[string]any{"added": n, "remaining": remaining})
+		engine.TriggerPanic()
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 
 	mux.HandleFunc("/api/punish", func(w http.ResponseWriter, r *http.Request) {
@@ -1654,11 +1677,19 @@ func main() {
 	}
 
 	engine.TimeoutHook = func(user string, secs int, ban bool, reason string) {
-		if ban {
-			chat.Load().Ban(user)
+		if !validNick.MatchString(user) {
+			log.Printf("refusing moderation on bad nick %q", user)
 			return
 		}
-		chat.Load().Timeout(user, secs)
+		c := chat.Load()
+		if c == nil {
+			return
+		}
+		if ban {
+			c.Ban(user)
+			return
+		}
+		c.Timeout(user, secs)
 	}
 
 	engine.SetPunishments(cfg.Load().Courtroom.Punishments)

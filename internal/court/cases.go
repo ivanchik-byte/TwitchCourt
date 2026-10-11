@@ -157,7 +157,7 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 		return CaseCard{}, fmt.Errorf("title is empty")
 	}
 	card := CaseCard{
-		ID:      slug(title) + "-" + fmt.Sprintf("%d", time.Now().Unix()),
+		ID:      slug(title) + "-" + fmt.Sprintf("%d", time.Now().UnixNano()),
 		Title:   title,
 		Crime:   strings.TrimSpace(crime),
 		Context: strings.TrimSpace(context),

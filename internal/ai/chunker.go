@@ -115,7 +115,9 @@ func findSentenceBoundary(s string) int {
 			if i+1 < n && isPunctuation(tokens[i+1].r) {
 				continue
 			}
-			if i > 2 {
+			// short verdicts ("Да.", "Нет.") must split too;
+			// single-letter abbreviations ("т.") stay buffered
+			if i > 1 {
 				return tokens[i].byteEnd - 1
 			}
 		}

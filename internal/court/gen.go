@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/rand"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"stream-tribunal/internal/ai"
@@ -172,11 +171,45 @@ func (e *Engine) GenerateCases(count int) (int, error) {
 	return added, nil
 }
 
-var generating atomic.Bool
+// GenJob tracks one background generation batch.
+type GenJob struct {
+	Running bool   `json:"running"`
+	Added   int    `json:"added"`
+	Error   string `json:"error,omitempty"`
+}
+
+// GenStatus snapshots the background job.
+func (e *Engine) GenStatus() GenJob {
+	e.genMu.Lock()
+	defer e.genMu.Unlock()
+	return e.genJob
+}
+
+// GenerateCasesAsync starts one background batch; false = already running.
+func (e *Engine) GenerateCasesAsync(count int) bool {
+	e.genMu.Lock()
+	if e.genJob.Running {
+		e.genMu.Unlock()
+		return false
+	}
+	e.genJob = GenJob{Running: true}
+	e.genMu.Unlock()
+	go func() {
+		added, err := e.GenerateCases(count)
+		e.genMu.Lock()
+		e.genJob.Running = false
+		e.genJob.Added = added
+		if err != nil {
+			e.genJob.Error = err.Error()
+		}
+		e.genMu.Unlock()
+		log.Printf("background generation: +%d cases (err=%v)", added, err)
+	}()
+	return true
+}
 
 // EnsureRefill tops the deck up in background when it runs low.
-// Draw never waits for it; an empty deck with generation on falls back
-// to one honest synchronous batch in the draw handler.
+// Draw never waits for it.
 func (e *Engine) EnsureRefill() {
 	deck := e.CaseDeck()
 	if deck == nil {
@@ -190,14 +223,9 @@ func (e *Engine) EnsureRefill() {
 	if !cfg.CasesGen.Enabled || deck.Remaining() >= low {
 		return
 	}
-	if !generating.CompareAndSwap(false, true) {
-		return
-	}
-	defer generating.Store(false)
 	batch := cfg.CasesGen.Batch
 	if batch <= 0 {
 		batch = 5
 	}
-	n, err := e.GenerateCases(batch)
-	log.Printf("background refill: +%d cases (err=%v)", n, err)
+	e.GenerateCasesAsync(batch)
 }

@@ -411,7 +411,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Courtroom.JudgeName == "" {
 		cfg.Courtroom.JudgeName = "Судья"
 	}
-	if cfg.Courtroom.JudgeStyle != "cynical" {
+	if cfg.Courtroom.JudgeStyle != "cynical" && cfg.Courtroom.JudgeStyle != "random" {
 		cfg.Courtroom.JudgeStyle = "strict"
 	}
 	if cfg.Courtroom.DefenseSec <= 0 {

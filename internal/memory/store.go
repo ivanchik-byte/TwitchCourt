@@ -399,6 +399,9 @@ func (s *Store) save() {
 	if s.path == "" {
 		return
 	}
+	// Serialize whole dumps: concurrent saves share one tmp path.
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 	// Snapshot under read lock so Marshal never races with AddTrial/AddDonation.
 	s.mu.RLock()
 	trials := make([]TrialRecord, len(s.trials))
