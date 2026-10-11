@@ -98,7 +98,7 @@ safety:
   filter_enabled: true
   custom_blacklist: []
   panic_hotkey: "f12"
-  ban_confirm: false # true = never auto-ban on verdict, streamer bans by hand
+  ban_confirm: true # never auto-ban on verdict, streamer bans by hand
   bribe_words: [] # e.g. ["взятк"]: donor money that sways the judge; empty = bribes off
 
 game:
