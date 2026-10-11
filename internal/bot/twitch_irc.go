@@ -137,6 +137,11 @@ func (t *TwitchIRC) Ban(user string) {
 	t.sendMod(fmt.Sprintf("/ban %s", user))
 }
 
+// Unban pardons a user; used for manual post-verdict moderation
+func (t *TwitchIRC) Unban(user string) {
+	t.sendMod(fmt.Sprintf("/unban %s", user))
+}
+
 // LastModError reports the latest moderation refusal from Twitch, if any
 func (t *TwitchIRC) LastModError() (string, bool) {
 	t.modMu.RLock()

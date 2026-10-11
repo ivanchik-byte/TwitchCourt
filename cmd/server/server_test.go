@@ -184,6 +184,19 @@ func TestSPAHandler(t *testing.T) {
 	}
 }
 
+func TestValidNick(t *testing.T) {
+	for _, good := range []string{"ivan_2024", "xQc", "abc"} {
+		if !validNick.MatchString(good) {
+			t.Fatalf("must accept twitch login %q", good)
+		}
+	}
+	for _, bad := range []string{"", "ab", "nick with spaces", "evil\r\nPRIVMSG", "a/b", "streamer!crime text here and more words to break irc"} {
+		if validNick.MatchString(bad) {
+			t.Fatalf("must reject moderation target %q", bad)
+		}
+	}
+}
+
 func TestDonationLogic(t *testing.T) {
 	bribeCfg := &config.Config{}
 	bribeCfg.Safety.BribeWords = []string{"взятк"}

@@ -1080,6 +1080,57 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/api/moderate", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			User   string `json:"user"`
+			Action string `json:"action"`
+			Secs   int    `json:"secs"`
+			Reason string `json:"reason"`
+		}
+		if err := decodeJSON(w, r, &req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if !validNick.MatchString(req.User) {
+			http.Error(w, "bad nick", http.StatusBadRequest)
+			return
+		}
+		c := chat.Load()
+		if c == nil {
+			http.Error(w, "chat offline", http.StatusConflict)
+			return
+		}
+		switch req.Action {
+		case "ban":
+			c.Ban(req.User)
+		case "timeout":
+			secs := req.Secs
+			if secs <= 0 {
+				secs = 60
+			}
+			if secs > 1209600 {
+				secs = 1209600
+			}
+			c.Timeout(req.User, secs)
+		case "pardon":
+			c.Unban(req.User)
+		default:
+			http.Error(w, "want action ban, timeout or pardon", http.StatusBadRequest)
+			return
+		}
+		log.Printf("manual moderation: %s %s", req.Action, req.User)
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	})
+
 	mux.HandleFunc("/api/panic", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodPost {
