@@ -346,16 +346,27 @@ export function SettingsView() {
           <div className="overflow-hidden rounded-lg border border-white/10">
             <iframe title="overlay preview" src={`/overlay/${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`} className="h-48 w-full bg-black" />
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => {
-                void navigator.clipboard?.writeText(`${location.origin}/overlay/${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`)
-                toast.success('URL оверлея скопирован')
+                void navigator.clipboard?.writeText(`${location.origin}/overlay/`)
+                toast.success('URL оверлея скопирован (без ключа)')
               }}
               className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
             >
               Скопировать URL для OBS
             </button>
+            {secret && (
+              <button
+                onClick={() => {
+                  void navigator.clipboard?.writeText(`${location.origin}/overlay/?secret=${encodeURIComponent(secret)}`)
+                  toast.success('URL с ключом скопирован — не свети его на стриме')
+                }}
+                className="pressable rounded-lg border border-amber-400/30 px-3 py-1.5 text-sm text-amber-200"
+              >
+                URL с ключом — один раз
+              </button>
+            )}
           </div>
           <div className="space-y-1">
             {sfx.map((f) => (

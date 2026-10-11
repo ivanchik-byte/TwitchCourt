@@ -11,7 +11,12 @@ interface SceneItem {
 interface Preset {
   name: string
   hint: string
+  plan: (items: SceneItem[], canvas: { w: number; h: number }) => string[]
   apply: (obs: OBSWebSocket, scene: string, items: SceneItem[], canvas: { w: number; h: number }) => Promise<void>
+}
+
+function showName(item: SceneItem | undefined, fallback: string): string {
+  return item ? `«${item.sourceName}»` : fallback
 }
 
 function find(items: SceneItem[], ...needles: string[]): SceneItem | undefined {
@@ -42,6 +47,14 @@ const PRESETS: Preset[] = [
   {
     name: 'Камера крупно',
     hint: 'Камера на весь экран, оверлей скрыт',
+    plan: (items, canvas) => {
+      const cam = find(items, 'камера', 'camera', 'вебка', 'webcam', 'video capture')
+      const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
+      return [
+        `${showName(cam, 'камера не найдена')} → весь экран ${canvas.w}x${canvas.h}, вкл`,
+        `${showName(court, 'оверлей не найден')} → выкл`,
+      ]
+    },
     apply: async (obs, scene, items, canvas) => {
       const cam = find(items, 'камера', 'camera', 'вебка', 'webcam', 'video capture')
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
@@ -55,6 +68,10 @@ const PRESETS: Preset[] = [
   {
     name: 'Зал целиком',
     hint: 'Оверлей суда на весь экран',
+    plan: (items, canvas) => {
+      const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
+      return [`${showName(court, 'оверлей не найден')} → весь экран ${canvas.w}x${canvas.h}, вкл`]
+    },
     apply: async (obs, scene, items, canvas) => {
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       if (court) {
@@ -66,6 +83,14 @@ const PRESETS: Preset[] = [
   {
     name: 'Судья в углу',
     hint: 'Зал суда и портрет судьи в правом нижнем углу',
+    plan: (items, canvas) => {
+      const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
+      const judge = find(items, 'судья', 'judge')
+      return [
+        `${showName(court, 'оверлей не найден')} → весь экран, вкл`,
+        `${showName(judge, 'судья не найден')} → правый нижний угол, вкл`,
+      ]
+    },
     apply: async (obs, scene, items, canvas) => {
       const court = find(items, 'court', 'суд', 'трибунал', 'browser', 'оверлей')
       const judge = find(items, 'судья', 'judge')
@@ -179,6 +204,8 @@ export function OBSRemoteView() {
   const runPreset = async (p: Preset) => {
     const obs = obsRef.current
     if (!obs || !scene) return
+    const lines = p.plan(items, canvas)
+    if (!window.confirm(`${p.name}:\n${lines.join('\n')}\n\nПрименить к сцене «${scene}»?`)) return
     try {
       await p.apply(obs, scene, items, canvas)
       toast.success(p.name)

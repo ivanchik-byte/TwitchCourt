@@ -7,6 +7,7 @@ export function useBan() {
   const { punish } = useTribunalActions()
 
   return useCallback(async () => {
+    if (!window.confirm('Заблокировать навсегда? Это необратимо для чата.')) return
     const r = await punish('ban')
     if (!r.ok) {
       toast.error(`Блокировка не применена: ${apiNote(r.status)}`)

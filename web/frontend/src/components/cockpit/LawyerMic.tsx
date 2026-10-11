@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useRef } from 'react'
 import { Mic } from 'lucide-react'
 import { useAudioMeter } from '../../hooks/useAudioMeter'
 import { useDefenseMic } from '../../hooks/useDefenseMic'
+import { apiPost } from '../../lib/api'
 import { useTribunalActions, useTribunalFeed, useTribunalPhase } from '../../tribunal/TribunalContext'
 
 export function LawyerMic() {
@@ -9,8 +11,35 @@ export function LawyerMic() {
   const { send } = useTribunalActions()
   const defenseLive = phase === 'defense' || phase === 'testimony'
   const { canvasRef } = useAudioMeter(defenseLive)
+  const pendingRef = useRef<string[]>([])
+
+  // dead socket must not eat the defense: REST fallback + backlog flush
+  const submit = useCallback(
+    async (text: string) => {
+      const lines = [...pendingRef.current, text].slice(-20)
+      pendingRef.current = []
+      for (const line of lines) {
+        if (send('defense', { author: 'стример', text: line })) continue
+        const r = await apiPost('/api/defense', { author: 'стример', text: line })
+        if (!r.ok) {
+          pendingRef.current.push(line)
+          break
+        }
+      }
+    },
+    [send],
+  )
+
+  useEffect(() => {
+    if ((phase === 'defense' || phase === 'testimony') && pendingRef.current.length > 0) {
+      const backlog = pendingRef.current
+      pendingRef.current = []
+      for (const line of backlog) void submit(line)
+    }
+  }, [phase, submit])
+
   const { transcript, listening, supported } = useDefenseMic(defenseLive, (text) => {
-    send('defense', { author: 'стример', text })
+    void submit(text)
   })
 
   return (

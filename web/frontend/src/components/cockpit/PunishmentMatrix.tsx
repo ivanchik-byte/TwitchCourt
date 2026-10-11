@@ -1,5 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
+import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
+import { apiGet } from '../../lib/api'
 import { useTribunalFeed, useTribunalPhase } from '../../tribunal/TribunalContext'
 import { useBan, usePunishWithToast } from './usePunish'
 
@@ -10,6 +12,20 @@ export function PunishmentMatrix() {
   const punishToast = usePunishWithToast()
 
   const verdicts = useMemo(() => stenogram.filter((e) => e.kind === 'verdict'), [stenogram])
+
+  // surface dropped Twitch punishments (mod queue overflow / no rights)
+  useEffect(() => {
+    if (!t.verdict) return
+    let dead = false
+    void apiGet<{ chat_mod_error?: string }>('/api/status')
+      .then((d) => {
+        if (!dead && d.chat_mod_error) toast.error(`Наказание не применено: ${d.chat_mod_error}`)
+      })
+      .catch(() => undefined)
+    return () => {
+      dead = true
+    }
+  }, [t.verdict])
 
   return (
     <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Меры воздействия">
