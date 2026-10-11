@@ -1,4 +1,15 @@
 "use strict";
+// link dot: green while frames arrive, red on silence or reconnect
+const link = document.createElement("div");
+link.textContent = "●";
+link.title = "связь с сервером";
+link.style.cssText =
+    "position:fixed;right:8px;bottom:6px;z-index:99;font-size:12px;color:#ef4444;opacity:.8;pointer-events:none";
+document.body.appendChild(link);
+let lastFrame = 0;
+function markLive(ok) {
+    link.style.color = ok ? "#34d399" : "#ef4444";
+}
 (function () {
     function el(id) {
         const node = document.getElementById(id);
@@ -273,6 +284,8 @@
     function connect() {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
         const ws = new WebSocket(protocol + "//" + location.host + "/ws" + location.search);
+        let pingTimer = 0;
+        let staleTimer = 0;
         ws.onmessage = (event) => {
             let msg;
             try {
@@ -281,12 +294,35 @@
             catch {
                 return;
             }
+            lastFrame = Date.now();
+            markLive(true);
             handleEvent(msg);
         };
         ws.onopen = () => {
             failures = 0;
+            lastFrame = Date.now();
+            markLive(true);
+            window.clearInterval(pingTimer);
+            window.clearInterval(staleTimer);
+            pingTimer = window.setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify({ action: "ping", payload: {} }));
+                    }
+                    catch {
+                        /* closed underneath */
+                    }
+                }
+            }, 15000);
+            staleTimer = window.setInterval(() => {
+                if (Date.now() - lastFrame > 30000)
+                    markLive(false);
+            }, 5000);
         };
         ws.onclose = () => {
+            window.clearInterval(pingTimer);
+            window.clearInterval(staleTimer);
+            markLive(false);
             failures += 1;
             const delay = Math.min(2000 * 2 ** failures, 30000) + Math.floor(Math.random() * 500);
             window.setTimeout(connect, delay);
