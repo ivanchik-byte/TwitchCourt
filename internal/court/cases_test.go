@@ -125,6 +125,37 @@ func TestSimilar(t *testing.T) {
 	}
 }
 
+func TestStartConfessionTrial(t *testing.T) {
+	reply := `{"title": "Попкагейт", "crime": "Предал попку", "context": "Чат в шоке"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(reply))
+	}))
+	defer server.Close()
+	e := newWitnessEngine()
+	e.hub = obs.NewHub(nil)
+	e.SetAI(mustAIClient(t, config.AIConfig{Provider: "custom", APIKey: "k", BaseURL: server.URL, Stream: false}))
+	pv, err := audio.NewPiperDaemon(config.TTSConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.SetVoice(pv)
+	if err := e.StartConfessionTrial("bogdan", "предал попку"); err != nil {
+		t.Fatalf("confession must open: %v", err)
+	}
+	if e.currCase == nil || !strings.Contains(e.currCase.ChatContext, "Самооговор") {
+		t.Fatalf("confession must carry the description: %+v", e.currCase)
+	}
+	e.TriggerPanic()
+}
+
+func TestStartConfessionBanned(t *testing.T) {
+	e := newWitnessEngine()
+	if err := e.StartConfessionTrial("bogdan", "устроим теракт в чате"); err == nil {
+		t.Fatal("banned confession must be refused")
+	}
+}
+
 func TestGenerateCasesStoresBatch(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cases.yaml")
 	if err := os.WriteFile(path, []byte("cases: []\n"), 0o644); err != nil {

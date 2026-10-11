@@ -80,6 +80,62 @@ type genCase struct {
 	Context string `json:"context"`
 }
 
+// StartConfessionTrial invents a funny absurd case from the viewer's own
+// description and puts him on the bench with it. Banned topics are refused.
+// If the bench is busy, the invented charge waits in the pool.
+func (e *Engine) StartConfessionTrial(author, description string) error {
+	description = strings.TrimSpace(description)
+	if description == "" {
+		return fmt.Errorf("empty confession")
+	}
+	if safety.Banned(description) {
+		return fmt.Errorf("banned topic")
+	}
+	client := e.currentAI()
+	if client == nil || !client.Configured() {
+		return fmt.Errorf("ai is not configured: set api_key or base_url in settings")
+	}
+	prompt := tmpl.Fill(e.cfg.Load().Prompts.Confession, map[string]string{"description": description})
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	var sb strings.Builder
+	if err := client.StreamCompletion(ctx,
+		[]ai.ChatMessage{{Role: "user", Content: prompt}},
+		func(delta string) error {
+			sb.WriteString(delta)
+			return nil
+		}); err != nil {
+		return err
+	}
+	raw := sb.String()
+	start, end := strings.Index(raw, "{"), strings.LastIndex(raw, "}")
+	if start < 0 || end <= start {
+		return fmt.Errorf("no json object in model reply")
+	}
+	var invented genCase
+	if err := json.Unmarshal([]byte(raw[start:end+1]), &invented); err != nil {
+		return err
+	}
+	title := strings.TrimSpace(invented.Title)
+	crime := strings.TrimSpace(invented.Crime)
+	if title == "" || crime == "" {
+		return fmt.Errorf("empty invented case")
+	}
+	if safety.Banned(title) || safety.Banned(crime) || safety.Banned(invented.Context) {
+		return fmt.Errorf("banned topic")
+	}
+	context := strings.TrimSpace(invented.Context)
+	if context != "" {
+		context += "\n"
+	}
+	context += "Самооговор: " + description
+	if err := e.startTrialWith(author, crime, context, author); err != nil {
+		e.JoinPool(author, crime)
+		return fmt.Errorf("court is busy, claim queued")
+	}
+	return nil
+}
+
 // GenerateCases asks the model for fresh cases, filters and stores them.
 // Banned topics are dropped silently; gray topics pass by design.
 func (e *Engine) GenerateCases(count int) (int, error) {

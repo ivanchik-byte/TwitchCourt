@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   windows-zip:
@@ -24,6 +25,11 @@ jobs:
           cache-dependency-path: web/frontend/package-lock.json
       - run: go vet ./...
       - run: make package-win
-      - run: gh release create "${{ github.ref_name }}" dist/StreamTribunal-windows-amd64.zip --title "${{ github.ref_name }}" --notes "One-click Windows build: unzip, run StreamTribunal.exe, open http://localhost:7890"
+      - run: |
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release upload "${{ github.ref_name }}" dist/StreamTribunal-windows-amd64.zip --clobber
+          else
+            gh release create "${{ github.ref_name }}" dist/StreamTribunal-windows-amd64.zip --title "${{ github.ref_name }}" --notes "One-click Windows build: unzip, run StreamTribunal.exe, open http://localhost:7890"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

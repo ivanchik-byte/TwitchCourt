@@ -45,9 +45,10 @@ type TrialCase struct {
 	Viewer      string
 	Testimony   []string
 	Bribe       *BribeOffer
-	// StreamerTrial marks a trial where the streamer is the defendant
-	// and a dedicated AI prosecutor leads the charge.
-	StreamerTrial bool
+	// Prosecutor marks trials where the AI prosecutor leads the charge
+	// (indictment + objection); the judge still rules. Unban trials keep
+	// their own framing and set this false.
+	Prosecutor bool
 }
 
 // BribeOffer is donor money on the table: the bench decides what to do
@@ -271,27 +272,22 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 	return e.startTrialWithMode(defendant, card.Crime, context, "", true)
 }
 
-// StartUnbanTrial opens an unban pardon trial against the streamer
+// StartUnbanTrial opens an unban pardon trial with its own role framing:
+// the bench defends, the streamer attacks from the mic.
 func (e *Engine) StartUnbanTrial(user, appeal string) error {
 	crime := "Апелляция на разбан: " + appeal
 	chatContext := "UNBAN-ТРИБУНАЛ. Подсудимого нет в чате. " +
 		"ИИ адвокат: защищает " + user + " и требует разбана. " +
 		"Стример в микрофон: выступает обвинителем, его реплики это атака, а не защита. " +
 		"Судья выслушивает обе стороны и выносит вердикт."
-	return e.startTrialWith(user, crime, chatContext, "")
-}
-
-// StartStreamerTrial opens a trial where the streamer is the defendant
-// and a dedicated AI prosecutor leads the charge.
-func (e *Engine) StartStreamerTrial(defendant, crime, chatContext string) error {
-	return e.startTrialWithMode(defendant, crime, chatContext, "", true)
+	return e.startTrialWithMode(user, crime, chatContext, "", false)
 }
 
 func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) error {
-	return e.startTrialWithMode(defendant, crime, chatContext, viewer, false)
+	return e.startTrialWithMode(defendant, crime, chatContext, viewer, true)
 }
 
-func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string, streamerTrial bool) error {
+func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string, prosecutor bool) error {
 	e.mu.Lock()
 	if e.state != StateIdle {
 		e.mu.Unlock()
@@ -312,12 +308,12 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 	gen := e.trialGen
 	e.state = StateIndictment
 	e.currCase = &TrialCase{
-		Defendant:     e.filter.Sanitize(truncateRunes(defendant, 80)),
-		Crime:         e.filter.Sanitize(truncateRunes(crime, 300)),
-		ChatContext:   e.filter.Sanitize(truncateRunes(chatContext, 1000)),
-		Judge:         ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
-		Viewer:        e.filter.Sanitize(viewer),
-		StreamerTrial: streamerTrial,
+		Defendant:   e.filter.Sanitize(truncateRunes(defendant, 80)),
+		Crime:       e.filter.Sanitize(truncateRunes(crime, 300)),
+		ChatContext: e.filter.Sanitize(truncateRunes(chatContext, 1000)),
+		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
+		Viewer:      e.filter.Sanitize(viewer),
+		Prosecutor:  prosecutor,
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
@@ -337,7 +333,7 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 // in streamer trials, the judge everywhere else. Deliberation always
 // stays with the judge as arbiter.
 func (e *Engine) accuserSystem(c *TrialCase) string {
-	if c.StreamerTrial {
+	if c.Prosecutor {
 		return ai.ProsecutorFor(e.cfg.Load().Prompts).System
 	}
 	return c.Judge.System

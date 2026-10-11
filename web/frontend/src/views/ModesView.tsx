@@ -19,6 +19,7 @@ export function ModesView() {
   const [testimonySec, setTestimonySec] = useState(25)
   const [streamerMin, setStreamerMin] = useState('0')
   const [sueThreshold, setSueThreshold] = useState('5')
+  const [crimeEnabled, setCrimeEnabled] = useState(false)
   const [sueWindow, setSueWindow] = useState('600')
   const [judgeStyle, setJudgeStyle] = useState('strict')
   const [judgeName, setJudgeName] = useState('Судья')
@@ -44,6 +45,7 @@ export function ModesView() {
     void apiGet<{
       defense_sec: number; testimony_sec: number; streamer_trial_min: number
       sue_threshold: number; sue_window_sec: number; judge_style: string; articles?: string[]
+      streamer_chance: number; crime_enabled: boolean
       platinum_min: number; judge_name: string; theme: string
       default_min: number; min_amounts?: Record<string, number>
     }>('/api/settings')
@@ -52,6 +54,7 @@ export function ModesView() {
         if (typeof d.testimony_sec === 'number') setTestimonySec(d.testimony_sec)
         if (typeof d.streamer_trial_min === 'number') setStreamerMin(String(d.streamer_trial_min))
         if (typeof d.sue_threshold === 'number') setSueThreshold(String(d.sue_threshold))
+        if (typeof d.crime_enabled === 'boolean') setCrimeEnabled(d.crime_enabled)
         if (typeof d.sue_window_sec === 'number') setSueWindow(String(d.sue_window_sec))
         if (typeof d.judge_style === 'string') setJudgeStyle(d.judge_style)
         if (typeof d.platinum_min === 'number') setPlatinumMin(String(d.platinum_min))
@@ -118,6 +121,7 @@ export function ModesView() {
         testimony_sec: testimonySec,
         streamer_trial_min: Number(streamerMin) || 0,
         sue_threshold: Number(sueThreshold) || 0,
+        crime_enabled: crimeEnabled,
         sue_window_sec: Number(sueWindow) || 600,
         judge_style: judgeStyle,
         platinum_min: Number(platinumMin) || 0,
@@ -411,6 +415,10 @@ export function ModesView() {
               />
             </label>
           </div>
+          <label className="flex items-center gap-1.5 text-xs text-zinc-300">
+            <input type="checkbox" checked={crimeEnabled} onChange={(e) => setCrimeEnabled(e.target.checked)} />
+            !crime: зрители придумывают себе дело (ИИ сочиняет из описания)
+          </label>
           <label className="block text-xs text-zinc-400">
             Шаблоны статей для пульта (по одной в строке)
             <textarea

@@ -93,7 +93,7 @@ export function SettingsView() {
         apiGet<{
           judge_strict: string; judge_cynical: string; prosecutor: string; prosody: string
           task_indictment: string; task_counter: string; task_deliberation: string
-          bribe_note: string; condemn_note: string; gen_prompt: string
+          bribe_note: string; condemn_note: string; gen_prompt: string; confession: string
         }>('/api/prompts'),
       ])
       const [aiR, ttsR, intR, profR, sfxR, safR, gameR, srvR, prmR] = settled
@@ -190,6 +190,7 @@ export function SettingsView() {
           taskDeliberation: d.task_deliberation ?? '',
           bribeNote: d.bribe_note ?? '',
           condemnNote: d.condemn_note ?? '',
+          confession: d.confession ?? '',
           genPrompt: d.gen_prompt ?? '',
         })
       }

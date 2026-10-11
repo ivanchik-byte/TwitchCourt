@@ -176,7 +176,7 @@ func main() {
 
 	// streamer trials are rare events now: manual starts and platinum donations only
 	openStreamerTrial := func(defendant, crime, context string) bool {
-		if err := engine.StartStreamerTrial(defendant, crime, context); err != nil {
+		if err := engine.StartTrial(defendant, crime, context); err != nil {
 			log.Printf("start trial rejected: %v", err)
 			return false
 		}
@@ -310,7 +310,7 @@ func main() {
 		if req.Viewer {
 			trialErr = engine.StartViewerTrial(req.Defendant, req.Crime)
 		} else {
-			trialErr = engine.StartStreamerTrial(req.Defendant, req.Crime, req.Context)
+			trialErr = engine.StartTrial(req.Defendant, req.Crime, req.Context)
 		}
 		if trialErr != nil {
 			http.Error(w, trialErr.Error(), http.StatusConflict)
@@ -494,7 +494,7 @@ func main() {
 				"prosecutor": p.Prosecutor,
 				"prosody":    p.Prosody, "task_indictment": p.TaskIndictment,
 				"task_counter": p.TaskCounter, "task_deliberation": p.TaskDeliberation,
-				"bribe_note": p.BribeNote, "condemn_note": p.CondemnNote,
+				"bribe_note": p.BribeNote, "condemn_note": p.CondemnNote, "confession": p.Confession,
 				"gen_prompt": p.GenPrompt,
 			}
 		}
@@ -522,6 +522,7 @@ func main() {
 				BribeNote        *string `json:"bribe_note"`
 				CondemnNote      *string `json:"condemn_note"`
 				GenPrompt        *string `json:"gen_prompt"`
+				Confession       *string `json:"confession"`
 			}
 			if err := decodeJSON(w, r, &req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
@@ -560,6 +561,9 @@ func main() {
 				}
 				if req.GenPrompt != nil {
 					next.Prompts.GenPrompt = *req.GenPrompt
+				}
+				if req.Confession != nil {
+					next.Prompts.Confession = *req.Confession
 				}
 			}
 			if !publish(w, next) {
@@ -1412,6 +1416,7 @@ func main() {
 				"testimony_sec":      cfg.Load().Courtroom.TestimonySec,
 				"sue_threshold":      cfg.Load().Courtroom.SueThreshold,
 				"sue_window_sec":     cfg.Load().Courtroom.SueWindowSec,
+				"crime_enabled":      cfg.Load().Courtroom.CrimeEnabled,
 				"streamer_chance":    cfg.Load().Courtroom.StreamerChance,
 				"articles":           cfg.Load().Courtroom.Articles,
 			})
@@ -1433,6 +1438,7 @@ func main() {
 				TestimonySec     *int               `json:"testimony_sec"`
 				SueThreshold     *int               `json:"sue_threshold"`
 				SueWindowSec     *int               `json:"sue_window_sec"`
+				CrimeEnabled     *bool              `json:"crime_enabled"`
 				StreamerChance   *float64           `json:"streamer_chance"`
 				Articles         []string           `json:"articles"`
 			}
@@ -1488,6 +1494,9 @@ func main() {
 			if req.SueWindowSec != nil && *req.SueWindowSec >= 60 && *req.SueWindowSec <= 3600 {
 				next.Courtroom.SueWindowSec = *req.SueWindowSec
 			}
+			if req.CrimeEnabled != nil {
+				next.Courtroom.CrimeEnabled = *req.CrimeEnabled
+			}
 			if req.StreamerChance != nil && *req.StreamerChance >= 0 && *req.StreamerChance <= 1 {
 				next.Courtroom.StreamerChance = *req.StreamerChance
 			}
@@ -1508,6 +1517,7 @@ func main() {
 				"testimony_sec":      next.Courtroom.TestimonySec,
 				"sue_threshold":      next.Courtroom.SueThreshold,
 				"sue_window_sec":     next.Courtroom.SueWindowSec,
+				"crime_enabled":      next.Courtroom.CrimeEnabled,
 				"streamer_chance":    next.Courtroom.StreamerChance,
 				"articles":           next.Courtroom.Articles,
 			})
@@ -1683,7 +1693,8 @@ func main() {
 	chatHandler := func(cmd bot.ChatCommand) {
 		switch cmd.Kind {
 		case bot.CommandCourt:
-			if joined, pos := engine.JoinPool(cmd.Author, cmd.Argument); joined {
+			// a bare seat, no case attached: the trial comes from the deck
+			if joined, pos := engine.JoinPool(cmd.Author, ""); joined {
 				announce(tmpl.Fill(cfg.Load().Chat.QueueJoined, map[string]string{
 					"author": cmd.Author, "position": strconv.Itoa(pos),
 				}))
@@ -1693,12 +1704,21 @@ func main() {
 				announce(tmpl.Fill(cfg.Load().Chat.QueueLeft, map[string]string{"author": cmd.Author}))
 			}
 		case bot.CommandCrime:
-			if cmd.Argument != "" {
-				engine.AddChatComment(cmd.Author, "!crime "+cmd.Argument)
-				if err := engine.StartViewerTrial(cmd.Author, cmd.Argument); err == nil {
-					announce(tmpl.Fill(cfg.Load().Chat.SelfTrial, map[string]string{"author": cmd.Author}))
-				}
+			// self-invented case, only when the streamer allows it in settings
+			if cmd.Argument == "" {
+				break
 			}
+			engine.AddChatComment(cmd.Author, "!crime "+cmd.Argument)
+			if !cfg.Load().Courtroom.CrimeEnabled {
+				break
+			}
+			go func(author, argument string) {
+				if err := engine.StartConfessionTrial(author, argument); err != nil {
+					log.Printf("confession trial refused: %v", err)
+					return
+				}
+				announce(tmpl.Fill(cfg.Load().Chat.SelfTrial, map[string]string{"author": author}))
+			}(cmd.Author, cmd.Argument)
 		case bot.CommandSnitch:
 			if cmd.Argument != "" {
 				engine.AddChatComment(cmd.Author, "!snitch "+cmd.Argument)

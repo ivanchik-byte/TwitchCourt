@@ -66,6 +66,7 @@ type CourtroomConfig struct {
 	SueThreshold   int      `yaml:"sue_threshold"`
 	SueWindowSec   int      `yaml:"sue_window_sec"`
 	StreamerChance float64  `yaml:"streamer_chance"`
+	CrimeEnabled   bool     `yaml:"crime_enabled"`
 	Articles       []string `yaml:"articles"`
 	Punishments    []string `yaml:"punishments"`
 	// spoken templates, all optional: empty = that line stays silent
@@ -125,6 +126,7 @@ type PromptsConfig struct {
 	BribeNote        string `yaml:"bribe_note"`
 	CondemnNote      string `yaml:"condemn_note"`
 	GenPrompt        string `yaml:"gen_prompt"`
+	Confession       string `yaml:"confession"`
 }
 
 // DefaultPrompts is the strong built-in bench: editable persona side.
@@ -163,7 +165,10 @@ func DefaultPrompts() PromptsConfig {
 Вынеси вердикт как Верховный Судья. Затем мотив двумя предложениями (не больше 35 слов) и коронная концовка «Суд окончен». Мотив обязан опираться на конкретные показания из дела, а не на общие слова. Никаких бытовых штампов.`,
 		BribeNote:   `На столе взятка: {donor} суёт {amount} {currency}{message}. Ты живой судья, а не автомат: делай с этим что хочешь — прими и оправдай, гордо откажи, разозлись, высмей взяткодателя, обидься на мелочность, устрой сцену. Никаких рамок, это ролевая игра — главное чтобы чату было смешно. Своё решение отрази в вердикте и репликах.`,
 		CondemnNote: `ВНИМАНИЕ: в показаниях запретная тема (слово уже вырезано фильтром, ты его не видишь и не должен восстанавливать). Правила: НИКОГДА не произноси и не пересказывай запретное слово, даже в шутку и даже «в кавычках». НЕ соглашайся с автором даже частично, никаких «раньше так говорили» и «в этом есть доля правды». Осуди автора от имени суда одной уничтожающей фразой и высмей ЕГО — его жадность, глупость и смелость позориться за деньги, а не тех, кого он оскорбил.`,
-		GenPrompt: `Ты генератор дел для сатирического стрим-суда. Придумай {count} дел.
+		Confession: `Зритель придумывает себе дело одной фразой: {description}.
+Сочини смешное абсурдное дело для сатирического стрим-суда: в духе бытовых баек с Reddit, но без запреток Twitch (без мата, политики, реального насилия и дискриминации).
+Формат ответа: JSON-объект {"title": "...", "crime": "...", "context": "..."}.
+Только JSON, без пояснений.`, GenPrompt: `Ты генератор дел для сатирического стрим-суда. Придумай {count} дел.
 Каждое дело — свои рамки из списка, строго по порядку:
 {axes}
 Уже были, НЕ повторять ни тему, ни объект, ни приём: {banlist}
@@ -382,6 +387,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Prompts.GenPrompt == "" {
 		cfg.Prompts.GenPrompt = defPrompts.GenPrompt
+	}
+	if cfg.Prompts.Confession == "" {
+		cfg.Prompts.Confession = defPrompts.Confession
 	}
 
 	switch cfg.TTS.Engine {

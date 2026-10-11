@@ -13,6 +13,7 @@ export interface PromptsState {
   taskDeliberation: string
   bribeNote: string
   condemnNote: string
+  confession: string
   genPrompt: string
 }
 
@@ -26,6 +27,7 @@ export const emptyPrompts: PromptsState = {
   taskDeliberation: '',
   bribeNote: '',
   condemnNote: '',
+  confession: '',
   genPrompt: '',
 }
 
@@ -63,6 +65,7 @@ export const PromptsSection = memo(function PromptsSection({ prompts, setPrompts
         task_deliberation: prompts.taskDeliberation,
         bribe_note: prompts.bribeNote,
         condemn_note: prompts.condemnNote,
+        confession: prompts.confession,
         gen_prompt: prompts.genPrompt,
       })
     )
@@ -93,6 +96,7 @@ export const PromptsSection = memo(function PromptsSection({ prompts, setPrompts
       <Area label="Задача: совещание" value={prompts.taskDeliberation} onChange={set('taskDeliberation')} />
       <Area label="Приписка о взятке" value={prompts.bribeNote} onChange={set('bribeNote')} rows={2} />
       <Area label="Осуждение запретки" value={prompts.condemnNote} onChange={set('condemnNote')} rows={3} />
+      <Area label="Самосуд зрителя (!crime)" value={prompts.confession} onChange={set('confession')} rows={6} />
       <Area label="Промпт генератора дел" value={prompts.genPrompt} onChange={set('genPrompt')} rows={6} />
       <div className="flex gap-1.5">
         <SaveButton onSave={save} />
