@@ -44,9 +44,11 @@ function pyToJson(obj: string): unknown {
       if (ch === '\\' && i + 1 < obj.length) {
         out += ch + obj[i + 1]
         i++
+      } else if (ch === quote) {
+        out += '"'
+        quote = null
       } else {
-        if (ch === quote) quote = null
-        out += ch === "'" && quote === "'" ? '"' : ch
+        out += ch
       }
       continue
     }
@@ -120,7 +122,7 @@ export function parseAISnippet(input: string): ParsedAISnippet {
     if (url) result.baseUrl = url[1]
     const auth = raw.match(/-H\s+["']Authorization:\s*Bearer\s+([^"'\s]+)["']/i)
     if (auth && !auth[1].includes('<')) result.apiKey = auth[1]
-    const bodyPos = raw.search(/-d\s+['"]/i)
+    const bodyPos = raw.search(/-d\s+['"]|--data(?:-binary)?\s+['"]/i)
     if (bodyPos >= 0) {
       const obj = scanObject(raw, bodyPos)
       if (obj) {

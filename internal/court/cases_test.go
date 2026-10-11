@@ -1,12 +1,15 @@
 package court
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
-	"stream-tribunal/internal/ai"
 	"stream-tribunal/internal/audio"
 	"stream-tribunal/internal/config"
 	"stream-tribunal/internal/memory"
@@ -88,11 +91,7 @@ func TestDeckAddDelete(t *testing.T) {
 func TestStartCaseTrialFeedsDetails(t *testing.T) {
 	e := newWitnessEngine()
 	e.hub = obs.NewHub(nil)
-	mc, err := ai.NewClient(config.AIConfig{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.SetAI(mc)
+	e.SetAI(mustAIClient(t, config.AIConfig{Provider: "custom", BaseURL: "http://127.0.0.1:9"}))
 	pv, err := audio.NewPiperDaemon(config.TTSConfig{})
 	if err != nil {
 		t.Fatal(err)
@@ -131,9 +130,17 @@ func TestGenerateCasesStoresBatch(t *testing.T) {
 	if err := os.WriteFile(path, []byte("cases: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	batch := `[{"title": "Слив катки", "crime": "Вышел из катки", "context": ""}, {"title": "Теракт в чате", "crime": "Устроил теракт", "context": ""}]`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s}}]}`, strconv.Quote(batch))
+	}))
+	defer server.Close()
 	cfg := config.DefaultConfig()
-	mockJSON := `[{"title": "Слив катки", "crime": "Вышел из катки", "context": ""}, {"title": "Теракт в чате", "crime": "Устроил теракт", "context": ""}]`
-	cfg.AI.MockLines = []string{mockJSON}
+	cfg.AI.Provider = "custom"
+	cfg.AI.APIKey = "k"
+	cfg.AI.BaseURL = server.URL
+	cfg.AI.Stream = false
 	recall := memory.NewStore("")
 	e := NewEngine(cfg, obs.NewHub(nil), mustAIClient(t, cfg.AI), nil, safety.NewFilter(nil))
 	e.AttachMemory(recall)

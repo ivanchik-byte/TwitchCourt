@@ -88,6 +88,9 @@ func (e *Engine) GenerateCases(count int) (int, error) {
 		return 0, fmt.Errorf("no case deck")
 	}
 	client := e.currentAI()
+	if client == nil || !client.Configured() {
+		return 0, fmt.Errorf("ai is not configured: set api_key or base_url in settings")
+	}
 	if client == nil {
 		return 0, fmt.Errorf("no ai client")
 	}

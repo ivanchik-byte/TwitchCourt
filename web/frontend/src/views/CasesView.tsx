@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { apiGet, apiPostJson, apiFetch, apiNote } from '../lib/api'
+import { apiGet, apiPostJson, apiPut, apiFetch, apiNote } from '../lib/api'
 
 interface CaseCard {
   id: string
@@ -18,6 +18,7 @@ export function CasesView() {
   const [cases, setCases] = useState<CaseCard[]>([])
   const [remaining, setRemaining] = useState(0)
   const [target, setTarget] = useState<'viewer' | 'streamer'>('viewer')
+  const [chance, setChance] = useState(0.1)
   const [title, setTitle] = useState('')
   const [crime, setCrime] = useState('')
   const [context, setContext] = useState('')
@@ -34,7 +35,18 @@ export function CasesView() {
 
   useEffect(() => {
     void refresh()
+    void apiGet<{ streamer_chance: number }>('/api/settings')
+      .then((d) => {
+        if (typeof d.streamer_chance === 'number') setChance(d.streamer_chance)
+      })
+      .catch(() => undefined)
   }, [refresh])
+
+  const saveChance = async (v: number) => {
+    setChance(v)
+    const r = await apiPut('/api/settings', { streamer_chance: v })
+    if (!r.ok) toast.error(`Шанс не сохранён: ${apiNote(r.status)}`)
+  }
 
   const waitGeneration = async (): Promise<boolean> => {
     for (let i = 0; i < 60; i++) {
@@ -140,6 +152,14 @@ export function CasesView() {
         >
           Вытянуть дело
         </button>
+        <label className="block text-xs text-zinc-400">
+          Стример на скамье: {Math.round(chance * 100)}%
+          <input
+            type="range" min={0} max={1} step={0.05} value={chance}
+            onChange={(e) => void saveChance(Number(e.target.value))}
+            className="mt-1 w-32"
+          />
+        </label>
         <button
           onClick={() => void reset()}
           className="pressable ml-auto rounded-lg border border-white/10 px-3 py-1.5 text-sm"

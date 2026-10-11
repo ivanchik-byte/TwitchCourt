@@ -10,17 +10,10 @@ import (
 	"stream-tribunal/internal/safety"
 )
 
-func TestPingAIMock(t *testing.T) {
+func TestPingAIUnconfigured(t *testing.T) {
 	e := NewEngine(nil, obs.NewHub(nil), mustAIClient(t, config.AIConfig{}), nil, safety.NewFilter(nil))
-	ms, mock, err := e.PingAI(context.Background())
-	if err != nil {
-		t.Fatalf("mock ping must not fail: %v", err)
-	}
-	if !mock {
-		t.Fatal("keyless client must report mock")
-	}
-	if ms != 0 {
-		t.Fatalf("mock ping must be instant, got %dms", ms)
+	if _, _, err := e.PingAI(context.Background()); err == nil {
+		t.Fatal("unconfigured ai must fail the ping with setup hint")
 	}
 }
 

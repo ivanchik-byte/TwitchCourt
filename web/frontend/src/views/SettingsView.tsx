@@ -91,7 +91,7 @@ export function SettingsView() {
         apiGet<{ streamer_name: string }>('/api/game'),
         apiGet<{ host: string; port: number; secret_set: boolean }>('/api/server'),
         apiGet<{
-          judge_strict: string; judge_cynical: string; prosody: string
+          judge_strict: string; judge_cynical: string; prosecutor: string; prosody: string
           task_indictment: string; task_counter: string; task_deliberation: string
           bribe_note: string; condemn_note: string; gen_prompt: string
         }>('/api/prompts'),
@@ -183,6 +183,7 @@ export function SettingsView() {
         setPrompts({
           judgeStrict: d.judge_strict ?? '',
           judgeCynical: d.judge_cynical ?? '',
+          prosecutor: d.prosecutor ?? '',
           prosody: d.prosody ?? '',
           taskIndictment: d.task_indictment ?? '',
           taskCounter: d.task_counter ?? '',

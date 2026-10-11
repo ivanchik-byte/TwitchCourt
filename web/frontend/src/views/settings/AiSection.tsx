@@ -77,7 +77,7 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
         <h2 className="font-semibold">Языковая модель</h2>
         {flags && (
           <span className={`font-mono text-xs ${flags.live ? 'text-emerald-300' : 'text-zinc-500'}`}>
-            {flags.live ? '● live' : '○ mock'}
+            {flags.live ? '● live' : '○ off'}
           </span>
         )}
         <button
@@ -166,12 +166,12 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
         />
         <button
           onClick={async () => {
-            const r = await apiPostJson<{ ms: number; mock: boolean }>('/api/ai/ping', {})
+            const r = await apiPostJson<{ ms: number }>('/api/ai/ping', {})
             if (!r.ok || !r.data) {
-              toast.error(`Проверка модели: ${apiNote(r.status)}`)
+              toast.error(`Проверка модели: ${apiNote(r.status)} (нужен ключ или URL)`)
               return
             }
-            toast.success(r.data.mock ? 'Режим mock: тестовые ответы без внешнего API' : `Ответ получен за ${r.data.ms} мс`)
+            toast.success(`Ответ получен за ${r.data.ms} мс`)
           }}
           className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
         >

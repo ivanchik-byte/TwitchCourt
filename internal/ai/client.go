@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -19,8 +18,6 @@ type Client struct {
 	cfg        config.AIConfig
 	httpClient *http.Client
 	endpoint   string
-	isMock     bool
-	mockLines  []string
 }
 
 type ChatMessage struct {
@@ -54,11 +51,6 @@ func NewClient(cfg config.AIConfig) (*Client, error) {
 		cfg:        cfg,
 		endpoint:   endpoint,
 		httpClient: &http.Client{Timeout: 90 * time.Second},
-		isMock:     cfg.APIKey == "" && strings.TrimSpace(cfg.BaseURL) == "" && cfg.Provider != "ollama",
-		mockLines:  append([]string(nil), cfg.MockLines...),
-	}
-	if client.isMock {
-		log.Printf("AI mock mode active (no API key): verdicts use canned phrases, not a model")
 	}
 
 	return client, nil
@@ -107,15 +99,16 @@ func mergeExtraBody(raw []byte, extra map[string]any) ([]byte, error) {
 	return json.Marshal(body)
 }
 
-// IsMock reports whether completions are simulated locally.
-func (c *Client) IsMock() bool {
-	return c == nil || c.isMock
+// Configured reports whether the court can reach a real model:
+// an API key, an explicit base_url, or local Ollama.
+func (c *Client) Configured() bool {
+	if c == nil {
+		return false
+	}
+	return c.cfg.APIKey != "" || strings.TrimSpace(c.cfg.BaseURL) != "" || c.cfg.Provider == "ollama"
 }
 
 func (c *Client) StreamCompletion(ctx context.Context, messages []ChatMessage, onDelta func(string) error) error {
-	if c.isMock {
-		return c.simulateStream(ctx, onDelta)
-	}
 	if !c.cfg.Stream {
 		return c.singleCompletion(ctx, messages, onDelta)
 	}
@@ -252,22 +245,4 @@ func (c *Client) singleCompletion(ctx context.Context, messages []ChatMessage, o
 		return fmt.Errorf("ai api returned no choices")
 	}
 	return onDelta(done.Choices[0].Message.Content)
-}
-
-func (c *Client) simulateStream(ctx context.Context, onDelta func(string) error) error {
-	for _, phrase := range c.mockLines {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(120 * time.Millisecond):
-			words := strings.Split(phrase, " ")
-			for _, word := range words {
-				if err := onDelta(word + " "); err != nil {
-					return err
-				}
-				time.Sleep(30 * time.Millisecond)
-			}
-		}
-	}
-	return nil
 }

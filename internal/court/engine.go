@@ -45,6 +45,9 @@ type TrialCase struct {
 	Viewer      string
 	Testimony   []string
 	Bribe       *BribeOffer
+	// StreamerTrial marks a trial where the streamer is the defendant
+	// and a dedicated AI prosecutor leads the charge.
+	StreamerTrial bool
 }
 
 // BribeOffer is donor money on the table: the bench decides what to do
@@ -193,11 +196,8 @@ func (e *Engine) currentAI() *ai.Client {
 // PingAI measures one real inference round-trip (ms to first token).
 func (e *Engine) PingAI(ctx context.Context) (ms int64, mock bool, err error) {
 	client := e.currentAI()
-	if client == nil {
-		return 0, true, fmt.Errorf("no ai client")
-	}
-	if client.IsMock() {
-		return 0, true, nil
+	if client == nil || !client.Configured() {
+		return 0, false, fmt.Errorf("ai is not configured: set api_key or base_url in settings")
 	}
 	start := time.Now()
 	done, cancel := context.WithCancel(ctx)
@@ -255,7 +255,8 @@ func (e *Engine) StartViewerTrial(viewer, crime string) error {
 }
 
 // StartCaseTrial opens a trial from a deck card: full details go to the bench.
-// viewer=true keeps the opt-in punishment path for viewer defendants.
+// viewer=true keeps the opt-in punishment path for viewer defendants;
+// viewer=false means the streamer is on the bench with a prosecutor on his tail.
 func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) error {
 	context := strings.TrimSpace(card.Context)
 	if d := strings.TrimSpace(card.Details); d != "" {
@@ -267,7 +268,7 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 	if viewer {
 		return e.startTrialWith(defendant, card.Crime, context, defendant)
 	}
-	return e.startTrialWith(defendant, card.Crime, context, "")
+	return e.startTrialWithMode(defendant, card.Crime, context, "", true)
 }
 
 // StartUnbanTrial opens an unban pardon trial against the streamer
@@ -280,11 +281,25 @@ func (e *Engine) StartUnbanTrial(user, appeal string) error {
 	return e.startTrialWith(user, crime, chatContext, "")
 }
 
+// StartStreamerTrial opens a trial where the streamer is the defendant
+// and a dedicated AI prosecutor leads the charge.
+func (e *Engine) StartStreamerTrial(defendant, crime, chatContext string) error {
+	return e.startTrialWithMode(defendant, crime, chatContext, "", true)
+}
+
 func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) error {
+	return e.startTrialWithMode(defendant, crime, chatContext, viewer, false)
+}
+
+func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string, streamerTrial bool) error {
 	e.mu.Lock()
 	if e.state != StateIdle {
 		e.mu.Unlock()
 		return fmt.Errorf("court is already in session (current state: %s)", e.state)
+	}
+	if e.aiClient == nil || !e.aiClient.Configured() {
+		e.mu.Unlock()
+		return fmt.Errorf("ai is not configured: set api_key or base_url in settings")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -297,11 +312,12 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 	gen := e.trialGen
 	e.state = StateIndictment
 	e.currCase = &TrialCase{
-		Defendant:   e.filter.Sanitize(truncateRunes(defendant, 80)),
-		Crime:       e.filter.Sanitize(truncateRunes(crime, 300)),
-		ChatContext: e.filter.Sanitize(truncateRunes(chatContext, 1000)),
-		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
-		Viewer:      e.filter.Sanitize(viewer),
+		Defendant:     e.filter.Sanitize(truncateRunes(defendant, 80)),
+		Crime:         e.filter.Sanitize(truncateRunes(crime, 300)),
+		ChatContext:   e.filter.Sanitize(truncateRunes(chatContext, 1000)),
+		Judge:         ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
+		Viewer:        e.filter.Sanitize(viewer),
+		StreamerTrial: streamerTrial,
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
@@ -317,6 +333,16 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 	return nil
 }
 
+// accuserSystem picks the voice that leads the charge: the prosecutor
+// in streamer trials, the judge everywhere else. Deliberation always
+// stays with the judge as arbiter.
+func (e *Engine) accuserSystem(c *TrialCase) string {
+	if c.StreamerTrial {
+		return ai.ProsecutorFor(e.cfg.Load().Prompts).System
+	}
+	return c.Judge.System
+}
+
 func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64) {
 	defer e.finishTrial(gen)
 
@@ -326,7 +352,7 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 	}
 	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart, e.cfg.Load().Prompts.TaskIndictment)
 	messages := []ai.ChatMessage{
-		{Role: "system", Content: c.Judge.System},
+		{Role: "system", Content: e.accuserSystem(c)},
 		{Role: "user", Content: prompt},
 	}
 
@@ -702,7 +728,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 		defense = e.fallbackDefense()
 	}
 	messages := []ai.ChatMessage{
-		{Role: "system", Content: c.Judge.System},
+		{Role: "system", Content: e.accuserSystem(c)},
 		{Role: "user", Content: ai.BuildCounterArgumentPromptWithTask(defense, e.cfg.Load().Prompts.TaskCounter)},
 	}
 	chunker := ai.NewSentenceChunker()

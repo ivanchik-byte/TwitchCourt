@@ -6,6 +6,7 @@ import { labelCls, saveSection, SaveButton } from './shared'
 export interface PromptsState {
   judgeStrict: string
   judgeCynical: string
+  prosecutor: string
   prosody: string
   taskIndictment: string
   taskCounter: string
@@ -18,6 +19,7 @@ export interface PromptsState {
 export const emptyPrompts: PromptsState = {
   judgeStrict: '',
   judgeCynical: '',
+  prosecutor: '',
   prosody: '',
   taskIndictment: '',
   taskCounter: '',
@@ -54,6 +56,7 @@ export const PromptsSection = memo(function PromptsSection({ prompts, setPrompts
       apiPut('/api/prompts', {
         judge_strict: prompts.judgeStrict,
         judge_cynical: prompts.judgeCynical,
+        prosecutor: prompts.prosecutor,
         prosody: prompts.prosody,
         task_indictment: prompts.taskIndictment,
         task_counter: prompts.taskCounter,
@@ -83,6 +86,7 @@ export const PromptsSection = memo(function PromptsSection({ prompts, setPrompts
       </p>
       <Area label="Строгий судья" value={prompts.judgeStrict} onChange={set('judgeStrict')} rows={6} />
       <Area label="Циничный судья" value={prompts.judgeCynical} onChange={set('judgeCynical')} rows={6} />
+      <Area label="Прокурор (суды над стримером)" value={prompts.prosecutor} onChange={set('prosecutor')} rows={6} />
       <Area label="Аудио-режиссура" value={prompts.prosody} onChange={set('prosody')} />
       <Area label="Задача: обвинение" value={prompts.taskIndictment} onChange={set('taskIndictment')} />
       <Area label="Задача: протест" value={prompts.taskCounter} onChange={set('taskCounter')} rows={3} />

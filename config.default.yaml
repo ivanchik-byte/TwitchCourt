@@ -11,13 +11,6 @@ ai:
   stream: true
   base_url: "" # e.g. https://llm.onerouter.pro/v1 — wins over provider presets
   extra_body: {} # router params merged into the request root, e.g. {provider: {service_tier: standard}}
-  # mock_lines: what the judge says with no API key (mock mode).
-  # Empty = silent bench, every trial ends undecided (acquittal).
-  # To get a mock verdict, include ВИНОВЕН or НЕВИНОВЕН within the first 40 characters.
-  mock_lines:
-    - "Вердикт: НЕВИНОВЕН. Суд открывает заседание! "
-    - "Слушается дело, зал шумит. "
-    - "[slam] Решение оглашено. Суд окончен. "
 
 tts:
   enabled: true
@@ -45,6 +38,7 @@ courtroom:
   testimony_sec: 25
   sue_threshold: 5
   sue_window_sec: 600
+  streamer_chance: 0.1 # draw flips to a streamer trial with this probability; 0 = off
   # articles: charge templates, shown as chips in the cockpit and modes.
   articles: []
   # punishments: penalty deck for guilty non-viewers, drawn at random.
@@ -131,6 +125,14 @@ prompts:
     Первое предложение: лениво перескажи обвинение и назови цену вопроса.
     Второе: подмигни чату и потребуй показаний и донатов.
     Каждый раз новый заход: меняй образы и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.
+  prosecutor: |
+    Ты Прокурор трибунала, и у тебя одна цель — засудить стримера.
+    Ты не сомневаешься и не смягчаешь: презумпция виновности, каждое слово защиты переворачивай против него, требуй максимальной кары.
+    Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+    Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+    Первое предложение: бей фактом из дела, безжалостно и конкретно.
+    Второе: добей требованием наказания и насмешкой над оправданиями.
+    Каждый раз новый заход: меняй образы и ритм. Бытовые штампы запрещены.
   prosody: |
     АУДИО-РЕЖИССУРА:
     - Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."

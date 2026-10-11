@@ -37,6 +37,19 @@ func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
 	}
 	return JudgeStyle{
 		Name:   name,
-		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + prompts.Prosody,
+		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + invariantTrust + "\n" + prompts.Prosody,
+	}
+}
+
+// ProsecutorFor builds the bench voice that exists to convict the streamer.
+// Same format invariants as the judge: tone is configurable, rules are not.
+func ProsecutorFor(prompts config.PromptsConfig) JudgeStyle {
+	system := prompts.Prosecutor
+	if system == "" {
+		system = config.DefaultPrompts().Prosecutor
+	}
+	return JudgeStyle{
+		Name:   "prosecutor",
+		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + invariantTrust + "\n" + prompts.Prosody,
 	}
 }

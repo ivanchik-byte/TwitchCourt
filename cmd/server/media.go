@@ -17,11 +17,22 @@ var judgePhotoExts = map[string]bool{
 
 // single judge portrait for the whole tribunal
 func judgePhotoPath() string {
+	if _, err := os.Stat(filepath.Join("data", "judge.png")); err == nil {
+		return filepath.Join("data", "judge.png")
+	}
 	return filepath.Join("data", "judge.jpg")
 }
 
 // fallback to the embedded default portrait
 func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
+	if _, err := os.Stat(judgePhotoPath()); err == nil {
+		serveImageFile(w, r, judgePhotoPath(), "")
+		return
+	}
+	if _, err := web.StaticFS.ReadFile("overlay/assets/judge.png"); err == nil {
+		serveImageFile(w, r, judgePhotoPath(), "overlay/assets/judge.png")
+		return
+	}
 	serveImageFile(w, r, judgePhotoPath(), "overlay/assets/judge.jpg")
 }
 

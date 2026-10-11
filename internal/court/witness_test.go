@@ -2,6 +2,9 @@ package court
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -180,8 +183,18 @@ func TestStartViewerTrialBusy(t *testing.T) {
 
 // verify pipeline acquits and completes when model produces no verdict keyword
 func TestViewerTrialRunsEndToEnd(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"Суд слушает, решения нет."}}]}`)
+	}))
+	defer server.Close()
 	cfg := config.DefaultConfig()
 	cfg.Courtroom.DefenseSec = 1
+	cfg.Courtroom.TestimonySec = 1
+	cfg.AI.Provider = "custom"
+	cfg.AI.APIKey = "k"
+	cfg.AI.BaseURL = server.URL
+	cfg.AI.Stream = false
 	voice, _ := audio.NewPiperDaemon(cfg.TTS)
 	e := NewEngine(cfg, obs.NewHub(nil), mustAIClient(t, cfg.AI), voice, safety.NewFilter(nil))
 	e.AttachMemory(memory.NewStore(""))

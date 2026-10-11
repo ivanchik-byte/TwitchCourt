@@ -35,7 +35,6 @@ type AIConfig struct {
 	Temperature float64        `yaml:"temperature"`
 	Stream      bool           `yaml:"stream"`
 	BaseURL     string         `yaml:"base_url"`
-	MockLines   []string       `yaml:"mock_lines"`
 	ExtraBody   map[string]any `yaml:"extra_body"`
 }
 
@@ -59,15 +58,16 @@ type TTSConfig struct {
 }
 
 type CourtroomConfig struct {
-	Theme        string   `yaml:"theme"`
-	JudgeName    string   `yaml:"judge_name"`
-	JudgeStyle   string   `yaml:"judge_style"`
-	DefenseSec   int      `yaml:"defense_sec"`
-	TestimonySec int      `yaml:"testimony_sec"`
-	SueThreshold int      `yaml:"sue_threshold"`
-	SueWindowSec int      `yaml:"sue_window_sec"`
-	Articles     []string `yaml:"articles"`
-	Punishments  []string `yaml:"punishments"`
+	Theme          string   `yaml:"theme"`
+	JudgeName      string   `yaml:"judge_name"`
+	JudgeStyle     string   `yaml:"judge_style"`
+	DefenseSec     int      `yaml:"defense_sec"`
+	TestimonySec   int      `yaml:"testimony_sec"`
+	SueThreshold   int      `yaml:"sue_threshold"`
+	SueWindowSec   int      `yaml:"sue_window_sec"`
+	StreamerChance float64  `yaml:"streamer_chance"`
+	Articles       []string `yaml:"articles"`
+	Punishments    []string `yaml:"punishments"`
 	// spoken templates, all optional: empty = that line stays silent
 	StandbyIndictment   string         `yaml:"standby_indictment"`
 	StandbyDeliberation string         `yaml:"standby_deliberation"`
@@ -117,6 +117,7 @@ type ChatConfig struct {
 type PromptsConfig struct {
 	JudgeStrict      string `yaml:"judge_strict"`
 	JudgeCynical     string `yaml:"judge_cynical"`
+	Prosecutor       string `yaml:"prosecutor"`
 	Prosody          string `yaml:"prosody"`
 	TaskIndictment   string `yaml:"task_indictment"`
 	TaskCounter      string `yaml:"task_counter"`
@@ -142,6 +143,13 @@ func DefaultPrompts() PromptsConfig {
 Первое предложение: лениво перескажи обвинение и назови цену вопроса.
 Второе: подмигни чату и потребуй показаний и донатов.
 Каждый раз новый заход: меняй образы и ритм, не повторяй формулировки прошлых приговоров из истории. Бытовые штампы запрещены.`,
+		Prosecutor: `Ты Прокурор трибунала, и у тебя одна цель — засудить стримера.
+Ты не сомневаешься и не смягчаешь: презумпция виновности, каждое слово защиты переворачивай против него, требуй максимальной кары.
+Железные правила: строгий PG-13, без мата, дискриминации, политики и реального насилия.
+Твоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.
+Первое предложение: бей фактом из дела, безжалостно и конкретно.
+Второе: добей требованием наказания и насмешкой над оправданиями.
+Каждый раз новый заход: меняй образы и ритм. Бытовые штампы запрещены.`,
 		Prosody: `АУДИО-РЕЖИССУРА:
 - Многоточия для вздохов и пауз: "Так-так-так... кто тут у нас..."
 - Тире для смысловых ударов, междометия для живости: "Кхм...", "Позвольте!", "Ого!"
@@ -230,11 +238,6 @@ func DefaultConfig() *Config {
 			Model:       "llama-3.3-70b-versatile",
 			Temperature: 0.85,
 			Stream:      true,
-			MockLines: []string{
-				"Вердикт: НЕВИНОВЕН. Суд открывает заседание! ",
-				"Слушается дело, зал шумит. ",
-				"[slam] Решение оглашено. Суд окончен. ",
-			},
 		},
 		TTS: TTSConfig{
 			Enabled:      true,
@@ -262,6 +265,7 @@ func DefaultConfig() *Config {
 			TestimonySec:        25,
 			SueThreshold:        5,
 			SueWindowSec:        600,
+			StreamerChance:      0.1,
 			Articles:            []string{},
 			Punishments:         []string{},
 			StandbyIndictment:   "Суд разбирает бумаги. Заседание продолжается!",
@@ -355,6 +359,9 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Prompts.JudgeCynical == "" {
 		cfg.Prompts.JudgeCynical = defPrompts.JudgeCynical
 	}
+	if cfg.Prompts.Prosecutor == "" {
+		cfg.Prompts.Prosecutor = defPrompts.Prosecutor
+	}
 	if cfg.Prompts.Prosody == "" {
 		cfg.Prompts.Prosody = defPrompts.Prosody
 	}
@@ -432,6 +439,9 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Courtroom.SueWindowSec <= 0 {
 		cfg.Courtroom.SueWindowSec = 600
 	}
+	if cfg.Courtroom.StreamerChance < 0 || cfg.Courtroom.StreamerChance > 1 {
+		cfg.Courtroom.StreamerChance = 0.1
+	}
 	if cfg.Donations.StreamerTrialMin < 0 {
 		cfg.Donations.StreamerTrialMin = 0
 	}
@@ -486,9 +496,6 @@ func (c *Config) Clone() *Config {
 	}
 	if c.Courtroom.Articles != nil {
 		out.Courtroom.Articles = append([]string(nil), c.Courtroom.Articles...)
-	}
-	if c.AI.MockLines != nil {
-		out.AI.MockLines = append([]string(nil), c.AI.MockLines...)
 	}
 	if c.AI.ExtraBody != nil {
 		out.AI.ExtraBody = deepCopyMap(c.AI.ExtraBody)

@@ -63,20 +63,23 @@ func TestMergeExtraBody(t *testing.T) {
 	}
 }
 
-func TestMockRule(t *testing.T) {
+func TestConfiguredRule(t *testing.T) {
 	keylessCustom, err := NewClient(config.AIConfig{Provider: "custom", BaseURL: "http://box:1234/v1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if keylessCustom.IsMock() {
-		t.Fatal("keyless custom with base_url is a live local server, not mock")
+	if !keylessCustom.Configured() {
+		t.Fatal("keyless custom with base_url counts as configured")
 	}
 	keylessKnown, err := NewClient(config.AIConfig{Provider: "groq"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !keylessKnown.IsMock() {
-		t.Fatal("keyless groq without base_url must stay mock")
+	if keylessKnown.Configured() {
+		t.Fatal("keyless groq without base_url is not configured")
+	}
+	if (&Client{}).Configured() {
+		t.Fatal("nil client is not configured")
 	}
 }
 

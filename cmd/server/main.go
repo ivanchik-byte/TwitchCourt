@@ -176,7 +176,7 @@ func main() {
 
 	// streamer trials are rare events now: manual starts and platinum donations only
 	openStreamerTrial := func(defendant, crime, context string) bool {
-		if err := engine.StartTrial(defendant, crime, context); err != nil {
+		if err := engine.StartStreamerTrial(defendant, crime, context); err != nil {
 			log.Printf("start trial rejected: %v", err)
 			return false
 		}
@@ -310,7 +310,7 @@ func main() {
 		if req.Viewer {
 			trialErr = engine.StartViewerTrial(req.Defendant, req.Crime)
 		} else {
-			trialErr = engine.StartTrial(req.Defendant, req.Crime, req.Context)
+			trialErr = engine.StartStreamerTrial(req.Defendant, req.Crime, req.Context)
 		}
 		if trialErr != nil {
 			http.Error(w, trialErr.Error(), http.StatusConflict)
@@ -491,7 +491,8 @@ func main() {
 			p := cfg.Load().Prompts
 			return map[string]any{
 				"judge_strict": p.JudgeStrict, "judge_cynical": p.JudgeCynical,
-				"prosody": p.Prosody, "task_indictment": p.TaskIndictment,
+				"prosecutor": p.Prosecutor,
+				"prosody":    p.Prosody, "task_indictment": p.TaskIndictment,
 				"task_counter": p.TaskCounter, "task_deliberation": p.TaskDeliberation,
 				"bribe_note": p.BribeNote, "condemn_note": p.CondemnNote,
 				"gen_prompt": p.GenPrompt,
@@ -513,6 +514,7 @@ func main() {
 				Reset            bool    `json:"reset"`
 				JudgeStrict      *string `json:"judge_strict"`
 				JudgeCynical     *string `json:"judge_cynical"`
+				Prosecutor       *string `json:"prosecutor"`
 				Prosody          *string `json:"prosody"`
 				TaskIndictment   *string `json:"task_indictment"`
 				TaskCounter      *string `json:"task_counter"`
@@ -534,6 +536,9 @@ func main() {
 				}
 				if req.JudgeCynical != nil {
 					next.Prompts.JudgeCynical = *req.JudgeCynical
+				}
+				if req.Prosecutor != nil {
+					next.Prompts.Prosecutor = *req.Prosecutor
 				}
 				if req.Prosody != nil {
 					next.Prompts.Prosody = *req.Prosody
@@ -990,6 +995,11 @@ func main() {
 				return
 			}
 			defendant = authors[rand.Intn(len(authors))]
+			// dice roll: the streamer himself lands on the bench vs the prosecutor
+			if chance := cfg.Load().Courtroom.StreamerChance; chance > 0 && rand.Float64() < chance {
+				viewer = false
+				defendant = cfg.Load().Game.StreamerName
+			}
 		}
 		if defendant == "" {
 			http.Error(w, "no defendant", http.StatusConflict)
@@ -1402,6 +1412,7 @@ func main() {
 				"testimony_sec":      cfg.Load().Courtroom.TestimonySec,
 				"sue_threshold":      cfg.Load().Courtroom.SueThreshold,
 				"sue_window_sec":     cfg.Load().Courtroom.SueWindowSec,
+				"streamer_chance":    cfg.Load().Courtroom.StreamerChance,
 				"articles":           cfg.Load().Courtroom.Articles,
 			})
 		case http.MethodPut:
@@ -1422,6 +1433,7 @@ func main() {
 				TestimonySec     *int               `json:"testimony_sec"`
 				SueThreshold     *int               `json:"sue_threshold"`
 				SueWindowSec     *int               `json:"sue_window_sec"`
+				StreamerChance   *float64           `json:"streamer_chance"`
 				Articles         []string           `json:"articles"`
 			}
 			if err := decodeJSON(w, r, &req); err != nil {
@@ -1455,9 +1467,12 @@ func main() {
 				next.Courtroom.Articles = req.Articles
 			}
 			if req.JudgeStyle != nil {
-				if *req.JudgeStyle == "cynical" {
+				switch *req.JudgeStyle {
+				case "cynical":
 					next.Courtroom.JudgeStyle = "cynical"
-				} else {
+				case "random":
+					next.Courtroom.JudgeStyle = "random"
+				default:
 					next.Courtroom.JudgeStyle = "strict"
 				}
 			}
@@ -1472,6 +1487,9 @@ func main() {
 			}
 			if req.SueWindowSec != nil && *req.SueWindowSec >= 60 && *req.SueWindowSec <= 3600 {
 				next.Courtroom.SueWindowSec = *req.SueWindowSec
+			}
+			if req.StreamerChance != nil && *req.StreamerChance >= 0 && *req.StreamerChance <= 1 {
+				next.Courtroom.StreamerChance = *req.StreamerChance
 			}
 			if !publish(w, next) {
 				return
@@ -1490,6 +1508,7 @@ func main() {
 				"testimony_sec":      next.Courtroom.TestimonySec,
 				"sue_threshold":      next.Courtroom.SueThreshold,
 				"sue_window_sec":     next.Courtroom.SueWindowSec,
+				"streamer_chance":    next.Courtroom.StreamerChance,
 				"articles":           next.Courtroom.Articles,
 			})
 		default:
