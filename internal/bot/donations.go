@@ -96,31 +96,3 @@ func (d *Deck) Draw() string {
 	}
 	return d.items[n.Int64()]
 }
-
-// Pending keeps latest queued donation while court is busy
-type Pending struct {
-	mu      sync.Mutex
-	event   DonationEvent
-	has     bool
-	dropped int
-}
-
-func (p *Pending) Push(d DonationEvent) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.has {
-		p.dropped++
-	}
-	p.event = d
-	p.has = true
-}
-
-func (p *Pending) Pop() (DonationEvent, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if !p.has {
-		return DonationEvent{}, false
-	}
-	p.has = false
-	return p.event, true
-}

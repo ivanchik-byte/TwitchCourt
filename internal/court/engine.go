@@ -77,7 +77,7 @@ type Engine struct {
 	aiClient    *ai.Client
 	voice       audio.Synthesizer
 	filter      *safety.Filter
-	recall      *memory.Store
+	recall      atomic.Pointer[memory.Store]
 	deck        *bot.Deck
 	VerdictHook func(verdict, penalty string, guilty, innocent int, twist string)
 	// TimeoutHook jails or bans a convicted viewer; wired to Twitch chat in main
@@ -103,10 +103,10 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 		aiClient:          aiClient,
 		voice:             voice,
 		filter:            filter,
-		recall:            memory.NewStore(""),
 		state:             StateIdle,
 		pendingPunishment: Punishment{Kind: "timeout", Secs: 90},
 	}
+	e.recall.Store(memory.NewStore(""))
 	if cfg != nil {
 		e.cfg.Store(cfg)
 	} else {
@@ -165,7 +165,7 @@ func (e *Engine) AttachMemory(store *memory.Store) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if store != nil {
-		e.recall = store
+		e.recall.Store(store)
 	}
 }
 
@@ -321,8 +321,8 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 	defer e.finishTrial(gen)
 
 	smart := ""
-	if e.recall != nil {
-		smart = e.recall.SmartContext(c.Defendant)
+	if e.recall.Load() != nil {
+		smart = e.recall.Load().SmartContext(c.Defendant)
 	}
 	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart, e.cfg.Load().Prompts.TaskIndictment)
 	messages := []ai.ChatMessage{
@@ -578,9 +578,9 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 			parts = append(parts, t)
 		}
 	}
-	if e.recall != nil {
+	if e.recall.Load() != nil {
 		var snitches []string
-		for _, l := range e.recall.RecentComments(10) {
+		for _, l := range e.recall.Load().RecentComments(10) {
 			text := strings.TrimSpace(html.UnescapeString(l.Text))
 			if !strings.HasPrefix(strings.ToLower(text), "!snitch") {
 				continue
@@ -763,10 +763,10 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 
 // fallbackDefense feeds recent chat lines when the streamer stayed silent
 func (e *Engine) fallbackDefense() string {
-	if e.recall == nil {
+	if e.recall.Load() == nil {
 		return e.cfg.Load().Courtroom.SilentDefense
 	}
-	lines := e.recall.RecentComments(3)
+	lines := e.recall.Load().RecentComments(3)
 	parts := make([]string, 0, len(lines))
 	for _, l := range lines {
 		author := l.Author
@@ -835,8 +835,8 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 		Text:    shown,
 	})
 
-	if e.recall != nil {
-		e.recall.AddSpeechLine(shown)
+	if e.recall.Load() != nil {
+		e.recall.Load().AddSpeechLine(shown)
 	}
 
 	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -881,12 +881,12 @@ func (e *Engine) Say(text string) {
 }
 
 func (e *Engine) AddChatComment(author, text string) {
-	if e.recall == nil {
+	if e.recall.Load() == nil {
 		return
 	}
 	cleanAuthor := e.filter.Sanitize(author)
 	cleanText := e.filter.Sanitize(text)
-	e.recall.AddComment(cleanAuthor, cleanText)
+	e.recall.Load().AddComment(cleanAuthor, cleanText)
 }
 
 // AddWitness queues testimony; returns false when no trial is active
@@ -923,8 +923,8 @@ func (e *Engine) addWitness(donor string, amount float64, currency, message stri
 		e.currCase.Witnesses = e.currCase.Witnesses[len(e.currCase.Witnesses)-maxWitnesses:]
 	}
 
-	if e.recall != nil {
-		e.recall.AddComment(cleanDonor, "свидетель: "+w.Message)
+	if e.recall.Load() != nil {
+		e.recall.Load().AddComment(cleanDonor, "свидетель: "+w.Message)
 	}
 	return true
 }
@@ -1060,16 +1060,16 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 	}
 	e.mu.Unlock()
 
-	if e.recall != nil {
+	if e.recall.Load() != nil {
 		summary := ""
-		if lines := e.recall.RecentComments(3); len(lines) > 0 {
+		if lines := e.recall.Load().RecentComments(3); len(lines) > 0 {
 			last := lines[len(lines)-1].Text
 			if len([]rune(last)) > 140 {
 				last = string([]rune(last)[:140]) + "..."
 			}
 			summary = last
 		}
-		e.recall.AddTrial(memory.TrialRecord{
+		e.recall.Load().AddTrial(memory.TrialRecord{
 			Defendant: defendant,
 			Crime:     crime,
 			Verdict:   verdictStr,
@@ -1078,10 +1078,10 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 			Witnesses: witnessCount,
 			Summary:   summary,
 		})
-		if e.recall.OffenderCount(defendant) == 3 {
-			e.recall.NoteForAI(defendant + " в третий раз на скамье, зал помнит все прошлые выходки")
+		if e.recall.Load().OffenderCount(defendant) == 3 {
+			e.recall.Load().NoteForAI(defendant + " в третий раз на скамье, зал помнит все прошлые выходки")
 		}
-		e.recall.ClearTranscript()
+		e.recall.Load().ClearTranscript()
 	}
 
 	// the ruling itself was spoken during deliberation: only the penalty lands now

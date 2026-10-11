@@ -384,7 +384,7 @@ func (s *Store) load() {
 		Comments     []Comment               `json:"comments"`
 	}
 	if err := json.Unmarshal(raw, &dump); err != nil {
-		_ = os.WriteFile(s.path+".bak", raw, 0o644)
+		_ = os.WriteFile(s.path+".bak", raw, 0o600)
 		return
 	}
 	s.trials = dump.Trials
@@ -436,7 +436,7 @@ func (s *Store) save() {
 	}
 	_ = os.MkdirAll(filepath.Dir(s.path), 0o755)
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return
 	}
 	_ = os.Rename(tmp, s.path)

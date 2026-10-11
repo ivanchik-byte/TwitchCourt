@@ -16,9 +16,9 @@ import (
 func newWitnessEngine() *Engine {
 	e := &Engine{
 		filter: safety.NewFilter(nil),
-		recall: memory.NewStore(""),
 		state:  StateIdle,
 	}
+	e.recall.Store(memory.NewStore(""))
 	e.SwapConfig(config.DefaultConfig())
 	return e
 }
@@ -147,7 +147,7 @@ func TestFallbackDefense(t *testing.T) {
 	if got := e.fallbackDefense(); got != "молчит как партизан" {
 		t.Fatalf("empty transcript fallback: %q", got)
 	}
-	e.recall.AddComment("ivan", "он точно сам в лаву прыгнул")
+	e.recall.Load().AddComment("ivan", "он точно сам в лаву прыгнул")
 	if got := e.fallbackDefense(); !strings.Contains(got, "ivan") {
 		t.Fatalf("fallback misses chat: %q", got)
 	}

@@ -18,6 +18,30 @@ func wavFixture() []byte {
 	return buf
 }
 
+func TestSileroDefaultVoice(t *testing.T) {
+	s := NewSileroSynthesizer("http://127.0.0.1:9", "")
+	var gotSpeaker string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Speaker string `json:"speaker"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		gotSpeaker = req.Speaker
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Write(wavFixture())
+	}))
+	defer server.Close()
+	s = NewSileroSynthesizer(server.URL, "")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := s.Synthesize(ctx, "тест"); err != nil {
+		t.Fatal(err)
+	}
+	if gotSpeaker != "kseniya" {
+		t.Fatalf("default silero voice must be kseniya, got %q", gotSpeaker)
+	}
+}
+
 func TestSileroRoundtrip(t *testing.T) {
 	var gotSpeaker, gotText string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

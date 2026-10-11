@@ -265,7 +265,7 @@ func slug(s string) string {
 
 // LoadCases attaches the case deck file to the engine.
 func (e *Engine) LoadCases(path string) error {
-	deck := NewCaseDeck(path, e.recall)
+	deck := NewCaseDeck(path, e.recall.Load())
 	if err := deck.Reload(); err != nil {
 		return err
 	}
@@ -284,7 +284,8 @@ func (e *Engine) CaseDeck() *CaseDeck {
 
 // RecentAuthors lists distinct chat authors, most recent first.
 func (e *Engine) RecentAuthors(n int) []string {
-	if e.recall == nil {
+	recall := e.recall.Load()
+	if recall == nil {
 		return nil
 	}
 	cfg := e.cfg.Load()
@@ -294,7 +295,7 @@ func (e *Engine) RecentAuthors(n int) []string {
 			skip[strings.ToLower(s)] = true
 		}
 	}
-	comments := e.recall.RecentComments(50)
+	comments := recall.RecentComments(50)
 	seen := map[string]bool{}
 	var out []string
 	for i := len(comments) - 1; i >= 0; i-- {

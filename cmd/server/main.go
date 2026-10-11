@@ -343,6 +343,34 @@ func main() {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
+	mux.HandleFunc("/api/defense", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !checkHTTPAuth(cfg.Load(), r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Author string `json:"author"`
+			Text   string `json:"text"`
+		}
+		if err := decodeJSON(w, r, &req); err != nil || req.Text == "" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.Author == "" {
+			req.Author = "стример"
+		}
+		if !limiter.allow("defense:" + req.Author) {
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"accepted": engine.AddDefense(req.Author, truncateRunes(req.Text, 600))})
+	})
+
 	mux.HandleFunc("/api/profile", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.Method {

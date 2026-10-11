@@ -52,22 +52,6 @@ func TestDeck(t *testing.T) {
 	}
 }
 
-func TestPending(t *testing.T) {
-	var p Pending
-	if _, ok := p.Pop(); ok {
-		t.Fatal("empty pending must pop nothing")
-	}
-	p.Push(DonationEvent{Donor: "a", Amount: 100})
-	p.Push(DonationEvent{Donor: "b", Amount: 200})
-	got, ok := p.Pop()
-	if !ok || got.Donor != "b" {
-		t.Fatalf("latest must win, got %+v", got)
-	}
-	if _, ok := p.Pop(); ok {
-		t.Fatal("queue holds one slot only")
-	}
-}
-
 func TestParseHandshakeSID(t *testing.T) {
 	open := `0{"sid":"abc123","upgrades":["websocket"],"pingInterval":25000,"pingTimeout":5000}`
 	body := itoa(len(open)) + ":" + open + "2:40"
