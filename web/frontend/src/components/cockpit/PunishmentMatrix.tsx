@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/cn'
-import { apiGet } from '../../lib/api'
+import { apiGet, apiPost, apiNote } from '../../lib/api'
 import { useTribunalFeed, useTribunalPhase } from '../../tribunal/TribunalContext'
 import { useBan, usePunishWithToast } from './usePunish'
 
@@ -26,6 +26,18 @@ export function PunishmentMatrix() {
       dead = true
     }
   }, [t.verdict])
+
+  // instant execution against the convict on the bench (ban_confirm safe)
+  const execute = async (action: 'ban' | 'timeout' | 'pardon', secs?: number) => {
+    if (!t.defendant) {
+      toast.error('Скамья пуста')
+      return
+    }
+    if (action === 'ban' && !window.confirm(`Забанить ${t.defendant} в Twitch?`)) return
+    const r = await apiPost('/api/moderate', { user: t.defendant, action, secs: secs ?? 0 })
+    if (r.ok) toast.success('Исполнено')
+    else toast.error(`Не исполнено: ${apiNote(r.status)}`)
+  }
 
   return (
     <section className="card flex min-h-0 flex-col gap-2 p-3" aria-label="Меры воздействия">
@@ -76,6 +88,22 @@ export function PunishmentMatrix() {
             {typeof t.verdict.witnesses === 'number' && t.verdict.witnesses > 0 && ` · свид. ${t.verdict.witnesses}`}
           </span>
           {t.verdict.twist && <span className="block text-xs text-zinc-400">{t.verdict.twist}</span>}
+          {t.verdict.verdict === 'ВИНОВЕН' && t.defendant && (
+            <span className="mt-2 flex flex-wrap gap-1.5">
+              <button onClick={() => void execute('ban')} className="pressable rounded-md border border-red-400/30 bg-red-400/10 px-2 py-1 text-xs">
+                Забанить в Twitch
+              </button>
+              <button onClick={() => void execute('timeout', 60)} className="pressable rounded-md border border-white/10 px-2 py-1 text-xs">
+                Мут 60 с
+              </button>
+              <button onClick={() => void execute('timeout', 300)} className="pressable rounded-md border border-white/10 px-2 py-1 text-xs">
+                Мут 5 мин
+              </button>
+              <button onClick={() => void execute('pardon')} className="pressable rounded-md border border-emerald-400/30 px-2 py-1 text-xs">
+                Помиловать
+              </button>
+            </span>
+          )}
         </div>
       )}
       <p className="text-[11px] uppercase tracking-widest text-zinc-500">Протокол</p>
