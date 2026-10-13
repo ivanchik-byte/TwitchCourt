@@ -15,7 +15,6 @@ var judgePhotoExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
 }
 
-// single judge portrait for the whole tribunal
 func judgePhotoPath() string {
 	if _, err := os.Stat(filepath.Join("data", "judge.png")); err == nil {
 		return filepath.Join("data", "judge.png")
@@ -23,7 +22,6 @@ func judgePhotoPath() string {
 	return filepath.Join("data", "judge.jpg")
 }
 
-// fallback to the embedded default portrait
 func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(judgePhotoPath()); err == nil {
 		serveImageFile(w, r, judgePhotoPath(), "")
@@ -55,7 +53,6 @@ func serveImageFile(w http.ResponseWriter, r *http.Request, dataPath, embedPath 
 	w.Write(raw)
 }
 
-// saveUpload stores a validated image upload, capping size before buffering.
 func saveUpload(r *http.Request, maxMB int, dest string) error {
 	file, header, err := r.FormFile("photo")
 	if err != nil {
@@ -95,12 +92,10 @@ func saveUpload(r *http.Request, maxMB int, dest string) error {
 	return os.Rename(tmp.Name(), dest)
 }
 
-// saveJudgePhoto stores the uploaded judge portrait, max 5 MB, images only.
 func saveJudgePhoto(r *http.Request) error {
 	return saveUpload(r, 5, judgePhotoPath())
 }
 
-// court background: single hall photo, replaceable from settings
 func courtBgPath() string {
 	return filepath.Join("data", "court_bg.jpg")
 }

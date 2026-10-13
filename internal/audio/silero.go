@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// SileroSynthesizer connects to local Python Silero sidecar over HTTP.
 type SileroSynthesizer struct {
 	mu    sync.RWMutex
 	url   string

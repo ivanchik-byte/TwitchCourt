@@ -9,11 +9,10 @@ import (
 	"stream-tribunal/internal/tmpl"
 )
 
-// validNick gates moderation targets: Twitch logins only, no IRC smuggling.
+// validNick validates Twitch username format.
 var validNick = regexp.MustCompile(`^[A-Za-z0-9_]{3,25}$`)
 
-// isBribe spots donor money worth the bench's attention: a hint in words
-// or a sum big enough to notice. Deliberately loose, the judge decides.
+// isBribe checks if a donation qualifies as a bribe attempt.
 func isBribe(cfg *config.Config, amount float64, message string) bool {
 	lower := strings.ToLower(message)
 	for _, w := range cfg.Safety.BribeWords {
@@ -25,7 +24,6 @@ func isBribe(cfg *config.Config, amount float64, message string) bool {
 	return cfg.Donations.BribeMin > 0 && amount >= cfg.Donations.BribeMin
 }
 
-// openDonationTrial maps donation amount to a trial; streamer trial takes priority
 func openDonationTrial(cfg *config.Config, open func(defendant, crime, context string) bool, donor string, amount float64, currency, message string) {
 	msg := strings.TrimSpace(message)
 	vars := map[string]string{"message": msg}
@@ -38,7 +36,6 @@ func openDonationTrial(cfg *config.Config, open func(defendant, crime, context s
 	switch {
 	case cfg.Donations.StreamerTrialMin > 0 && amount >= cfg.Donations.StreamerTrialMin,
 		cfg.Donations.PlatinumMin > 0 && amount >= cfg.Donations.PlatinumMin:
-		// big money puts the streamer on the bench (documented behavior)
 		if crime == "" {
 			crime = tmpl.Fill(cfg.Chat.DonateStreamer, vars)
 		}

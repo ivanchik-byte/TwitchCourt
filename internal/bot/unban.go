@@ -52,7 +52,6 @@ func (c *UnbanClient) headers(req *http.Request) {
 	req.Header.Set("Client-Id", c.clientID)
 }
 
-// FetchPending returns appeals awaiting a verdict, walking Helix pages.
 func (c *UnbanClient) FetchPending(ctx context.Context) ([]UnbanRequest, error) {
 	if !c.configured() {
 		return nil, fmt.Errorf("unban court not configured")
@@ -130,7 +129,6 @@ func (c *UnbanClient) fetchPage(ctx context.Context, query url.Values) ([]UnbanR
 	return out, envelope.Pagination.Cursor, nil
 }
 
-// Resolve approves or denies one appeal; the verdict lands on Twitch at once.
 func (c *UnbanClient) Resolve(ctx context.Context, id string, approve bool, resolutionText string) error {
 	if !c.configured() {
 		return fmt.Errorf("unban court not configured")

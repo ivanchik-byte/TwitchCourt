@@ -37,7 +37,6 @@ func buildSynthesizer(cfg *config.Config) audio.Synthesizer {
 	}
 }
 
-// ttsIsBeep checks if current tts configuration defaults to mock signal.
 func ttsIsBeep(cfg *config.Config) bool {
 	if !cfg.TTS.Enabled {
 		return true

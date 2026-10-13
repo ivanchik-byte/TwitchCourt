@@ -24,7 +24,7 @@ const (
 	edgeUserAgent  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0"
 )
 
-// breakTagRe matches our own pause tags, user input stays escaped
+// breakTagRe matches pause tags in escaped text.
 var breakTagRe = regexp.MustCompile(`&lt;break time=&#34;(\d{1,4})ms&#34;/&gt;`)
 
 // rawBreakRe matches break pause tags before xml escaping
@@ -33,7 +33,7 @@ var rawBreakRe = regexp.MustCompile(`(?i)<break(\s+time="(\d{1,4})ms")?\s*/?>`)
 var rawBreakMs = regexp.MustCompile(`(\d{1,4})ms`)
 
 func ssmlBody(text, voice, rate, volume, pitch string) string {
-	// stress pluses are a Silero accent trick: Edge would read them aloud
+	// strip Silero stress marks for Edge TTS
 	cleaned := strings.ReplaceAll(strings.TrimSpace(text), "+", "")
 	cleaned = rawBreakRe.ReplaceAllStringFunc(cleaned, func(tag string) string {
 		ms := "300"
@@ -80,7 +80,7 @@ func shiftPitch(pitch string, delta int) string {
 	return fmt.Sprintf("%+dHz", base+delta)
 }
 
-// secMSGEC reproduces Edge token: SHA256 hex of 5-min Windows ticks + token
+// secMSGEC computes Edge Sec-MS-GEC token.
 func secMSGEC() string {
 	ticks := float64(time.Now().UTC().Unix()) + 11644473600
 	ticks = math.Floor(ticks/300) * 300
@@ -97,7 +97,6 @@ func edgeTimestamp() string {
 	return time.Now().UTC().Format("Mon Jan 02 2006 15:04:05 GMT+0000 (Coordinated Universal Time)")
 }
 
-// directSynthesize sends raw SSML directly to preserve <break> pause tags
 func directSynthesize(ctx context.Context, text, voice, rate, volume, pitch string) ([]byte, error) {
 	url := edgeWSSURL + "&Sec-MS-GEC=" + secMSGEC() +
 		"&Sec-MS-GEC-Version=" + edgeGECVersion +

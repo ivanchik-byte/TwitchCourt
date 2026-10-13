@@ -14,7 +14,6 @@ import (
 	"stream-tribunal/internal/memory"
 )
 
-// CaseCard is one playable trial from the deck file.
 type CaseCard struct {
 	ID             string   `yaml:"id" json:"id"`
 	Title          string   `yaml:"title" json:"title"`
@@ -27,8 +26,7 @@ type CaseCard struct {
 	Source         string   `yaml:"source,omitempty" json:"source,omitempty"`
 }
 
-// CaseDeck is a shuffle-bag over the deck file: no repeats until reset.
-// Used ids persist in memory.json, so repeats survive restarts too.
+// CaseDeck tracks remaining case cards and persists used IDs across restarts.
 type CaseDeck struct {
 	mu        sync.Mutex
 	path      string
@@ -46,7 +44,6 @@ func (d *CaseDeck) Path() string {
 	return d.path
 }
 
-// Reload re-reads the file and rebuilds the remaining pile minus used ids.
 func (d *CaseDeck) Reload() error {
 	d.fileMu.Lock()
 	raw, err := os.ReadFile(d.path)
@@ -96,7 +93,6 @@ func (d *CaseDeck) Reload() error {
 	return nil
 }
 
-// Draw pops one unplayed case and marks it used.
 func (d *CaseDeck) Draw() (CaseCard, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -111,7 +107,6 @@ func (d *CaseDeck) Draw() (CaseCard, bool) {
 	return card, true
 }
 
-// Remaining counts draws left before the bag runs out.
 func (d *CaseDeck) Remaining() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -122,14 +117,12 @@ func (d *CaseDeck) Remaining() int {
 	return len(seen)
 }
 
-// List returns every card in file order.
 func (d *CaseDeck) List() []CaseCard {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return append([]CaseCard(nil), d.all...)
 }
 
-// Return puts a drawn card back on top and unmarks it used.
 func (d *CaseDeck) Return(card CaseCard) {
 	if card.ID == "" {
 		return
@@ -142,7 +135,6 @@ func (d *CaseDeck) Return(card CaseCard) {
 	}
 }
 
-// Reset clears used ids and reshuffles the full deck.
 func (d *CaseDeck) Reset() {
 	if d.recall != nil {
 		d.recall.ResetUsedCases()
@@ -150,7 +142,6 @@ func (d *CaseDeck) Reset() {
 	_ = d.Reload()
 }
 
-// Add appends one card to the file, preserving hand-written comments.
 func (d *CaseDeck) Add(title, crime, context string, tags []string, source string) (CaseCard, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -201,7 +192,6 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 	return card, nil
 }
 
-// Delete drops one card by id, rewriting the file.
 func (d *CaseDeck) Delete(id string) error {
 	d.mu.Lock()
 	kept := make([]CaseCard, 0, len(d.all))
@@ -263,7 +253,6 @@ func slug(s string) string {
 	return out
 }
 
-// LoadCases attaches the case deck file to the engine.
 func (e *Engine) LoadCases(path string) error {
 	deck := NewCaseDeck(path, e.recall.Load())
 	if err := deck.Reload(); err != nil {
@@ -275,14 +264,12 @@ func (e *Engine) LoadCases(path string) error {
 	return nil
 }
 
-// CaseDeck returns the attached deck, if any.
 func (e *Engine) CaseDeck() *CaseDeck {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.cases
 }
 
-// RecentAuthors lists distinct chat authors, most recent first.
 func (e *Engine) RecentAuthors(n int) []string {
 	recall := e.recall.Load()
 	if recall == nil {

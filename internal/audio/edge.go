@@ -33,7 +33,6 @@ func NewEdgeSynthesizer(voice, rate, volume, pitch string) *EdgeSynthesizer {
 	return &EdgeSynthesizer{voice: voice, rate: rate, volume: volume, pitch: pitch}
 }
 
-// SetVoiceProfile switches voice and rate for subsequent syntheses
 func (s *EdgeSynthesizer) SetVoiceProfile(voice, rate string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

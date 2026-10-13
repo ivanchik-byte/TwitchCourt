@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// EventSubWatcher listens to bits cheers (requires bits:read scope)
+// EventSubWatcher listens for bits cheer events.
 type EventSubWatcher struct {
 	token         string
 	clientID      string

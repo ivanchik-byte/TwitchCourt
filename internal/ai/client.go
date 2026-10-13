@@ -56,8 +56,7 @@ func NewClient(cfg config.AIConfig) (*Client, error) {
 	return client, nil
 }
 
-// ResolveEndpoint resolves the chat-completions URL: explicit base_url
-// wins, then known providers, otherwise an error (never a silent default).
+// ResolveEndpoint returns the chat completions URL for the configured provider.
 func ResolveEndpoint(provider, baseURL string) (string, error) {
 	if strings.TrimSpace(baseURL) != "" {
 		base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
@@ -81,8 +80,7 @@ func ResolveEndpoint(provider, baseURL string) (string, error) {
 	}
 }
 
-// mergeExtraBody injects router params into the request root.
-// Standard fields always win on conflict.
+// mergeExtraBody injects extra params without overwriting standard fields.
 func mergeExtraBody(raw []byte, extra map[string]any) ([]byte, error) {
 	if len(extra) == 0 {
 		return raw, nil
@@ -99,8 +97,7 @@ func mergeExtraBody(raw []byte, extra map[string]any) ([]byte, error) {
 	return json.Marshal(body)
 }
 
-// Configured reports whether the court can reach a real model:
-// an API key, an explicit base_url, or local Ollama.
+// Configured reports whether a model provider is set up.
 func (c *Client) Configured() bool {
 	if c == nil {
 		return false
@@ -189,7 +186,6 @@ func (c *Client) StreamCompletion(ctx context.Context, messages []ChatMessage, o
 	return nil
 }
 
-// singleCompletion is the non-streaming fallback for providers without SSE
 func (c *Client) singleCompletion(ctx context.Context, messages []ChatMessage, onDelta func(string) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()

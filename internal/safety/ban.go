@@ -5,10 +5,7 @@ import (
 	"regexp"
 )
 
-// bannedRoots is the hard TOS line: generated cases with a hit are dropped,
-// donations with a hit are kept but flagged for the bench to condemn.
-// Gray topics pass by design. This list stays in code, not in user config:
-// loosening it must be a deliberate code change, not a settings typo.
+// Hard TOS patterns rejected by safety checks.
 var bannedFragments = []string{
 	`убийств[\p{L}]*`,
 	`зареж[\p{L}]*`, `приреж[\p{L}]*`, `расчлен[\p{L}]*`,

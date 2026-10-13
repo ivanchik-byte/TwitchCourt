@@ -45,14 +45,11 @@ type TrialCase struct {
 	Viewer      string
 	Testimony   []string
 	Bribe       *BribeOffer
-	// Prosecutor marks trials where the AI prosecutor leads the charge
-	// (indictment + objection); the judge still rules. Unban trials keep
-	// their own framing and set this false.
+	// Prosecutor marks trials where the AI prosecutor leads the charge.
 	Prosecutor bool
 }
 
-// BribeOffer is donor money on the table: the bench decides what to do
-// with it (take, refuse, or punish the cheapskate), never a keyword flip.
+// BribeOffer represents donor money offered during a trial.
 type BribeOffer struct {
 	Donor    string
 	Amount   float64
@@ -60,7 +57,6 @@ type BribeOffer struct {
 	Message  string
 }
 
-// Witness represents a donation queued as trial testimony.
 type Witness struct {
 	Donor    string
 	Amount   float64
@@ -255,9 +251,7 @@ func (e *Engine) StartViewerTrial(viewer, crime string) error {
 	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
 }
 
-// StartCaseTrial opens a trial from a deck card: full details go to the bench.
-// viewer=true keeps the opt-in punishment path for viewer defendants;
-// viewer=false means the streamer is on the bench with a prosecutor on his tail.
+// StartCaseTrial opens a trial from a deck card; viewer selects target mode.
 func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) error {
 	context := strings.TrimSpace(card.Context)
 	if d := strings.TrimSpace(card.Details); d != "" {
@@ -272,8 +266,7 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 	return e.startTrialWithMode(defendant, card.Crime, context, "", true)
 }
 
-// StartUnbanTrial opens an unban pardon trial with its own role framing:
-// the bench defends, the streamer attacks from the mic.
+// StartUnbanTrial opens an unban pardon hearing.
 func (e *Engine) StartUnbanTrial(user, appeal string) error {
 	crime := "Апелляция на разбан: " + appeal
 	chatContext := "UNBAN-ТРИБУНАЛ. Подсудимого нет в чате. " +
@@ -329,9 +322,7 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 	return nil
 }
 
-// accuserSystem picks the voice that leads the charge: the prosecutor
-// in streamer trials, the judge everywhere else. Deliberation always
-// stays with the judge as arbiter.
+// accuserSystem selects whether prosecutor or judge leads the accusation.
 func (e *Engine) accuserSystem(c *TrialCase) string {
 	if c.Prosecutor {
 		return ai.ProsecutorFor(e.cfg.Load().Prompts).System
@@ -521,7 +512,7 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 	chunker := ai.NewPhaseChunker("objection")
 	index := startIndex
 
-	// slow TTS must not block the SSE reader, or the 15s budget burns and the verdict parses undecided
+	// decouple TTS playback from SSE reader to avoid timeouts
 	type queued struct {
 		chunk ai.SentenceChunk
 		index int
@@ -883,8 +874,7 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 	return nil
 }
 
-// Say speaks immediately using the judge voice (gavel interjections).
-// Interjections serialize among themselves and never claim stream end.
+// Say plays an immediate judge interjection.
 func (e *Engine) Say(text string) {
 	clean := e.filter.Sanitize(text)
 	if clean == "" {
@@ -999,8 +989,7 @@ func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	return e.buildWitnessInterlude(c.Witnesses)
 }
 
-// AddBribe puts donor money on the table; first offer per trial wins.
-// The bench judges the offer, it never flips the verdict by itself.
+// AddBribe records the first bribe offer for the active trial.
 func (e *Engine) AddBribe(donor string, amount float64, currency, message string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()

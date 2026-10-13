@@ -80,9 +80,7 @@ type genCase struct {
 	Context string `json:"context"`
 }
 
-// StartConfessionTrial invents a funny absurd case from the viewer's own
-// description and puts him on the bench with it. Banned topics are refused.
-// If the bench is busy, the invented charge waits in the pool.
+// StartConfessionTrial generates a case from viewer description and places them on the bench.
 func (e *Engine) StartConfessionTrial(author, description string) error {
 	description = strings.TrimSpace(description)
 	if description == "" {
@@ -136,8 +134,7 @@ func (e *Engine) StartConfessionTrial(author, description string) error {
 	return nil
 }
 
-// GenerateCases asks the model for fresh cases, filters and stores them.
-// Banned topics are dropped silently; gray topics pass by design.
+// GenerateCases requests fresh cases from the model, filters and saves them.
 func (e *Engine) GenerateCases(count int) (int, error) {
 	deck := e.CaseDeck()
 	if deck == nil {
@@ -230,21 +227,18 @@ func (e *Engine) GenerateCases(count int) (int, error) {
 	return added, nil
 }
 
-// GenJob tracks one background generation batch.
 type GenJob struct {
 	Running bool   `json:"running"`
 	Added   int    `json:"added"`
 	Error   string `json:"error,omitempty"`
 }
 
-// GenStatus snapshots the background job.
 func (e *Engine) GenStatus() GenJob {
 	e.genMu.Lock()
 	defer e.genMu.Unlock()
 	return e.genJob
 }
 
-// GenerateCasesAsync starts one background batch; false = already running.
 func (e *Engine) GenerateCasesAsync(count int) bool {
 	e.genMu.Lock()
 	if e.genJob.Running {
@@ -267,8 +261,6 @@ func (e *Engine) GenerateCasesAsync(count int) bool {
 	return true
 }
 
-// EnsureRefill tops the deck up in background when it runs low.
-// Draw never waits for it.
 func (e *Engine) EnsureRefill() {
 	deck := e.CaseDeck()
 	if deck == nil {

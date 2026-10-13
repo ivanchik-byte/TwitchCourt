@@ -72,7 +72,6 @@ func TestActionLimiter(t *testing.T) {
 func TestActionLimiterPruning(t *testing.T) {
 	limiter := newActionLimiter(time.Millisecond)
 
-	// Populate map beyond 4096 entries
 	for i := 0; i < 4100; i++ {
 		key := string(rune('a' + (i % 26))) + string(rune(i))
 		limiter.last[key] = time.Now().Add(-time.Hour)
@@ -118,7 +117,6 @@ func TestDecodeJSON(t *testing.T) {
 		Age  int    `json:"age"`
 	}
 
-	// Valid payload
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"alice","age":30}`))
 	var val payload
@@ -129,13 +127,11 @@ func TestDecodeJSON(t *testing.T) {
 		t.Fatalf("decodeJSON parsed unexpected value: %+v", val)
 	}
 
-	// Disallowed unknown fields
 	reqExtra := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"alice","unknown":true}`))
 	if err := decodeJSON(w, reqExtra, &val); err == nil {
 		t.Fatal("decodeJSON must fail on unknown fields")
 	}
 
-	// Oversized body (> 64KB)
 	largeBody := bytes.Repeat([]byte("a"), 70*1024)
 	reqLarge := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(largeBody))
 	if err := decodeJSON(w, reqLarge, &val); err == nil {
@@ -151,7 +147,6 @@ func TestSPAHandler(t *testing.T) {
 
 	handler := spaHandler(mockFS)
 
-	// Direct asset request
 	reqAsset := httptest.NewRequest(http.MethodGet, "/assets/style.css", nil)
 	recAsset := httptest.NewRecorder()
 	handler.ServeHTTP(recAsset, reqAsset)
@@ -162,7 +157,6 @@ func TestSPAHandler(t *testing.T) {
 		t.Fatalf("unexpected asset body: %s", recAsset.Body.String())
 	}
 
-	// SPA route fallback to index.html
 	reqSPA := httptest.NewRequest(http.MethodGet, "/cockpit/bench", nil)
 	recSPA := httptest.NewRecorder()
 	handler.ServeHTTP(recSPA, reqSPA)
@@ -173,7 +167,6 @@ func TestSPAHandler(t *testing.T) {
 		t.Fatalf("expected index.html fallback, got %s", recSPA.Body.String())
 	}
 
-	// API and WS paths must 404
 	for _, p := range []string{"/api/court/state", "/ws/feed"} {
 		req404 := httptest.NewRequest(http.MethodGet, p, nil)
 		rec404 := httptest.NewRecorder()

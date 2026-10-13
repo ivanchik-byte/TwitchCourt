@@ -6,7 +6,7 @@ import (
 	"log"
 )
 
-// AutoSynthesizer cascades primary -> secondary synthesizer on error
+// AutoSynthesizer fails over from primary to secondary synthesizer.
 type AutoSynthesizer struct {
 	primary   Synthesizer
 	secondary Synthesizer

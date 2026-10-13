@@ -13,8 +13,7 @@ type JudgeStyle struct {
 	System string
 }
 
-// JudgeFor picks the bench voice; unknown styles fall back to strict.
-// Persona texts come from config, brevity cap and prosody are appended here.
+// JudgeFor resolves the judge persona prompt, falling back to strict.
 func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
 	name := strings.ToLower(strings.TrimSpace(style))
 	if name == "random" {
@@ -41,8 +40,7 @@ func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
 	}
 }
 
-// ProsecutorFor builds the bench voice that exists to convict the streamer.
-// Same format invariants as the judge: tone is configurable, rules are not.
+// ProsecutorFor resolves the prosecutor persona prompt.
 func ProsecutorFor(prompts config.PromptsConfig) JudgeStyle {
 	system := prompts.Prosecutor
 	if system == "" {

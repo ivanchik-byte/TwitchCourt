@@ -22,7 +22,6 @@ type Donation struct {
 	Message  string
 }
 
-// DonationsWatcher connects to DonationAlerts via widget token.
 type DonationsWatcher struct {
 	token string
 	emit  func(Donation)

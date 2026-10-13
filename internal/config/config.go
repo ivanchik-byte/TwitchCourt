@@ -113,8 +113,7 @@ type ChatConfig struct {
 	StreamerCrime  string `yaml:"streamer_crime"`
 }
 
-// PromptsConfig holds the editable persona side of the court.
-// Format invariants (verdict keyword, limits, animation tags) stay in code.
+// PromptsConfig holds customizable courtroom persona prompts.
 type PromptsConfig struct {
 	JudgeStrict      string `yaml:"judge_strict"`
 	JudgeCynical     string `yaml:"judge_cynical"`
@@ -129,8 +128,7 @@ type PromptsConfig struct {
 	Confession       string `yaml:"confession"`
 }
 
-// DefaultPrompts is the strong built-in bench: editable persona side.
-// Format invariants (verdict keyword, limits, animation tags) live in code.
+// DefaultPrompts returns the default courtroom personas.
 func DefaultPrompts() PromptsConfig {
 	return PromptsConfig{
 		JudgeStrict: `Ты Верховный Судья трибунала. Сухой, педантичный, неподкупный.
@@ -463,7 +461,6 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// deepCopyMap copies nested maps/slices so RCU clones never share references.
 func deepCopyMap(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
 	for k, v := range in {
@@ -487,7 +484,7 @@ func deepCopyValue(v any) any {
 	}
 }
 
-// Clone creates a deep copy for safe atomic pointer swap (RCU).
+// Clone creates a deep copy for atomic RCU pointer swapping.
 func (c *Config) Clone() *Config {
 	if c == nil {
 		return nil
@@ -517,7 +514,7 @@ func (c *Config) Clone() *Config {
 	return &out
 }
 
-// Save writes the whole config back to disk, secrets included, mode 0600
+// Save writes config to disk with 0600 permissions.
 func (c *Config) Save(path string) error {
 	raw, err := yaml.Marshal(c)
 	if err != nil {

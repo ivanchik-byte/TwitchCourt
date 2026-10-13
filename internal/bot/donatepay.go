@@ -14,7 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// DonatePayWatcher subscribes to donatepay donation events via Centrifugo.
 type DonatePayWatcher struct {
 	apiKey string
 	emit   func(Donation)

@@ -289,7 +289,6 @@ func (s *Store) RecentComments(n int) []Comment {
 	return out
 }
 
-// MarkCaseUsed records a played case id (deck no-repeat survives restarts).
 func (s *Store) MarkCaseUsed(id string) {
 	if id == "" {
 		return
@@ -306,14 +305,12 @@ func (s *Store) MarkCaseUsed(id string) {
 	s.saveSoon()
 }
 
-// UsedCases snapshots played case ids.
 func (s *Store) UsedCases() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]string(nil), s.usedCases...)
 }
 
-// ResetUsedCases clears played case ids.
 func (s *Store) ResetUsedCases() {
 	s.mu.Lock()
 	s.usedCases = nil
@@ -321,7 +318,6 @@ func (s *Store) ResetUsedCases() {
 	s.saveSoon()
 }
 
-// UnmarkCaseUsed returns one case id to the unplayed pile.
 func (s *Store) UnmarkCaseUsed(id string) {
 	s.mu.Lock()
 	kept := s.usedCases[:0]
@@ -335,7 +331,7 @@ func (s *Store) UnmarkCaseUsed(id string) {
 	s.saveSoon()
 }
 
-// saveSoon throttles writes to at most one disk flush per second
+// saveSoon rate-limits disk flushes to at most 1/sec.
 func (s *Store) saveSoon() {
 	if s.path == "" {
 		return
@@ -353,7 +349,6 @@ func (s *Store) saveSoon() {
 	})
 }
 
-// Flush flushes pending throttled memory writes to disk immediately.
 func (s *Store) Flush() {
 	if s.path == "" {
 		return
