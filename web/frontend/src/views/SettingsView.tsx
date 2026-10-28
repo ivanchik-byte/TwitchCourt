@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { apiGet, apiPut, apiPost, apiUpload, apiFetch, apiNote } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
@@ -8,10 +9,14 @@ import { AiSection } from './settings/AiSection'
 import { TtsSection } from './settings/TtsSection'
 import { IntegrationsSection } from './settings/IntegrationsSection'
 import { ProfileSection } from './settings/ProfileSection'
+import { DonationRulesSection } from './settings/DonationRulesSection'
+import { ShowRulesSection } from './settings/ShowRulesSection'
 import { SafetySection } from './settings/SafetySection'
 import { PromptsSection, emptyPrompts, type PromptsState } from './settings/PromptsSection'
 
 export function SettingsView() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const section = searchParams.get('section') || 'ai'
   const [secret, setSecretLocal] = useState(getSecret())
 
   const [ai, setAi] = useState<AiState>({ provider: 'groq', model: '', temperature: 0.85, baseUrl: '', extraBody: '' })
@@ -142,6 +147,9 @@ export function SettingsView() {
           ...t,
           channel: String(d.channel ?? ''),
           nick: String(d.nick ?? ''),
+          clientId: String(d.client_id ?? ''),
+          broadcasterId: String(d.broadcaster_id ?? ''),
+          moderatorId: String(d.moderator_id ?? ''),
           daEnabled: d.donationalerts_enabled !== false,
           dpEnabled: d.donatepay_enabled !== false,
           bitsEnabled: d.twitch_bits_enabled !== false,
@@ -212,20 +220,26 @@ export function SettingsView() {
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-3 p-3">
+    <div className="setup-page">
+      <div className="desk-heading"><div><p className="eyebrow">Перед первым заседанием</p><h1>Подготовка<span>.</span></h1></div><Link to="/" className="quiet-link">Вернуться в эфир</Link></div>
+      <nav className="setup-tabs" aria-label="Разделы подготовки">
+        {[['ai', '01', 'Языковая модель'], ['voice', '02', 'Голос судьи'], ['twitch', '03', 'Подключения'], ['donations', '04', 'Донаты'], ['rules', '05', 'Правила суда'], ['appearance', '06', 'Оформление'], ['advanced', '07', 'Дополнительно']].map(([key, number, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} onClick={() => setSearchParams({ section: key })}><span>{number}</span>{label}</button>)}
+      </nav>
       <div className="card p-3">
         <div className="min-w-[220px] max-w-prose">
           <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v); location.reload() }} placeholder="X-Secret" />
         </div>
       </div>
 
-      <div className="grid items-start gap-3 md:grid-cols-2">
-        <AiSection ai={ai} setAi={setAi} apiKey={apiKey} setApiKey={setApiKey} flags={aiFlags} />
-        <TtsSection tts={tts} setTts={setTts} voices={voices} />
-        <IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} />
-        <ProfileSection profile={profile} setProfile={setProfile} />
+      <div className="setup-content">
+        {section === 'donations' && <DonationRulesSection />}
+        {section === 'rules' && <ShowRulesSection />}
+        {section === 'ai' && <AiSection ai={ai} setAi={setAi} apiKey={apiKey} setApiKey={setApiKey} flags={aiFlags} />}
+        {section === 'voice' && <TtsSection tts={tts} setTts={setTts} voices={voices} />}
+        {section === 'twitch' && <IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} />}
+        {section === 'advanced' && <ProfileSection profile={profile} setProfile={setProfile} />}
 
-        <section className="card space-y-2 p-4">
+        {section === 'appearance' && <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Фото судьи для оверлея</h2>
           <p className="text-xs text-zinc-500">Портрет отображается на оверлее во время речи судьи.</p>
           <label className="block cursor-pointer text-center text-xs text-zinc-400">
@@ -248,9 +262,9 @@ export function SettingsView() {
               onChange={(e) => void uploadPhoto(e.target.files?.[0])}
             />
           </label>
-        </section>
+        </section>}
 
-        <section className="card space-y-2 p-4">
+        {section === 'appearance' && <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Фон зала суда</h2>
           <img
             src={`/api/court/photo?t=${courtTick}`}
@@ -299,13 +313,13 @@ export function SettingsView() {
               Стандартный
             </button>
           </div>
-        </section>
+        </section>}
 
-        <SafetySection safety={safety} setSafety={setSafety} />
+        {section === 'advanced' && <SafetySection safety={safety} setSafety={setSafety} />}
 
-        <PromptsSection prompts={prompts} setPrompts={setPrompts} onReset={() => setPromptsTick((n) => n + 1)} />
+        {section === 'advanced' && <PromptsSection prompts={prompts} setPrompts={setPrompts} onReset={() => setPromptsTick((n) => n + 1)} />}
 
-        <section className="card space-y-2 p-4">
+        {section === 'advanced' && <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Стример</h2>
           <label className={labelCls}>
             Имя стримера (подсудимый по донатам и !sue)
@@ -318,9 +332,9 @@ export function SettingsView() {
               }
             />
           </div>
-        </section>
+        </section>}
 
-        <section className="card space-y-2 p-4">
+        {section === 'advanced' && <section className="card space-y-2 p-4">
           <h2 className="font-semibold">Сервер</h2>
           <p className="tabular font-mono text-sm text-zinc-300">
             {server.host || '-'}:{server.port || '-'} · ключ доступа {server.secretSet ? 'задан' : 'не задан'}
@@ -341,9 +355,9 @@ export function SettingsView() {
               Перезапустить сервер
             </button>
           </div>
-        </section>
+        </section>}
 
-        <section className="card space-y-2 p-4">
+        {section === 'appearance' && <section className="card space-y-2 p-4">
           <h2 className="font-semibold">OBS Sandbox</h2>
           <div className="overflow-hidden rounded-lg border border-white/10">
             <iframe title="overlay preview" src={`/overlay/${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`} className="h-48 w-full bg-black" />
@@ -379,7 +393,7 @@ export function SettingsView() {
             ))}
             {sfx.length === 0 && <p className="text-xs text-zinc-600">Звуковые эффекты не найдены.</p>}
           </div>
-        </section>
+        </section>}
       </div>
     </div>
   )

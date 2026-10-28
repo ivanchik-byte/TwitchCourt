@@ -34,6 +34,37 @@ func TestPoolJoinLeavePick(t *testing.T) {
 	}
 }
 
+func TestPriorityQueueKeepsPaidOrderAndUpgradesWithoutDuplicates(t *testing.T) {
+	e := newWitnessEngine()
+	e.JoinPool("ordinary", "своё дело")
+	e.JoinPool("second", "")
+	e.JoinPriorityPool("paid_first", "")
+	e.JoinPriorityPool("paid_second", "")
+	joined, position := e.JoinPriorityPool("ordinary", "")
+	if !joined || position != 3 {
+		t.Fatalf("upgrade: %v %d", joined, position)
+	}
+	seats := e.PoolList()
+	if len(seats) != 4 || seats[0].Nick != "paid_first" || seats[1].Nick != "paid_second" || seats[2].Nick != "ordinary" || seats[2].Reason != "своё дело" || seats[3].Priority {
+		t.Fatal(seats)
+	}
+	if joined, _ := e.JoinPriorityPool("ORDINARY", ""); joined || len(e.PoolList()) != 4 {
+		t.Fatal("duplicate paid entry")
+	}
+	cfg := e.cfg.Load().Clone()
+	cfg.Courtroom.QueueOpen = false
+	e.SwapConfig(cfg)
+	if joined, _ := e.JoinPool("late", ""); joined {
+		t.Fatal("closed queue accepted ordinary entry")
+	}
+	if joined, _ := e.JoinPriorityPool("late", ""); joined {
+		t.Fatal("closed queue accepted paid entry")
+	}
+	if len(e.PoolList()) != 4 {
+		t.Fatal("closing queue discarded existing entries")
+	}
+}
+
 func TestAddTestimonyGating(t *testing.T) {
 	e := newWitnessEngine()
 	if e.AddTestimony("troll", "я не виноват") {

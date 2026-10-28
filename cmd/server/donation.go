@@ -24,7 +24,7 @@ func isBribe(cfg *config.Config, amount float64, message string) bool {
 	return cfg.Donations.BribeMin > 0 && amount >= cfg.Donations.BribeMin
 }
 
-func openDonationTrial(cfg *config.Config, open func(defendant, crime, context string) bool, donor string, amount float64, currency, message string) {
+func openDonationTrial(cfg *config.Config, open func(defendant, crime, context string) bool, donor string, amount float64, currency, message string) bool {
 	msg := strings.TrimSpace(message)
 	vars := map[string]string{"message": msg}
 	crime := tmpl.Fill(cfg.Chat.DonateCrime, vars)
@@ -42,6 +42,7 @@ func openDonationTrial(cfg *config.Config, open func(defendant, crime, context s
 		if crime == "" {
 			crime = tmpl.Fill(cfg.Chat.DonateViewer, vars)
 		}
-		open(cfg.Game.StreamerName, crime, context)
+		return open(cfg.Game.StreamerName, crime, context)
 	}
+	return false
 }

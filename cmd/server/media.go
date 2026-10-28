@@ -35,7 +35,7 @@ func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveCourtBg(w http.ResponseWriter, r *http.Request) {
-	serveImageFile(w, r, courtBgPath(), "overlay/assets/backgrounds/court_zoom_medium.jpg")
+	serveImageFile(w, r, courtBgPath(), "overlay/assets/backgrounds/courtroom.png")
 }
 
 func serveImageFile(w http.ResponseWriter, r *http.Request, dataPath, embedPath string) {

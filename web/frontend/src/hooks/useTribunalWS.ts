@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { getSecret } from '../lib/api'
+import { apiGet, getSecret } from '../lib/api'
 import type { DonationPayload, StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
 
 export interface StenogramEntry {
@@ -12,6 +12,7 @@ export interface StenogramEntry {
 }
 
 interface TribunalState {
+	queueRevision: number
   connected: boolean
   rttMs: number | null
   phase: string
@@ -22,9 +23,12 @@ interface TribunalState {
   judgeLine: string
   verdict: VerdictPayload | null
   stenogram: StenogramEntry[]
+  demo: boolean
+  mode: 'viewer' | 'streamer' | 'unban'
 }
 
 const initial: TribunalState = {
+	queueRevision: 0,
   connected: false,
   rttMs: null,
   phase: 'idle',
@@ -35,6 +39,8 @@ const initial: TribunalState = {
   judgeLine: '',
   verdict: null,
   stenogram: [],
+  demo: false,
+  mode: 'viewer',
 }
 
 let seq = 1
@@ -70,6 +76,7 @@ export function useTribunalWS() {
       timeLeft: null,
       judgeLine: '',
       verdict: null,
+      demo: false,
     }))
     push('local', 'Экстренный сброс: заседание завершено')
   }, [push])
@@ -85,6 +92,7 @@ export function useTribunalWS() {
       const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
       const secret = getSecret()
       const ws = new WebSocket(proto + location.host + '/ws' + (secret ? `?secret=${encodeURIComponent(secret)}` : ''))
+      let stateEvents = 0
       wsRef.current = ws
       let heartbeat: ReturnType<typeof setInterval> | undefined
       let pongWait: ReturnType<typeof setTimeout> | undefined
@@ -114,6 +122,19 @@ export function useTribunalWS() {
         setState((s) => ({ ...s, connected: true }))
         ping()
         heartbeat = setInterval(ping, 10000)
+        // A fresh tab has missed the events that opened the current trial.
+        const revision = stateEvents
+        void apiGet<{ trial: StateChangePayload }>('/api/status').then(({ trial }) => {
+          if (closed || wsRef.current !== ws || !trial || revision !== stateEvents) return
+          setState((s) => ({
+            ...s, phase: trial.state, defendant: trial.defendant ?? '', charge: trial.charge ?? '',
+            caseTitle: trial.case_title ?? '', demo: trial.demo ?? false, mode: trial.mode ?? 'viewer',
+            timeLeft: trial.time_left_sec ?? null,
+            judgeLine: trial.line ?? '', verdict: trial.verdict ?? null,
+          }))
+        }).catch(() => {
+          push('local', 'Не удалось восстановить дело. Проверьте связь с сервером.')
+        })
       }
       ws.onclose = () => {
         clearInterval(heartbeat)
@@ -139,14 +160,20 @@ export function useTribunalWS() {
           return
         }        switch (msg.type) {
           case 'state_change': {
+            stateEvents += 1
             const p = msg.payload as StateChangePayload
             setState((s) => ({
               ...s,
               phase: p.state ?? s.phase,
+              demo: p.state === 'idle' ? false : (p.demo ?? s.demo),
+              mode: p.mode ?? s.mode,
               caseTitle: p.case_title ?? (p.state === 'idle' ? '' : s.caseTitle),
               defendant: p.state === 'idle' ? '' : (p.defendant ?? s.defendant),
               charge: p.state === 'idle' ? '' : (p.charge ?? s.charge),
-              timeLeft: typeof p.time_left_sec === 'number' ? p.time_left_sec : s.timeLeft,
+              timeLeft: p.state === 'testimony' || p.state === 'defense' ? (p.time_left_sec ?? null) : null,
+              judgeLine: p.state === 'indictment' || p.state === 'idle' ? '' : s.judgeLine,
+              verdict: p.state === 'indictment' ? null : s.verdict,
+              stenogram: p.state === 'indictment' ? [] : s.stenogram,
             }))
             push('state_change', `${p.state}${p.defendant ? ` · ${p.defendant}` : ''}${p.charge ? `: ${p.charge}` : ''}`)
             break
@@ -171,9 +198,12 @@ export function useTribunalWS() {
           case 'panic':
             panicReset()
             break
+          case 'queue_change':
+            setState(s => ({ ...s, queueRevision: s.queueRevision + 1 }))
+            break
           case 'donation': {
             const p = msg.payload as DonationPayload
-            const line = `${p.donor}: ${p.amount} ${p.currency}${p.message ? ` (${p.message})` : ''}${p.opens_trial ? ' [открывает заседание]' : ''}`
+            const line = `${p.donor}: ${p.amount} ${p.currency}${p.message ? ` (${p.message})` : ''}${p.note ? ` · ${p.note}` : ''}`
             push('donation', line, 'донат')
             toast(`Донат: ${p.donor}: ${p.amount} ${p.currency}`)
             break

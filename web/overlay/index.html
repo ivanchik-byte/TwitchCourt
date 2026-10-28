@@ -2,43 +2,25 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Stream Tribunal Overlay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tribunal · Суд в эфире</title>
   <link rel="stylesheet" href="overlay.css">
 </head>
 <body>
   <div id="stage">
     <div id="court" class="hidden">
       <img id="court-bg" src="/api/court/photo" alt="" aria-hidden="true">
-      <div id="prosecutor">
-        <div id="bust">
-          <div id="hair"></div>
-          <div id="face">
-            <div class="eye left"></div>
-            <div class="eye right"></div>
-            <div id="mouth"></div>
-          </div>
-          <div id="suit"></div>
-          <div id="arm"></div>
-        </div>
-      </div>
-
+      <header id="court-heading"><span class="court-brand">TRIBUNAL</span><span id="phase-name">Заседание</span><span id="participant"></span></header>
       <div id="docket">
-        <div id="case-no">ДЕЛО №404</div>
+        <div id="case-meta"><span id="case-no">ЗАСЕДАНИЕ</span><span id="prosecutor"><span id="mouth"></span><span id="speaker-name">Судья</span></span></div>
         <div id="charge">Зал суда готов</div>
         <div id="subtitles" aria-live="off"></div>
       </div>
-
-      <div id="testimony" class="hidden">
-        <div id="testimony-author">Подсудимый</div>
-        <div id="testimony-text"></div>
-      </div>
-
+      <div id="testimony" class="hidden"><div id="testimony-author">Подсудимый</div><div id="testimony-text"></div></div>
     </div>
-
-    <div id="objection" class="hidden objection-burst">ПРОТЕСТУЮ!</div>
-    <div id="verdict" class="hidden"><span id="verdict-text">ВИНОВЕН</span></div>
+    <div id="objection" class="hidden">ПРОТЕСТ</div>
+    <div id="verdict" class="hidden"><span class="verdict-label">РЕШЕНИЕ СУДА</span><span id="verdict-text">ВИНОВЕН</span><span id="verdict-detail"></span></div>
   </div>
-
   <script src="overlay.js"></script>
 </body>
 </html>

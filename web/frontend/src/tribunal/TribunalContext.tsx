@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useTribunalWS, type StenogramEntry } from '../hooks/useTribunalWS'
-import { apiGet, apiPost, apiNote, type ApiResult } from '../lib/api'
+import { apiGet, apiPost, apiNote } from '../lib/api'
 import type { PoolSeat, VerdictPayload } from '../lib/types'
 
 export interface TribunalPhase {
@@ -14,6 +14,8 @@ export interface TribunalPhase {
   charge: string
   timeLeft: number | null
   verdict: VerdictPayload | null
+  demo: boolean
+  mode: 'viewer' | 'streamer' | 'unban'
 }
 
 export interface TribunalFeed {
@@ -22,14 +24,9 @@ export interface TribunalFeed {
 }
 
 export interface TribunalActions {
-  refreshDock: () => void
+	refreshDock: () => Promise<void>
   gavel: () => void
   panic: () => void
-  punish: (kind: string, secs?: number) => Promise<ApiResult>
-  pick: (nick?: string) => Promise<void>
-  skip: () => Promise<void>
-  openTrial: (defendant: string, crime: string, viewer?: boolean) => Promise<ApiResult>
-  send: (action: string, payload?: Record<string, unknown>) => boolean
 }
 
 const TribunalPhaseContext = createContext<TribunalPhase | null>(null)
@@ -61,9 +58,10 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   // queue follows socket events: phase or defendant updates trigger dock refresh
   const phaseName = t.phase
   const defendantName = t.defendant
+  const donationTick = t.stenogram.filter(entry => entry.kind === 'donation').slice(-1)[0]?.id
   useEffect(() => {
     void refreshDock()
-  }, [phaseName, defendantName, refreshDock])
+  }, [phaseName, defendantName, donationTick, t.queueRevision, refreshDock])
 
   const gavel = useCallback(() => {
     // trigger gavel desk slam animation and vocal interjection
@@ -84,46 +82,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
     })()
   }, [])
 
-  const punish = useCallback(
-    (kind: string, secs?: number) => apiPost('/api/punish', { kind, secs: secs ?? 0 }),
-    [],
-  )
-
-  const pick = useCallback(
-    async (nick?: string) => {
-      const r = await apiPost('/api/dock/pick', { nick: nick ?? '' })
-      if (!r.ok) toast.error(`Скамья: ${r.status === 401 ? 'проверьте секретный ключ' : 'операция не выполнена'}`)
-      await refreshDock()
-    },
-    [refreshDock],
-  )
-
-  const skip = useCallback(async () => {
-    const r = await apiPost('/api/dock/skip', {})
-    if (!r.ok) {
-      toast.error(`Пропуск не удался: ${apiNote(r.status)}`)
-      return
-    }
-    tRef.current.panicReset()
-    await refreshDock()
-  }, [refreshDock])
-
-  const openTrial = useCallback(async (defendant: string, crime: string, viewer = true): Promise<ApiResult> => {
-    if (!defendant.trim()) {
-      toast.error('Укажите никнейм подсудимого')
-      return { ok: false, status: 0 }
-    }
-    return apiPost('/api/trial', { defendant: defendant.trim(), crime: crime || '', viewer })
-  }, [])
-
-  const send = useCallback((action: string, payload: Record<string, unknown> = {}) => {
-    return tRef.current.send(action, payload)
-  }, [])
-
-  const actions = useMemo<TribunalActions>(
-    () => ({ refreshDock, gavel, panic, punish, pick, skip, openTrial, send }),
-    [refreshDock, gavel, panic, punish, pick, skip, openTrial, send],
-  )
+  const actions = useMemo<TribunalActions>(() => ({ gavel, panic, refreshDock }), [gavel, panic, refreshDock])
 
   // split identity: stenogram ticks must not re-render phase consumers
   const phase = useMemo<TribunalPhase>(
@@ -137,8 +96,10 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
       charge: t.charge,
       timeLeft: t.timeLeft,
       verdict: t.verdict,
+      demo: t.demo,
+      mode: t.mode,
     }),
-    [t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict],
+    [t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict, t.demo, t.mode],
   )
   const feed = useMemo<TribunalFeed>(
     () => ({ judgeLine: t.judgeLine, stenogram: t.stenogram }),

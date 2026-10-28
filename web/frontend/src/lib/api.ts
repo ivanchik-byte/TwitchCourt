@@ -10,11 +10,13 @@ export function setSecret(secret: string) {
 export interface ApiResult {
   ok: boolean
   status: number
+  code?: string
 }
 
 export function apiNote(status: number): string {
   if (status === 401) return 'проверьте секретный ключ'
   if (status === 409) return 'зал занят, дождитесь окончания текущего дела'
+  if (status === 412) return 'подключите языковую модель в подготовке эфира или запустите репетицию'
   if (status === 429) return 'превышен лимит запросов, повторите позже'
   if (status === 502) return 'внешний сервис недоступен'
   if (status === 0) return 'нет соединения с сервером'
@@ -39,7 +41,10 @@ export async function apiGet<T>(path: string): Promise<T> {
 async function call(path: string, method: string, body: unknown): Promise<ApiResult> {
   try {
     const res = await apiFetch(path, { method, body: JSON.stringify(body) })
-    return { ok: res.ok, status: res.status }
+    const failure = !res.ok && res.headers.get('Content-Type')?.includes('application/json')
+      ? await res.json() as { code?: string }
+      : undefined
+    return { ok: res.ok, status: res.status, code: failure?.code }
   } catch {
     return { ok: false, status: 0 }
   }

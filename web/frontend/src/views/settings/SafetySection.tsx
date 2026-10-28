@@ -25,7 +25,7 @@ export const SafetySection = memo(function SafetySection({ safety, setSafety }: 
           checked={safety.banConfirm}
           onChange={(e) => setSafety({ ...safety, banConfirm: e.target.checked })}
         />
-        Бан только вручную (вердикт сам не банит)
+        Блокировки и таймауты только вручную
       </label>
       <label className={labelCls}>
         Чёрный список (по строке)

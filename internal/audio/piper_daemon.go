@@ -34,6 +34,8 @@ type PiperInput struct {
 	SpeakerID int    `json:"speaker_id,omitempty"`
 }
 
+func (p *PiperDaemon) IsMock() bool { return p.isMock }
+
 func NewPiperDaemon(cfg config.TTSConfig) (*PiperDaemon, error) {
 	daemon := &PiperDaemon{cfg: cfg, sem: make(chan struct{}, 1)}
 

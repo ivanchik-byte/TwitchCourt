@@ -58,6 +58,7 @@ type TTSConfig struct {
 }
 
 type CourtroomConfig struct {
+	QueueOpen      bool     `yaml:"queue_open"`
 	Theme          string   `yaml:"theme"`
 	JudgeName      string   `yaml:"judge_name"`
 	JudgeStyle     string   `yaml:"judge_style"`
@@ -176,6 +177,9 @@ func DefaultPrompts() PromptsConfig {
 }
 
 type DonationsConfig struct {
+	WitnessEnabled   bool               `yaml:"witness_enabled"`
+	RuleCurrency     string             `yaml:"rule_currency"`
+	QueueMin         float64            `yaml:"queue_min"`
 	Token            string             `yaml:"token"`
 	DefaultMin       float64            `yaml:"default_min"`
 	PlatinumMin      float64            `yaml:"platinum_min"`
@@ -261,6 +265,8 @@ func DefaultConfig() *Config {
 			Speed:        1.15,
 		},
 		Courtroom: CourtroomConfig{
+			CasesGen:            CasesGenConfig{Batch: 5, LowMark: 3},
+			QueueOpen:           true,
 			Theme:               "ace_attorney",
 			JudgeName:           "Судья",
 			JudgeStyle:          "strict",
@@ -277,6 +283,7 @@ func DefaultConfig() *Config {
 		},
 		Safety: SafetyConfig{
 			FilterEnabled:   true,
+			BanConfirm:      true,
 			CustomBlacklist: []string{},
 			PanicHotkey:     "f12",
 		},
@@ -292,10 +299,12 @@ func DefaultConfig() *Config {
 			Token:   "",
 		},
 		Donations: DonationsConfig{
-			Token:       "",
-			DefaultMin:  100,
-			PlatinumMin: 500,
-			MinAmounts:  map[string]float64{"RUB": 100, "USD": 2, "EUR": 2, "BITS": 200},
+			RuleCurrency:   "RUB",
+			WitnessEnabled: true,
+			Token:          "",
+			DefaultMin:     100,
+			PlatinumMin:    500,
+			MinAmounts:     map[string]float64{"RUB": 100, "USD": 2, "EUR": 2, "BITS": 200},
 			DonationAlerts: WidgetSource{
 				Enabled: true,
 				Token:   "",

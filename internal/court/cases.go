@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -46,8 +47,8 @@ func (d *CaseDeck) Path() string {
 
 func (d *CaseDeck) Reload() error {
 	d.fileMu.Lock()
+	defer d.fileMu.Unlock()
 	raw, err := os.ReadFile(d.path)
-	d.fileMu.Unlock()
 	if err != nil {
 		if os.IsNotExist(err) {
 			d.mu.Lock()
@@ -193,34 +194,99 @@ func (d *CaseDeck) Add(title, crime, context string, tags []string, source strin
 }
 
 func (d *CaseDeck) Delete(id string) error {
+	return d.rewriteCase(id, nil)
+}
+
+func (d *CaseDeck) Update(card CaseCard) error {
+	if strings.TrimSpace(card.Title) == "" || strings.TrimSpace(card.Crime) == "" {
+		return fmt.Errorf("title and crime are required")
+	}
+	return d.rewriteCase(card.ID, &card)
+}
+
+func (d *CaseDeck) Use(id string) {
 	d.mu.Lock()
-	kept := make([]CaseCard, 0, len(d.all))
+	kept := d.remaining[:0]
+	for _, card := range d.remaining {
+		if card.ID != id {
+			kept = append(kept, card)
+		}
+	}
+	d.remaining = kept
+	if d.recall != nil {
+		d.recall.MarkCaseUsed(id)
+	}
+	d.mu.Unlock()
+}
+
+func (d *CaseDeck) rewriteCase(id string, replacement *CaseCard) error {
+	d.fileMu.Lock()
+	defer d.fileMu.Unlock()
+	raw, err := os.ReadFile(d.path)
+	if err != nil {
+		return err
+	}
+	var file struct {
+		Cases []CaseCard `yaml:"cases"`
+	}
+	if err := yaml.Unmarshal(raw, &file); err != nil {
+		return err
+	}
+	kept := make([]CaseCard, 0, len(file.Cases))
 	found := false
-	for _, c := range d.all {
+	for _, c := range file.Cases {
 		if c.ID == id {
 			found = true
-			continue
+			if replacement == nil {
+				continue
+			}
+			c.Title, c.Crime, c.Context = strings.TrimSpace(replacement.Title), strings.TrimSpace(replacement.Crime), strings.TrimSpace(replacement.Context)
+			c.Details, c.DefenseExample = replacement.Details, replacement.DefenseExample
 		}
 		kept = append(kept, c)
 	}
-	d.mu.Unlock()
 	if !found {
 		return fmt.Errorf("case %q not found", id)
 	}
-	raw, err := yaml.Marshal(struct {
+	raw, err = yaml.Marshal(struct {
 		Cases []CaseCard `yaml:"cases"`
 	}{Cases: kept})
 	if err != nil {
 		return err
 	}
-	out := casesHeader + string(raw)
-	d.fileMu.Lock()
-	werr := os.WriteFile(d.path, []byte(out), 0o644)
-	d.fileMu.Unlock()
-	if werr != nil {
-		return werr
+	tmp, err := os.CreateTemp(filepath.Dir(d.path), "cases-*.yaml")
+	if err != nil {
+		return err
 	}
-	return d.Reload()
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(casesHeader + string(raw)); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), d.path); err != nil {
+		return err
+	}
+	// Reload takes fileMu; publish the already-parsed cards while still holding it.
+	d.mu.Lock()
+	d.all = kept
+	remaining := d.remaining[:0]
+	for _, pending := range d.remaining {
+		if pending.ID != id {
+			remaining = append(remaining, pending)
+			continue
+		}
+		if replacement != nil {
+			pending.Title, pending.Crime, pending.Context = replacement.Title, replacement.Crime, replacement.Context
+			pending.Details, pending.DefenseExample = replacement.Details, replacement.DefenseExample
+			remaining = append(remaining, pending)
+		}
+	}
+	d.remaining = remaining
+	d.mu.Unlock()
+	return nil
 }
 
 const casesHeader = `# Case deck: random trials for the Draw button (see the Дела tab).

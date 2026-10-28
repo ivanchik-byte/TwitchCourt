@@ -29,6 +29,34 @@ const deckFixture = `cases:
     crime: "Храпит в микрофон"
 `
 
+func TestCaseEditingPreservesIdentityAndUsedStatus(t *testing.T) {
+	d, recall := newTempDeck(t, deckFixture)
+	d.Use("a")
+	if err := d.Update(CaseCard{ID: "a", Title: "Новое название", Crime: "Новая статья", Context: "Новая улика", Details: "Подробности", DefenseExample: "Версия защиты"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if d.Remaining() != 2 {
+		t.Fatalf("editing replayed used case: %d", d.Remaining())
+	}
+	if used := recall.UsedCases(); len(used) != 1 || used[0] != "a" {
+		t.Fatal(used)
+	}
+	for _, card := range d.List() {
+		if card.ID == "a" && (card.Title != "Новое название" || card.Details != "Подробности" || card.DefenseExample != "Версия защиты") {
+			t.Fatal(card)
+		}
+	}
+	if err := d.Delete("b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.List()) != 2 || d.Remaining() != 1 {
+		t.Fatal("delete lost or resurrected another card")
+	}
+}
+
 func newTempDeck(t *testing.T, content string) (*CaseDeck, *memory.Store) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "cases.yaml")

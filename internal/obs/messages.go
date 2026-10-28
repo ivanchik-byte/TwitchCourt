@@ -3,14 +3,15 @@ package obs
 type EventType string
 
 const (
-	EventStateChange EventType = "state_change"
-	EventAudioChunk  EventType = "audio_chunk"
-	EventAnimation   EventType = "animation"
-	EventSubtitles   EventType = "subtitles"
-	EventVerdict     EventType = "verdict"
-	EventPanic       EventType = "panic"
-	EventDonation    EventType = "donation"
-	EventTestimony   EventType = "testimony"
+	EventStateChange  EventType = "state_change"
+	EventAudioChunk   EventType = "audio_chunk"
+	EventAnimation    EventType = "animation"
+	EventSubtitles    EventType = "subtitles"
+	EventVerdict      EventType = "verdict"
+	EventPanic        EventType = "panic"
+	EventDonation     EventType = "donation"
+	EventTestimony    EventType = "testimony"
+	EventQueueChanged EventType = "queue_change"
 )
 
 type EventMessage struct {
@@ -19,11 +20,15 @@ type EventMessage struct {
 }
 
 type StateChangePayload struct {
-	State       string `json:"state"`
-	CaseTitle   string `json:"case_title,omitempty"`
-	Defendant   string `json:"defendant,omitempty"`
-	Charge      string `json:"charge,omitempty"`
-	TimeLeftSec int    `json:"time_left_sec,omitempty"`
+	State       string          `json:"state"`
+	CaseTitle   string          `json:"case_title,omitempty"`
+	Defendant   string          `json:"defendant,omitempty"`
+	Charge      string          `json:"charge,omitempty"`
+	TimeLeftSec int             `json:"time_left_sec,omitempty"`
+	Demo        bool            `json:"demo"`
+	Mode        string          `json:"mode,omitempty"`
+	Line        string          `json:"line,omitempty"`
+	Verdict     *VerdictPayload `json:"verdict,omitempty"`
 }
 
 type AudioChunkPayload struct {
@@ -49,6 +54,10 @@ type TestimonyPayload struct {
 }
 
 type DonationPayload struct {
+	ID         uint64  `json:"id"`
+	Action     string  `json:"action"`
+	Note       string  `json:"note"`
+	At         string  `json:"at"`
 	Donor      string  `json:"donor"`
 	Amount     float64 `json:"amount"`
 	Currency   string  `json:"currency"`

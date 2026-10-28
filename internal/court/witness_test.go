@@ -208,7 +208,18 @@ func TestViewerTrialRunsEndToEnd(t *testing.T) {
 	if err := e.StartViewerTrial("troll", "спит на стриме"); err != nil {
 		t.Fatalf("viewer trial rejected: %v", err)
 	}
-	waitState(t, e, StateIdle, 60*time.Second)
+	waitState(t, e, StateVerdict, 10*time.Second)
+	deadline := time.Now().Add(time.Second)
+	for e.Snapshot().Verdict == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("verdict was not published")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := e.AdvancePhase(StateVerdict); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, e, StateIdle, time.Second)
 	select {
 	case got := <-timedOut:
 		t.Fatalf("undecided bench must not jail, got %q", got)
@@ -229,6 +240,7 @@ func waitState(t *testing.T, e *Engine, want State, timeout time.Duration) {
 
 func TestFinalizeVerdictJailsViewer(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.Safety.BanConfirm = false
 	voice, _ := audio.NewPiperDaemon(cfg.TTS)
 	e := NewEngine(cfg, obs.NewHub(nil), nil, voice, safety.NewFilter(nil))
 	e.AttachMemory(memory.NewStore(""))
@@ -240,7 +252,27 @@ func TestFinalizeVerdictJailsViewer(t *testing.T) {
 		jailed, term, banned = user, secs, isBan
 	}
 	c := &TrialCase{Defendant: "troll", Crime: "спит", Viewer: "troll"}
-	e.finalizeVerdict(context.Background(), c, true, true)
+	e.currCase = c
+	done := make(chan struct{})
+	go func() {
+		e.finalizeVerdict(context.Background(), c, true, true)
+		close(done)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for e.Snapshot().Verdict == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("verdict was not published")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := e.AdvancePhase(StateVerdict); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("operator could not finish the verdict")
+	}
 	if jailed != "troll" || term != 90 || banned {
 		t.Fatalf("guilty viewer must be jailed 90s, got %q %d ban=%v", jailed, term, banned)
 	}
@@ -266,7 +298,7 @@ func TestFinishTrialIgnoresStaleGeneration(t *testing.T) {
 	}
 }
 
-func TestAddBribeOnce(t *testing.T) {
+func TestAddBribeOffers(t *testing.T) {
 	e := newWitnessEngine()
 	if e.AddBribe("ivan", 150, "RUB", "возьми") {
 		t.Fatal("idle court must reject bribes")
@@ -276,8 +308,14 @@ func TestAddBribeOnce(t *testing.T) {
 	if !e.AddBribe("ivan", 150, "RUB", "возьми") {
 		t.Fatal("active court must accept the first bribe")
 	}
+	if !e.AddBribe("maria", 500, "RUB", "и мою возьми") {
+		t.Fatal("a competing offer must reach the judge")
+	}
+	if len(e.currCase.Bribes) != 2 {
+		t.Fatal("competing offer was lost")
+	}
 	if e.AddBribe("maria", 500, "RUB", "и мою возьми") {
-		t.Fatal("second bribe must be rejected")
+		t.Fatal("duplicate offer was accepted")
 	}
 	if e.currCase.Bribe == nil || e.currCase.Bribe.Donor != "ivan" || e.currCase.Bribe.Amount != 150 {
 		t.Fatalf("bribe offer not stored: %+v", e.currCase.Bribe)

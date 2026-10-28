@@ -45,8 +45,13 @@ type TrialCase struct {
 	Viewer      string
 	Testimony   []string
 	Bribe       *BribeOffer
+	Bribes      []BribeOffer
 	// Prosecutor marks trials where the AI prosecutor leads the charge.
 	Prosecutor bool
+	Demo       bool
+	Mode       string
+	LastLine   string
+	Verdict    *obs.VerdictPayload
 }
 
 // BribeOffer represents donor money offered during a trial.
@@ -95,6 +100,8 @@ type Engine struct {
 	trialCancel       context.CancelFunc
 	trialGen          uint64
 	cases             *CaseDeck
+	phaseAdvance      chan struct{}
+	phaseDeadline     time.Time
 }
 
 func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
@@ -235,6 +242,8 @@ func (e *Engine) TriggerPanic() {
 	e.trialGen++
 	e.state = StateIdle
 	e.currCase = nil
+	e.phaseAdvance = nil
+	e.phaseDeadline = time.Time{}
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventPanic, map[string]string{"status": "muted"})
@@ -248,7 +257,11 @@ func (e *Engine) StartTrial(defendant, crime, chatContext string) error {
 
 // StartViewerTrial opens an opt-in viewer trial
 func (e *Engine) StartViewerTrial(viewer, crime string) error {
-	return e.startTrialWith(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью", viewer)
+	return e.StartViewerTrialWithContext(viewer, crime, "")
+}
+
+func (e *Engine) StartViewerTrialWithContext(viewer, crime, evidence string) error {
+	return e.startTrialWithMode(viewer, "Проступок зрителя: "+crime, "Сам вызвался на скамью.\n"+evidence, viewer, false)
 }
 
 // StartCaseTrial opens a trial from a deck card; viewer selects target mode.
@@ -261,7 +274,7 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 		context += "МАТЕРИАЛЫ ДЕЛА:\n" + d
 	}
 	if viewer {
-		return e.startTrialWith(defendant, card.Crime, context, defendant)
+		return e.startTrialWithMode(defendant, card.Crime, context, defendant, false)
 	}
 	return e.startTrialWithMode(defendant, card.Crime, context, "", true)
 }
@@ -288,7 +301,7 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 	}
 	if e.aiClient == nil || !e.aiClient.Configured() {
 		e.mu.Unlock()
-		return fmt.Errorf("ai is not configured: set api_key or base_url in settings")
+		return ErrAINotConfigured
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -307,6 +320,7 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
 		Viewer:      e.filter.Sanitize(viewer),
 		Prosecutor:  prosecutor,
+		Mode:        trialMode(viewer, prosecutor),
 	}
 	currentCase := e.currCase
 	e.mu.Unlock()
@@ -316,6 +330,7 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 		CaseTitle: "ДЕЛО №" + fmt.Sprintf("%d", time.Now().Unix()%1000),
 		Defendant: currentCase.Defendant,
 		Charge:    currentCase.Crime,
+		Mode:      currentCase.Mode,
 	})
 
 	go e.runTrialPipeline(trialCtx, currentCase, gen)
@@ -324,6 +339,12 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 
 // accuserSystem selects whether prosecutor or judge leads the accusation.
 func (e *Engine) accuserSystem(c *TrialCase) string {
+	if c.Mode == "unban" {
+		return `Ты адвокат участника, подавшего апелляцию на разбан. Стример выступает обвинителем.
+Защищай участника по материалам дела: признавай подтверждённые нарушения, ищи основания для второго шанса.
+Не придумывай факты, доказательства и раскаяние. Отвечай на конкретный аргумент ведущего.
+Сухой судебный юмор, без оскорблений личности, мата и дискриминации. Не более двух предложений и 35 слов.`
+	}
 	if c.Prosecutor {
 		return ai.ProsecutorFor(e.cfg.Load().Prompts).System
 	}
@@ -332,12 +353,17 @@ func (e *Engine) accuserSystem(c *TrialCase) string {
 
 func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64) {
 	defer e.finishTrial(gen)
+	defer e.restIdle(gen)
 
 	smart := ""
 	if e.recall.Load() != nil {
 		smart = e.recall.Load().SmartContext(c.Defendant)
 	}
-	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart, e.cfg.Load().Prompts.TaskIndictment)
+	task := e.cfg.Load().Prompts.TaskIndictment
+	if c.Mode == "unban" {
+		task = "Коротко представь позицию защиты по апелляции. Назови факт из материалов и задай обвинителю вопрос. Не объявляй обвинение и не выноси вердикт."
+	}
+	prompt := ai.BuildIndictmentPromptWithMemory(c.Defendant, c.Crime, c.ChatContext, smart, task)
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: e.accuserSystem(c)},
 		{Role: "user", Content: prompt},
@@ -446,6 +472,8 @@ func (e *Engine) restIdle(gen uint64) {
 	}
 	e.state = StateIdle
 	e.currCase = nil
+	e.phaseAdvance = nil
+	e.phaseDeadline = time.Time{}
 	e.mu.Unlock()
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateIdle)})
 }
@@ -482,13 +510,12 @@ func (e *Engine) deliberate(ctx context.Context, c *TrialCase, startIndex int) (
 
 	testimony := e.caseTestimony(c)
 	e.mu.RLock()
-	var bribe *BribeOffer
-	if c.Bribe != nil {
-		cp := *c.Bribe
-		bribe = &cp
+	bribes := append([]BribeOffer(nil), c.Bribes...)
+	if len(bribes) == 0 && c.Bribe != nil {
+		bribes = append(bribes, *c.Bribe)
 	}
 	e.mu.RUnlock()
-	if bribe != nil {
+	for _, bribe := range bribes {
 		whisper := ""
 		if strings.TrimSpace(html.UnescapeString(bribe.Message)) != "" {
 			whisper = " и шепчет: «" + truncateRunes(html.UnescapeString(bribe.Message), maxTestimonyRunes) + "»"
@@ -655,6 +682,7 @@ func (e *Engine) runTestimonyWindow(ctx context.Context, c *TrialCase) {
 		return
 	}
 	e.state = StateTestimony
+	advance := e.openPhaseWindowLocked(dur)
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
@@ -665,6 +693,7 @@ func (e *Engine) runTestimonyWindow(ctx context.Context, c *TrialCase) {
 
 	select {
 	case <-ctx.Done():
+	case <-advance:
 	case <-time.After(time.Duration(dur) * time.Second):
 	}
 }
@@ -681,6 +710,7 @@ func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
 		return ""
 	}
 	e.state = StateDefense
+	advance := e.openPhaseWindowLocked(dur)
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
@@ -691,6 +721,7 @@ func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
 	select {
 	case <-ctx.Done():
 		return ""
+	case <-advance:
 	case <-time.After(time.Duration(dur) * time.Second):
 	}
 
@@ -707,6 +738,8 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 		return
 	}
 	e.state = StateObjection
+	e.phaseAdvance = nil
+	e.phaseDeadline = time.Time{}
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{State: string(StateObjection)})
@@ -714,9 +747,13 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	if strings.TrimSpace(html.UnescapeString(defense)) == "" {
 		defense = e.fallbackDefense()
 	}
+	counterTask := e.cfg.Load().Prompts.TaskCounter
+	if c.Mode == "unban" {
+		counterTask = "Возрази на довод обвинителя. Признавай подтверждённые нарушения, не выдумывай факты. Объясни, на каких условиях участник мог бы получить второй шанс. Не более 35 слов."
+	}
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: e.accuserSystem(c)},
-		{Role: "user", Content: ai.BuildCounterArgumentPromptWithTask(defense, e.cfg.Load().Prompts.TaskCounter)},
+		{Role: "user", Content: ai.BuildCounterArgumentPromptWithTask(defense, counterTask)},
 	}
 	chunker := ai.NewSentenceChunker()
 	index := startIndex
@@ -843,6 +880,11 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 
 	// strip SSML pause tags from subtitle display
 	shown := strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(speechText, ""))
+	e.mu.Lock()
+	if e.currCase != nil {
+		e.currCase.LastLine = shown
+	}
+	e.mu.Unlock()
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
 		Speaker: speaker,
 		Text:    shown,
@@ -861,6 +903,9 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 	}
 	if len(rawBytes) == 0 {
 		return fmt.Errorf("tts returned no audio")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	b64Audio := base64.StdEncoding.EncodeToString(rawBytes)
@@ -915,7 +960,7 @@ func (e *Engine) addWitness(donor string, amount float64, currency, message stri
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.state == StateIdle || e.currCase == nil {
+	if e.currCase == nil || e.currCase.Demo || (e.state != StateIndictment && e.state != StateTestimony && e.state != StateDefense && e.state != StateObjection) {
 		return false
 	}
 
@@ -989,18 +1034,27 @@ func (e *Engine) drainWitnessInterlude(c *TrialCase) string {
 	return e.buildWitnessInterlude(c.Witnesses)
 }
 
-// AddBribe records the first bribe offer for the active trial.
+// AddBribe records distinct offers until the bench starts deliberating.
 func (e *Engine) AddBribe(donor string, amount float64, currency, message string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.state == StateIdle || e.currCase == nil || e.currCase.Bribe != nil {
+	if e.currCase == nil || e.currCase.Demo || len(e.currCase.Bribes) >= maxWitnesses || (e.state != StateIndictment && e.state != StateTestimony && e.state != StateDefense && e.state != StateObjection) {
 		return false
 	}
-	e.currCase.Bribe = &BribeOffer{
+	offer := BribeOffer{
 		Donor:    e.filter.Sanitize(donor),
 		Amount:   amount,
 		Currency: strings.TrimSpace(currency),
 		Message:  e.filter.Sanitize(truncateRunes(message, 200)),
+	}
+	for _, previous := range e.currCase.Bribes {
+		if previous == offer {
+			return false
+		}
+	}
+	e.currCase.Bribes = append(e.currCase.Bribes, offer)
+	if e.currCase.Bribe == nil {
+		e.currCase.Bribe = &offer
 	}
 	return true
 }
@@ -1022,6 +1076,10 @@ func verdictSentence(prefix, penalty, twist string) string {
 
 func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, decided bool) {
 	e.mu.Lock()
+	if ctx.Err() != nil || e.currCase != c {
+		e.mu.Unlock()
+		return
+	}
 	e.state = StateVerdict
 	isGuilty := guilty
 	twist := ""
@@ -1103,27 +1161,32 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 		}
 	}
 
-	e.hub.BroadcastEvent(obs.EventVerdict, obs.VerdictPayload{
+	verdictPayload := obs.VerdictPayload{
 		Verdict:     verdictStr,
 		GuiltyVotes: guiltyVotes,
 		TotalVotes:  totalVotes,
 		Witnesses:   witnessCount,
 		Penalty:     penalty,
 		Twist:       twist,
-	})
+	}
+	e.mu.Lock()
+	var verdictAdvance <-chan struct{}
+	if ctx.Err() != nil || e.currCase != c {
+		e.mu.Unlock()
+		return
+	}
+	c.Verdict = &verdictPayload
+	verdictAdvance = e.openPhaseWindowLocked(0)
+	e.hub.BroadcastEvent(obs.EventVerdict, verdictPayload)
+	e.mu.Unlock()
 
 	if e.VerdictHook != nil {
 		e.VerdictHook(verdictStr, penalty, guiltyVotes, innocentVotes, twist)
 	}
-	if isGuilty && viewer != "" && e.TimeoutHook != nil {
+	if isGuilty && viewer != "" && e.TimeoutHook != nil && !e.cfg.Load().Safety.BanConfirm {
 		switch punish.Kind {
 		case "pardon":
 		case "ban":
-			// ban_confirm=true: verdict never auto-bans, streamer clicks it by hand
-			if e.cfg.Load().Safety.BanConfirm {
-				log.Printf("ban on %s needs manual confirm, skipping auto-ban", viewer)
-				break
-			}
 			e.TimeoutHook(viewer, 0, true, "Решение суда: "+penalty)
 		default:
 			e.TimeoutHook(viewer, punish.Secs, false, "Решение суда: "+penalty)
@@ -1133,7 +1196,7 @@ func (e *Engine) finalizeVerdict(ctx context.Context, c *TrialCase, guilty, deci
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(6 * time.Second):
+	case <-verdictAdvance:
 	}
 
 	e.mu.Lock()

@@ -30,9 +30,15 @@ function markLive(ok) {
     const objection = el("objection");
     const verdict = el("verdict");
     const verdictText = el("verdict-text");
+    const phaseName = el("phase-name");
+    const participant = el("participant");
+    const speakerName = el("speaker-name");
+    const verdictDetail = el("verdict-detail");
+    let demoSession = false;
     let objectionTimer = 0;
     let briefCourtTimer = 0;
     let currentStageState = "idle";
+    let audioEpoch = 0;
     let audioCtx = null;
     let analyser = null;
     let lipRaf = 0;
@@ -70,6 +76,7 @@ function markLive(ok) {
             mouth.classList.remove("open");
     }
     function enqueueAudio(base64) {
+        const epoch = audioEpoch;
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++)
@@ -77,6 +84,8 @@ function markLive(ok) {
         const ac = ctx();
         const copy = bytes.buffer.slice(0);
         ac.decodeAudioData(copy).then((decoded) => {
+            if (epoch !== audioEpoch)
+                return;
             audioQueue.push(decoded);
             if (!playing)
                 playNext();
@@ -105,6 +114,7 @@ function markLive(ok) {
         lipRaf = requestAnimationFrame(lipTick);
     }
     function stopAudio() {
+        audioEpoch += 1;
         audioQueue.length = 0;
         playing = false;
         try {
@@ -159,9 +169,11 @@ function markLive(ok) {
     }
     // Short samples live in sfx/, missing files stay silent on purpose.
     function playSfx(name) {
+        if (demoSession)
+            return;
         try {
             const audio = new Audio("sfx/" + name);
-            audio.volume = 0.9;
+            audio.volume = 0.4;
             void audio.play().catch(() => undefined);
         }
         catch {
@@ -170,7 +182,8 @@ function markLive(ok) {
     }
     function deskSlam() {
         slamVisual();
-        thump();
+        if (!demoSession)
+            thump();
         playSfx("gavel.mp3");
     }
     function slamVisual() {
@@ -194,6 +207,7 @@ function markLive(ok) {
     function showVerdict(payload) {
         const guilty = payload.verdict === "ВИНОВЕН";
         verdictText.textContent = payload.verdict;
+        verdictDetail.textContent = payload.penalty || "";
         verdict.className = guilty ? "guilty" : "innocent";
         verdict.classList.remove("hidden");
         verdict.classList.remove("drop");
@@ -202,7 +216,8 @@ function markLive(ok) {
         stopCrowd();
         stopBgm();
         slamVisual();
-        thump();
+        if (!demoSession)
+            thump();
         playSfx("verdict.mp3");
     }
     function hideVerdict() {
@@ -223,11 +238,13 @@ function markLive(ok) {
     }
     let bgm = null;
     function startBgm() {
+        if (demoSession)
+            return;
         try {
             if (!bgm) {
                 bgm = new Audio("sfx/bgm.mp3");
                 bgm.loop = true;
-                bgm.volume = 0.25;
+                bgm.volume = 0.10;
             }
             void bgm.play().catch(() => undefined);
         }
@@ -247,11 +264,13 @@ function markLive(ok) {
     // Hushed crowd bed under the trial, cut on verdict for silence in the hall.
     let crowd = null;
     function startCrowd() {
+        if (demoSession)
+            return;
         try {
             if (!crowd) {
                 crowd = new Audio("sfx/crowd.mp3");
                 crowd.loop = true;
-                crowd.volume = 0.6;
+                crowd.volume = 0.08;
             }
             void crowd.play().catch(() => undefined);
         }
@@ -286,6 +305,7 @@ function markLive(ok) {
         const ws = new WebSocket(protocol + "//" + location.host + "/ws" + location.search);
         let pingTimer = 0;
         let staleTimer = 0;
+        let stateEvents = 0;
         ws.onmessage = (event) => {
             let msg;
             try {
@@ -296,10 +316,25 @@ function markLive(ok) {
             }
             lastFrame = Date.now();
             markLive(true);
+            if (msg.type === "state_change")
+                stateEvents += 1;
             handleEvent(msg);
         };
         ws.onopen = () => {
             failures = 0;
+            const revision = stateEvents;
+            void fetch("/api/status" + location.search).then(async (response) => {
+                if (!response.ok)
+                    return;
+                const status = await response.json();
+                if (revision !== stateEvents || ws.readyState !== WebSocket.OPEN || !status.trial)
+                    return;
+                handleEvent({ type: "state_change", payload: status.trial });
+                if (status.trial.line)
+                    handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: status.trial.line } });
+                if (status.trial.verdict)
+                    handleEvent({ type: "verdict", payload: status.trial.verdict });
+            }).catch(() => markLive(false));
             lastFrame = Date.now();
             markLive(true);
             window.clearInterval(pingTimer);
@@ -333,6 +368,16 @@ function markLive(ok) {
             case "state_change": {
                 const state = String(msg.payload.state || "idle");
                 currentStageState = state;
+                if (typeof msg.payload.demo === "boolean")
+                    demoSession = msg.payload.demo;
+                const labels = { indictment: "Открытие дела", testimony: "Показания", defense: "Слово ведущего", objection: "Ответ суда", deliberation: "Совещание", verdict: "Вердикт" };
+                phaseName.textContent = labels[state] || "Заседание";
+                if (msg.payload.defendant)
+                    participant.textContent = msg.payload.defendant;
+                if (state === "indictment") {
+                    caseNo.textContent = demoSession ? "РЕПЕТИЦИЯ" : (msg.payload.case_title || "ЗАСЕДАНИЕ");
+                    subtitles.textContent = "";
+                }
                 if (state === "idle") {
                     stopBgm();
                     stopCrowd();
@@ -354,12 +399,14 @@ function markLive(ok) {
             }
             case "subtitles":
                 revealCourtBriefly();
+                if (msg.payload.speaker)
+                    speakerName.textContent = msg.payload.speaker;
                 if (msg.payload.text)
                     subtitles.textContent = msg.payload.text;
                 break;
             case "audio_chunk":
                 revealCourtBriefly();
-                if (msg.payload.audio_base64)
+                if (!demoSession && msg.payload.audio_base64)
                     enqueueAudio(msg.payload.audio_base64);
                 if (msg.payload.text)
                     subtitles.textContent = msg.payload.text;
@@ -377,7 +424,8 @@ function markLive(ok) {
                 showVerdict(msg.payload);
                 break;
             case "donation":
-                coinPing();
+                if (!demoSession)
+                    coinPing();
                 break;
             case "testimony":
                 testimonyAuthor.textContent = msg.payload.author || "Подсудимый";

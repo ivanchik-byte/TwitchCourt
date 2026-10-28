@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 interface DefenseMic {
   supported: boolean
   listening: boolean
+  error: string
   transcript: string
   start: () => void
   stop: () => void
@@ -38,6 +39,7 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
   const [supported] = useState(() => detectRecognition() !== null)
   const [transcript, setTranscript] = useState('')
   const [listening, setListening] = useState(false)
+  const [error, setError] = useState('')
   const recRef = useRef<SpeechRec | null>(null)
   const lastInterimAt = useRef(0)
   const onFinalRef = useRef(onFinal)
@@ -47,6 +49,7 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
     const Ctor = detectRecognition()
     if (!Ctor || !enabled) return
 
+    setError('')
     const rec = new Ctor()
     rec.lang = 'ru-RU'
     rec.interimResults = true
@@ -71,7 +74,8 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
     }
     // restart recognition while phase is active; fatal errors abort
     rec.onerror = (ev) => {
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture' || ev.error === 'network') {
+        setError(ev.error === 'network' ? 'Распознавание недоступно. Введите ответ текстом.' : 'Нет доступа к микрофону. Разрешите его в браузере или введите текст.')
         micDead = true
         setListening(false)
       }
@@ -122,5 +126,5 @@ export function useDefenseMic(enabled: boolean, onFinal: (text: string) => void)
     setListening(false)
   }, [])
 
-  return { supported, listening, transcript, start, stop }
+  return { supported, listening, transcript, start, stop, error }
 }

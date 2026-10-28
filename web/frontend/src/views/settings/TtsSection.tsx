@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { apiPut, apiPost } from '../../lib/api'
+import { memo, useEffect, useState } from 'react'
+import { apiPut, apiFetch } from '../../lib/api'
 import { inputCls, labelCls, saveSection, SaveButton, type TtsState, type VoiceLists } from './shared'
 
 interface Props {
@@ -9,6 +9,10 @@ interface Props {
 }
 
 export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Props) {
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const [previewing, setPreviewing] = useState(false)
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
   const effectiveVoice = tts.voice === 'custom' ? tts.customVoice : tts.voice
   return (
     <section className="card space-y-2 p-4">
@@ -18,10 +22,9 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           Включен резервный сигнал: движок синтеза недоступен либо не найден файл модели. Проверьте настройки ниже.
         </div>
       )}
-      <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/[0.07] p-2.5 text-xs text-zinc-300">
-        <span className="font-semibold text-emerald-200">Локальный голос:</span> Silero ({tts.sileroJudge || 'kseniya'}).
-        Работает автономно без внешних сетевых запросов.
-      </div>
+      <p className="text-sm leading-relaxed text-zinc-400">
+        {tts.engine === 'silero' ? 'Silero работает локально. Сначала запустите голосовой сервис, затем прослушайте реплику.' : tts.engine === 'edge' ? 'Edge синтезирует речь через интернет. Для локального голоса выберите Silero.' : tts.engine === 'piper' ? 'Piper работает локально. Понадобятся исполняемый файл и модель голоса.' : 'Тестовый сигнал помогает проверить звуковой тракт. Речь не синтезируется.'}
+      </p>
       <label className={labelCls}>
         Движок
         <select
@@ -35,6 +38,7 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           <option value="mock">Mock</option>
         </select>
       </label>
+      {tts.engine === 'edge' && <>
       <label className={labelCls}>
         Голос
         <select
@@ -43,7 +47,7 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-sm text-white"
         >
           {voices.edge.map((v) => (
-            <option key={v} value={v}>{v}{v.includes('Svetlana') ? ' ♀' : ''}</option>
+            <option key={v} value={v}>{v}</option>
           ))}
           <option value="custom">Свой…</option>
         </select>
@@ -83,6 +87,8 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           <input value={tts.judgeRate} onChange={(e) => setTts({ ...tts, judgeRate: e.target.value })} className={inputCls} />
         </label>
       </div>
+      </>}
+      {tts.engine === 'silero' && (
       <label className={labelCls}>
         Голос Silero
         <select
@@ -98,6 +104,7 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           )}
         </select>
       </label>
+      )}
       {tts.engine === 'silero' && (
         <label className={labelCls}>
           Silero URL
@@ -169,12 +176,29 @@ export const TtsSection = memo(function TtsSection({ tts, setTts, voices }: Prop
           }
         />
         <button
-          onClick={() => void apiPost('/api/say', { text: 'Проверка голоса судьи. Суд идёт.' })}
+          disabled={previewing || tts.engine === 'mock'}
+          onClick={async () => {
+            setPreviewing(true)
+            setPreviewError('')
+            try {
+              const response = await apiFetch('/api/tts/preview', { method: 'POST', body: JSON.stringify({ engine: tts.engine, voice: tts.engine === 'silero' ? tts.sileroJudge : effectiveVoice }) })
+              if (!response.ok) {
+                setPreviewError(response.status === 502 ? 'Голосовой сервис недоступен. Для Silero запустите локальный сервис и проверьте адрес.' : response.status === 409 ? 'Закончите заседание перед проверкой голоса.' : response.status === 401 ? 'Проверьте ключ доступа.' : 'Проверьте движок, модель и сохранённые параметры.')
+              } else setPreviewUrl(URL.createObjectURL(await response.blob()))
+            } catch {
+              setPreviewError('Нет связи с сервером.')
+            } finally {
+              setPreviewing(false)
+            }
+          }}
           className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
         >
-          Прослушать голос
+          {previewing ? 'Готовим реплику…' : 'Прослушать здесь'}
         </button>
       </div>
+      <p className="text-xs leading-relaxed text-zinc-400">Проверка не меняет настройки. Адрес локального сервиса и пути к модели берутся из сохранённых параметров.</p>
+      {previewError && <p role="alert" className="text-sm text-amber-200">{previewError}</p>}
+      {previewUrl && <audio key={previewUrl} controls autoPlay src={previewUrl} className="mt-3 w-full" aria-label="Пробная реплика судьи" />}
     </section>
   )
 })

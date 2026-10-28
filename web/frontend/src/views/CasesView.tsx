@@ -1,242 +1,78 @@
 import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { apiGet, apiPostJson, apiPut, apiFetch, apiNote } from '../lib/api'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowRight, Plus, Search, Shuffle, Trash2 } from 'lucide-react'
+import { apiFetch, apiGet, apiNote, apiPost, apiPostJson, apiPut } from '../lib/api'
+import type { ShowCase } from '../lib/show'
 
-interface CaseCard {
-  id: string
-  title: string
-  crime: string
-  context?: string
-  details?: string
-  defense_example?: string
-  tags?: string[]
-  source?: string
-  used?: boolean
-}
+const emptyCase: ShowCase = { id: '', title: '', crime: '', context: '', details: '', defense_example: '' }
 
 export function CasesView() {
-  const [cases, setCases] = useState<CaseCard[]>([])
+  const navigate = useNavigate()
+  const [cards, setCards] = useState<ShowCase[]>([])
   const [remaining, setRemaining] = useState(0)
-  const [target, setTarget] = useState<'viewer' | 'streamer'>('viewer')
-  const [chance, setChance] = useState(0.1)
-  const [title, setTitle] = useState('')
-  const [crime, setCrime] = useState('')
-  const [context, setContext] = useState('')
+  const [selected, setSelected] = useState<ShowCase | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
-      const d = await apiGet<{ cases: CaseCard[]; remaining: number }>('/api/cases')
-      setCases(d.cases ?? [])
-      setRemaining(d.remaining ?? 0)
-    } catch {
-      toast.error('Дела недоступны: проверьте секретный ключ')
-    }
+      const deck = await apiGet<{ cases: ShowCase[]; remaining: number }>('/api/cases')
+      setCards(deck.cases)
+      setRemaining(deck.remaining)
+      setError('')
+    } catch { setError('Не удалось загрузить колоду. Проверьте сервер и ключ доступа.') }
   }, [])
-
   useEffect(() => {
     void refresh()
-    void apiGet<{ streamer_chance: number }>('/api/settings')
-      .then((d) => {
-        if (typeof d.streamer_chance === 'number') setChance(d.streamer_chance)
-      })
-      .catch(() => undefined)
+    void apiGet<{ running: boolean }>('/api/cases/generate').then(job => setGenerating(job.running)).catch(() => setError('Не удалось проверить генератор дел.'))
   }, [refresh])
+  useEffect(() => {
+    if (!generating) return
+    let mounted = true
+    const timer = setInterval(() => {
+      void apiGet<{ running: boolean; error?: string }>('/api/cases/generate').then(job => {
+        if (!mounted) return
+        if (!job.running) { setGenerating(false); if (job.error) setError(job.error); else void refresh() }
+      }).catch(() => { if (mounted) { setGenerating(false); setError('Потеряна связь с генератором.') } })
+    },2000)
+    return () => { mounted = false; clearInterval(timer) }
+  }, [generating,refresh])
 
-  const saveChance = async (v: number) => {
-    setChance(v)
-    const r = await apiPut('/api/settings', { streamer_chance: v })
-    if (!r.ok) toast.error(`Шанс не сохранён: ${apiNote(r.status)}`)
-  }
+  const visible = cards.filter(card => (filter === 'all' || (filter === 'unused' ? !card.used : card.used)) && `${card.title} ${card.crime}`.toLowerCase().includes(query.toLowerCase()))
+  const available = cards.filter(card => !card.used)
+  const select = (card: ShowCase) => { setSelected(card); setEditing(false); setConfirmDelete(false) }
 
-  const waitGeneration = async (): Promise<boolean> => {
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 2000))
-      try {
-        const st = await apiGet<{ running: boolean; added: number; error?: string }>('/api/cases/generate')
-        if (!st.running) {
-          if (st.error) {
-            toast.error(`Генерация не удалась: ${st.error}`)
-            return false
-          }
-          toast.success(`Добавлено дел: ${st.added}`)
-          await refresh()
-          return true
-        }
-      } catch {
-        return false
-      }
-    }
-    toast.error('Генерация затянулась, проверь позже')
-    return false
-  }
-
-  const draw = async (retry = true) => {
-    const r = await apiPostJson<{ case: CaseCard; defendant: string; remaining: number }>('/api/cases/draw', {
-      target,
-      start: true,
-    })
-    if (!r.ok || !r.data) {
-      if (r.status === 409 && retry) {
-        toast('Колода пуста, генерирую…')
-        if (await waitGeneration()) await draw(false)
-        return
-      }
-      toast.error(`Дело не вытянуто: ${apiNote(r.status)}`)
-      return
-    }
-    toast.success(`На скамье ${r.data.defendant}: ${r.data.case.title}`)
-    void refresh()
-  }
-
-  const add = async () => {
-    if (!title.trim()) {
-      toast.error('Укажите название дела')
-      return
-    }
-    const r = await apiPostJson('/api/cases', { title: title.trim(), crime, context })
-    if (!r.ok) {
-      toast.error(`Не добавлено: ${apiNote(r.status)}`)
-      return
-    }
-    setTitle('')
-    setCrime('')
-    setContext('')
-    toast.success('Дело в колоде')
-    void refresh()
-  }
-
-  const remove = async (id: string) => {
-    const res = await apiFetch(`/api/cases?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-    if (!res.ok) toast.error(`Не удалено: ${apiNote(res.status)}`)
-    void refresh()
-  }
-
-  const reset = async () => {
-    const r = await apiPostJson('/api/cases/reset', {})
-    if (!r.ok) toast.error(`Не сброшено: ${apiNote(r.status)}`)
-    else toast.success('Колода перетасована')
-    void refresh()
-  }
-
-  const generate = async () => {
-    const r = await apiPostJson('/api/cases/generate', {})
-    if (!r.ok) {
-      toast.error(`Не запущено: ${apiNote(r.status)}`)
-      return
-    }
-    toast('Генерирую дела…')
-    void waitGeneration()
-  }
-
-  return (
-    <div className="mx-auto max-w-[1100px] space-y-3 p-3">
-      <div className="card flex flex-wrap items-center gap-3 p-4">
-        <div>
-          <p className="text-[11px] uppercase tracking-widest text-zinc-500">Осталось дел</p>
-          <p className="text-2xl font-bold tabular">{remaining}</p>
-        </div>
-        <div className="flex rounded-lg border border-white/10 p-0.5 text-sm">
-          {(['viewer', 'streamer'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setTarget(m)}
-              className={`rounded-md px-3 py-1.5 ${target === m ? 'bg-white/10 text-white' : 'text-zinc-400'}`}
-            >
-              {m === 'viewer' ? 'Случайный зритель' : 'Стример'}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => void draw()}
-          className="pressable rounded-lg bg-amber-400/90 px-5 py-2 font-bold text-black"
-        >
-          Вытянуть дело
-        </button>
-        <label className="block text-xs text-zinc-400">
-          Стример на скамье: {Math.round(chance * 100)}%
-          <input
-            type="range" min={0} max={1} step={0.05} value={chance}
-            onChange={(e) => void saveChance(Number(e.target.value))}
-            className="mt-1 w-32"
-          />
-        </label>
-        <button
-          onClick={() => void reset()}
-          className="pressable ml-auto rounded-lg border border-white/10 px-3 py-1.5 text-sm"
-        >
-          Перетасовать
-        </button>
-        <button
-          onClick={() => void generate()}
-          className="pressable rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-sm"
-        >
-          Сгенерировать
-        </button>
-      </div>
-
-      <div className="card space-y-2 p-4">
-        <h2 className="font-semibold">Новое дело</h2>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="block text-xs text-zinc-400">
-            Название
-            <input
-              value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Слив катки" autoComplete="off"
-              className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
-            />
-          </label>
-          <label className="block text-xs text-zinc-400">
-            Контекст
-            <input
-              value={context} onChange={(e) => setContext(e.target.value)} placeholder="чат всё видел" autoComplete="off"
-              className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none"
-            />
-          </label>
-        </div>
-        <label className="block text-xs text-zinc-400">
-          Обвинение
-          <textarea
-            value={crime} onChange={(e) => setCrime(e.target.value)} rows={2}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-sm text-white outline-none"
-          />
-        </label>
-        <button
-          onClick={() => void add()}
-          className="pressable rounded-lg border border-white/10 px-4 py-1.5 text-sm"
-        >
-          В колоду
-        </button>
-      </div>
-
-      <div className="card space-y-1 p-4">
-        <h2 className="font-semibold">Колода · {cases.length}</h2>
-        {cases.length === 0 && <p className="text-sm text-zinc-500">Пусто. Добавь дела выше или сгенерируй кнопкой ниже.</p>}
-        {cases.map((c) => (
-          <div key={c.id} className={`flex items-start gap-2 rounded-lg border border-white/5 px-2.5 py-2 ${c.used ? 'opacity-40' : ''}`}>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">
-                {c.title}
-                {c.used && <span className="ml-2 font-mono text-xs text-zinc-500">сыграно</span>}
-                {c.source === 'ai' && <span className="ml-2 font-mono text-xs text-emerald-400">ai</span>}
-              </p>
-              {c.crime && <p className="truncate text-xs text-zinc-400">{c.crime}</p>}
-              {(c.details || c.defense_example) && (
-                <details className="mt-1 text-xs text-zinc-400">
-                  <summary className="cursor-pointer text-zinc-500">Материалы дела</summary>
-                  {c.details && <p className="mt-1 whitespace-pre-wrap">{c.details}</p>}
-                  {c.defense_example && <p className="mt-1 whitespace-pre-wrap text-amber-200/80">{c.defense_example}</p>}
-                </details>
-              )}
-            </div>
-            <button
-              onClick={() => void remove(c.id)}
-              aria-label={`Удалить ${c.title}`}
-              className="pressable rounded-md border border-red-400/30 px-2 py-0.5 text-xs text-red-300"
-            >
-              Удалить
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+  return <div className="deck-workbench">
+    <div className="desk-heading"><div className="workspace-title"><h1>Колода дел</h1><span>{remaining} не сыграно · всего {cards.length}</span></div><Link className="quiet-link" to="/settings?section=rules">Правила и автопополнение<ArrowRight size={13} /></Link></div>
+    <div className="deck-toolbar"><div className="deck-search"><Search size={14} /><input aria-label="Поиск дел" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти дело или обвинение" /></div><select aria-label="Статус дел" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Все дела</option><option value="unused">Не сыграно</option><option value="used">Сыграно</option></select><button className="secondary-action" disabled={!available.length || editing} onClick={() => select(available[Math.floor(Math.random()*available.length)])}><Shuffle size={13} /> Выбрать случайное</button><button className="secondary-action" disabled={pending} onClick={() => { setSelected(emptyCase); setEditing(true); setConfirmDelete(false) }}><Plus size={14} /> Новое дело</button><button className="secondary-action" disabled={generating || pending} onClick={async () => {
+      setPending(true)
+      const response = await apiPost('/api/cases/generate', { count: 5 })
+      if (response.ok) { setGenerating(true); setError('') } else setError(response.status === 409 ? 'Генератор уже работает.' : apiNote(response.status))
+      setPending(false)
+    }}>{generating ? 'Генерируем…' : 'Сгенерировать 5 дел'}</button></div>
+    {error && <p className="desk-error" role="alert">{error}</p>}
+    <div className="deck-layout"><section className="deck-list" aria-label="Список дел"><div className="deck-list-heading"><span>Дело</span><span>Статус</span></div>{visible.length ? visible.map(card => <button key={card.id} className={`deck-row ${selected?.id === card.id ? 'is-selected' : ''}`} aria-pressed={selected?.id === card.id} onClick={() => select(card)}><span><strong>{card.title}</strong><small>{card.crime}</small></span><span className="case-state">{card.used ? 'Сыграно' : 'В колоде'}</span></button>) : <p className="deck-empty">{cards.length ? 'По этому запросу дел нет.' : 'Колода пуста. Добавьте своё дело или запустите генерацию.'}</p>}<div className="deck-list-footer"><button disabled={pending || !cards.length} onClick={async () => {
+      setPending(true)
+      const response = await apiPost('/api/cases/reset', {})
+      if (response.ok) { await refresh(); setSelected(null) } else setError(apiNote(response.status))
+      setPending(false)
+    }}>Вернуть сыгранные дела в колоду</button></div></section>
+    <section className="deck-inspector" aria-label="Материалы выбранного дела">{selected ? editing ? <form className="settings-panel" onSubmit={async event => {
+      event.preventDefault()
+      setPending(true)
+      const fields = { title: selected.title.trim(), crime: selected.crime.trim(), context: selected.context || '', details: selected.details || '', defense_example: selected.defense_example || '' }
+      const response = selected.id ? await apiPut('/api/cases', { ...fields, id: selected.id }) : await apiPostJson<ShowCase>('/api/cases', { title: fields.title, crime: fields.crime, context: fields.context })
+      if (response.ok) { setEditing(false); setSelected(null); await refresh() } else setError('Не удалось сохранить дело. Проверьте название, обвинение и связь с сервером.')
+      setPending(false)
+    }}><h2>{selected.id ? 'Изменить дело' : 'Новое дело'}</h2><label>Название<input value={selected.title} required maxLength={120} onChange={event => setSelected({ ...selected,title:event.target.value })} /></label><label>Обвинение<textarea value={selected.crime} required maxLength={300} rows={3} onChange={event => setSelected({ ...selected,crime:event.target.value })} /></label><label>Улика или контекст<textarea value={selected.context || ''} maxLength={1000} rows={3} onChange={event => setSelected({ ...selected,context:event.target.value })} /></label>{selected.id && <><label>Материалы дела<textarea value={selected.details || ''} maxLength={5000} rows={4} onChange={event => setSelected({ ...selected,details:event.target.value })} /></label><label>Подсказка для защиты<textarea value={selected.defense_example || ''} maxLength={1000} rows={3} onChange={event => setSelected({ ...selected,defense_example:event.target.value })} /></label></>}<div className="inspector-actions"><button className="primary-action" disabled={pending}>Сохранить дело</button><button type="button" className="secondary-action" onClick={() => { setSelected(cards.find(card => card.id === selected.id) || null); setEditing(false) }}>Отмена</button></div></form> : <div className="settings-panel"><div className="inspector-meta"><span>{selected.source === 'ai' ? 'Сгенерировано' : 'Из колоды'}</span><span>{selected.used ? 'Сыграно' : 'Готово к заседанию'}</span></div><h2>{selected.title}</h2><h3>Обвинение</h3><p>{selected.crime}</p>{selected.context && <><h3>Улика или контекст</h3><p>{selected.context}</p></>}{selected.details && <><h3>Материалы</h3><p className="case-long-text">{selected.details}</p></>}{selected.defense_example && <><h3>Зацепка для ведущего</h3><p className="case-long-text">{selected.defense_example}</p></>}<div className="inspector-actions"><button className="primary-action" onClick={() => navigate('/', { state: { preparedCase: selected } })}>Подготовить в пульте<ArrowRight size={14} /></button><button className="secondary-action" onClick={() => setEditing(true)}>Изменить</button><button aria-label="Удалить выбранное дело" className="file-text-button" onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></div>{confirmDelete && <div className="delete-case-confirm"><span>Удалить «{selected.title}» из колоды?</span><button disabled={pending} className="stop-button" onClick={async () => {
+      setPending(true)
+      try { const response = await apiFetch(`/api/cases?id=${encodeURIComponent(selected.id)}`, { method: 'DELETE' }); if (response.ok) { setSelected(null); setConfirmDelete(false); await refresh() } else setError('Не удалось удалить дело.') } catch { setError('Нет связи с сервером.') }
+      setPending(false)
+    }}>Удалить</button><button className="file-text-button" onClick={() => setConfirmDelete(false)}>Отмена</button></div>}</div> : <div className="inspector-placeholder"><h2>Выберите дело слева</h2><p>Здесь будут обвинение, улики и подсказка для ведущего. Кнопка подготовки перенесёт дело в пульт без запуска суда.</p></div>}</section></div>
+  </div>
 }

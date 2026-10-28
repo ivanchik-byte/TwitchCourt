@@ -15,6 +15,10 @@ namespace Overlay {
     defendant?: string;
     charge?: string;
     time_left_sec?: number;
+    demo?: boolean;
+    mode?: string;
+    line?: string;
+    verdict?: Verdict;
   }
 
   export interface Verdict {
@@ -90,10 +94,16 @@ namespace Overlay {
   const verdict = el("verdict");
   const verdictText = el("verdict-text");
 
+  const phaseName = el("phase-name");
+  const participant = el("participant");
+  const speakerName = el("speaker-name");
+  const verdictDetail = el("verdict-detail");
+  let demoSession = false;
   let objectionTimer = 0;
   let briefCourtTimer = 0;
   let currentStageState = "idle";
 
+  let audioEpoch = 0;
   let audioCtx: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
   let lipRaf = 0;
@@ -131,6 +141,7 @@ namespace Overlay {
   }
 
   function enqueueAudio(base64: string): void {
+    const epoch = audioEpoch;
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -138,6 +149,7 @@ namespace Overlay {
     const copy = bytes.buffer.slice(0);
     ac.decodeAudioData(copy).then(
       (decoded) => {
+        if (epoch !== audioEpoch) return;
         audioQueue.push(decoded);
         if (!playing) playNext();
       },
@@ -167,6 +179,7 @@ namespace Overlay {
   }
 
   function stopAudio(): void {
+    audioEpoch += 1;
     audioQueue.length = 0;
     playing = false;
     try {
@@ -221,9 +234,10 @@ namespace Overlay {
 
   // Short samples live in sfx/, missing files stay silent on purpose.
   function playSfx(name: string): void {
+    if (demoSession) return;
     try {
       const audio = new Audio("sfx/" + name);
-      audio.volume = 0.9;
+      audio.volume = 0.4;
       void audio.play().catch(() => undefined);
     } catch {
       /* no sample yet */
@@ -232,7 +246,7 @@ namespace Overlay {
 
   function deskSlam(): void {
     slamVisual();
-    thump();
+    if (!demoSession) thump();
     playSfx("gavel.mp3");
   }
 
@@ -259,6 +273,7 @@ namespace Overlay {
   function showVerdict(payload: Overlay.Verdict): void {
     const guilty = payload.verdict === "ВИНОВЕН";
     verdictText.textContent = payload.verdict;
+    verdictDetail.textContent = payload.penalty || "";
     verdict.className = guilty ? "guilty" : "innocent";
     verdict.classList.remove("hidden");
     verdict.classList.remove("drop");
@@ -267,7 +282,7 @@ namespace Overlay {
     stopCrowd();
     stopBgm();
     slamVisual();
-    thump();
+    if (!demoSession) thump();
     playSfx("verdict.mp3");
   }
 
@@ -292,11 +307,12 @@ namespace Overlay {
   let bgm: HTMLAudioElement | null = null;
 
   function startBgm(): void {
+    if (demoSession) return;
     try {
       if (!bgm) {
         bgm = new Audio("sfx/bgm.mp3");
         bgm.loop = true;
-        bgm.volume = 0.25;
+        bgm.volume = 0.10;
       }
       void bgm.play().catch(() => undefined);
     } catch {
@@ -316,11 +332,12 @@ namespace Overlay {
   let crowd: HTMLAudioElement | null = null;
 
   function startCrowd(): void {
+    if (demoSession) return;
     try {
       if (!crowd) {
         crowd = new Audio("sfx/crowd.mp3");
         crowd.loop = true;
-        crowd.volume = 0.6;
+        crowd.volume = 0.08;
       }
       void crowd.play().catch(() => undefined);
     } catch {
@@ -357,6 +374,7 @@ namespace Overlay {
     const ws = new WebSocket(protocol + "//" + location.host + "/ws" + location.search);
     let pingTimer = 0;
     let staleTimer = 0;
+    let stateEvents = 0;
     ws.onmessage = (event: MessageEvent<string>) => {
       let msg: Overlay.ServerEvent;
       try {
@@ -366,10 +384,20 @@ namespace Overlay {
       }
       lastFrame = Date.now();
       markLive(true);
+      if (msg.type === "state_change") stateEvents += 1;
       handleEvent(msg);
     };
     ws.onopen = () => {
       failures = 0;
+      const revision = stateEvents;
+      void fetch("/api/status" + location.search).then(async (response) => {
+        if (!response.ok) return;
+        const status = await response.json() as { trial?: Overlay.StateChange };
+        if (revision !== stateEvents || ws.readyState !== WebSocket.OPEN || !status.trial) return;
+        handleEvent({ type: "state_change", payload: status.trial });
+        if (status.trial.line) handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: status.trial.line } });
+        if (status.trial.verdict) handleEvent({ type: "verdict", payload: status.trial.verdict });
+      }).catch(() => markLive(false));
       lastFrame = Date.now();
       markLive(true);
       window.clearInterval(pingTimer);
@@ -402,6 +430,14 @@ namespace Overlay {
       case "state_change": {
         const state = String(msg.payload.state || "idle");
         currentStageState = state;
+        if (typeof msg.payload.demo === "boolean") demoSession = msg.payload.demo;
+        const labels: Record<string, string> = { indictment: "Открытие дела", testimony: "Показания", defense: "Слово ведущего", objection: "Ответ суда", deliberation: "Совещание", verdict: "Вердикт" };
+        phaseName.textContent = labels[state] || "Заседание";
+        if (msg.payload.defendant) participant.textContent = msg.payload.defendant;
+        if (state === "indictment") {
+          caseNo.textContent = demoSession ? "РЕПЕТИЦИЯ" : (msg.payload.case_title || "ЗАСЕДАНИЕ");
+          subtitles.textContent = "";
+        }
         if (state === "idle") {
           stopBgm();
           stopCrowd();
@@ -420,11 +456,12 @@ namespace Overlay {
       }
       case "subtitles":
         revealCourtBriefly();
+        if (msg.payload.speaker) speakerName.textContent = msg.payload.speaker;
         if (msg.payload.text) subtitles.textContent = msg.payload.text;
         break;
       case "audio_chunk":
         revealCourtBriefly();
-        if (msg.payload.audio_base64) enqueueAudio(msg.payload.audio_base64);
+        if (!demoSession && msg.payload.audio_base64) enqueueAudio(msg.payload.audio_base64);
         if (msg.payload.text) subtitles.textContent = msg.payload.text;
         break;
       case "animation":
@@ -439,7 +476,7 @@ namespace Overlay {
         showVerdict(msg.payload);
         break;
       case "donation":
-        coinPing();
+        if (!demoSession) coinPing();
         break;
       case "testimony":
         testimonyAuthor.textContent = msg.payload.author || "Подсудимый";

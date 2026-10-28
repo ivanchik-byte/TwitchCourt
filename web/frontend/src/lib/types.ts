@@ -7,6 +7,7 @@ export type TribunalEventType =
   | 'panic'
   | 'donation'
   | 'testimony'
+  | 'queue_change'
 
 export interface StateChangePayload {
   state: string
@@ -14,6 +15,10 @@ export interface StateChangePayload {
   defendant?: string
   charge?: string
   time_left_sec?: number
+  demo?: boolean
+  mode?: 'viewer' | 'streamer' | 'unban'
+  line?: string
+  verdict?: VerdictPayload
 }
 
 export interface VerdictPayload {
@@ -36,6 +41,10 @@ export interface TestimonyPayload {
 }
 
 export interface DonationPayload {
+	 id: number
+	 action: string
+	 note: string
+	 at: string
   donor: string
   amount: number
   currency: string
@@ -44,6 +53,7 @@ export interface DonationPayload {
 }
 
 export interface PoolSeat {
+	priority: boolean
   nick: string
   reason: string
 }

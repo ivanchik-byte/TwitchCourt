@@ -22,6 +22,7 @@ type PoolSeat struct {
 	Nick     string    `json:"nick"`
 	Reason   string    `json:"reason"`
 	JoinedAt time.Time `json:"-"`
+	Priority bool      `json:"priority"`
 }
 
 // Punishment is the streamer's chosen penalty for a guilty viewer
@@ -30,8 +31,25 @@ type Punishment struct {
 	Secs int    `json:"secs"`
 }
 
+func (e *Engine) notifyQueueLocked() {
+	if e.hub != nil {
+		e.hub.BroadcastEvent(obs.EventQueueChanged, map[string]int{"size": len(e.pool)})
+	}
+}
+
 // JoinPool lines a viewer up for the stand; reason is an optional self-charge
 func (e *Engine) JoinPool(nick, reason string) (joined bool, position int) {
+	return e.joinPool(nick, reason, false)
+}
+
+func (e *Engine) JoinPriorityPool(nick, reason string) (joined bool, position int) {
+	return e.joinPool(nick, reason, true)
+}
+
+func (e *Engine) joinPool(nick, reason string, priority bool) (joined bool, position int) {
+	if !e.cfg.Load().Courtroom.QueueOpen {
+		return false, 0
+	}
 	clean := strings.TrimSpace(html.UnescapeString(e.filter.Sanitize(nick)))
 	if clean == "" {
 		return false, 0
@@ -40,14 +58,32 @@ func (e *Engine) JoinPool(nick, reason string) (joined bool, position int) {
 	defer e.mu.Unlock()
 	for i, seat := range e.pool {
 		if strings.EqualFold(seat.Nick, clean) {
-			return false, i + 1
+			if !priority || seat.Priority {
+				return false, i + 1
+			}
+			if strings.TrimSpace(reason) == "" {
+				reason = seat.Reason
+			}
+			e.pool = append(e.pool[:i], e.pool[i+1:]...)
+			break
 		}
 	}
 	if len(e.pool) >= maxPool {
 		return false, 0
 	}
-	e.pool = append(e.pool, PoolSeat{Nick: clean, Reason: truncateRunes(html.UnescapeString(e.filter.Sanitize(reason)), maxTestimonyRunes), JoinedAt: time.Now()})
-	return true, len(e.pool)
+	seat := PoolSeat{Nick: clean, Reason: truncateRunes(html.UnescapeString(e.filter.Sanitize(reason)), maxTestimonyRunes), JoinedAt: time.Now(), Priority: priority}
+	position = len(e.pool)
+	if priority {
+		position = 0
+		for position < len(e.pool) && e.pool[position].Priority {
+			position++
+		}
+	}
+	e.pool = append(e.pool, PoolSeat{})
+	copy(e.pool[position+1:], e.pool[position:])
+	e.pool[position] = seat
+	e.notifyQueueLocked()
+	return true, position + 1
 }
 
 // LeavePool drops a viewer from the line
@@ -57,6 +93,7 @@ func (e *Engine) LeavePool(nick string) bool {
 	for i, seat := range e.pool {
 		if strings.EqualFold(seat.Nick, nick) {
 			e.pool = append(e.pool[:i], e.pool[i+1:]...)
+			e.notifyQueueLocked()
 			return true
 		}
 	}
@@ -82,6 +119,7 @@ func (e *Engine) PickRandom() (PoolSeat, bool) {
 	i := rand.Intn(len(e.pool))
 	seat := e.pool[i]
 	e.pool = append(e.pool[:i], e.pool[i+1:]...)
+	e.notifyQueueLocked()
 	return seat, true
 }
 
@@ -92,6 +130,7 @@ func (e *Engine) PickNick(nick string) (PoolSeat, bool) {
 	for i, seat := range e.pool {
 		if strings.EqualFold(seat.Nick, nick) {
 			e.pool = append(e.pool[:i], e.pool[i+1:]...)
+			e.notifyQueueLocked()
 			return seat, true
 		}
 	}
@@ -114,6 +153,7 @@ func (e *Engine) ReturnSeat(seat PoolSeat) {
 		return
 	}
 	e.pool = append([]PoolSeat{seat}, e.pool...)
+	e.notifyQueueLocked()
 }
 
 // CurrentDefendant names who is on the stand right now

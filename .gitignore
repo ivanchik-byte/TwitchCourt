@@ -2,14 +2,8 @@
 node_modules/
 web/frontend/node_modules/
 
-# Documentation & notes
-MoneyPrinter.md
-draft.md
-notes.md
-BeforeReal.md
-Setup.md
-Workflow.md
-
+# Local AI notes, research, and review artifacts
+/.infoslop/
 
 # Binaries
 *.exe

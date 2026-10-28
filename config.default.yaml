@@ -31,6 +31,7 @@ tts:
   speed: 1.15
 
 courtroom:
+  queue_open: true # accept voluntary entries from !court and paid entries
   theme: "ace_attorney"
   judge_name: "Судья"
   judge_style: "strict"
@@ -70,6 +71,9 @@ courtroom:
     low_mark: 3 # refill when fewer remain unplayed
 
 donations:
+  witness_enabled: true # attach regular donation messages to the current case
+  rule_currency: "RUB" # currency of queue_min, bribe_min and automatic-trial thresholds
+  queue_min: 0 # priority entry via donation message !court twitch_login; 0 = disabled
   token: ""
   default_min: 100
   platinum_min: 500

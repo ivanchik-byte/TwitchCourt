@@ -195,47 +195,11 @@ func main() {
 	}
 	var voiceMu sync.Mutex
 
-	handleDonation := func(d bot.Donation) {
-		if d.Amount <= 0 {
-			return
-		}
-		recall.AddDonation(memory.DonationRecord{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message})
-		event := bot.DonationEvent{Donor: d.Donor, Amount: d.Amount, Currency: d.Currency, Message: d.Message}
-		passed := donateGate.Pass(event)
-		hub.BroadcastEvent(obs.EventDonation, obs.DonationPayload{
-			Donor:      d.Donor,
-			Amount:     d.Amount,
-			Currency:   d.Currency,
-			Message:    d.Message,
-			OpensTrial: passed,
-		})
-		if !passed {
-			return
-		}
-		donor := d.Donor
-		if donor == "" {
-			donor = "Аноним"
-		}
-		if d.Amount >= 500 && donor != "" {
-			recall.NoteForAI("меценат " + donor + " любит взятки и ждет снисхождения")
-		}
-		// queue donation as testimony during active trial instead of competing
-		queued := false
-		if safety.Banned(d.Message) {
-			queued = engine.AddFlaggedWitness(donor, d.Amount, d.Currency, d.Message)
-		} else {
-			queued = engine.AddWitness(donor, d.Amount, d.Currency, d.Message)
-		}
-		if queued {
-			if isBribe(cfg.Load(), d.Amount, d.Message) {
-				engine.AddBribe(donor, d.Amount, d.Currency, d.Message)
-			}
-			return
-		}
-		openDonationTrial(cfg.Load(), openStreamerTrial, donor, d.Amount, d.Currency, d.Message)
-	}
+	donationLog := &donationDesk{currentConfig: func() *config.Config { return cfg.Load() }, engine: engine, recall: recall, hub: hub, filter: filter, open: openStreamerTrial}
+	handleDonation := donationLog.receive
 
 	mux := http.NewServeMux()
+	registerDonationDesk(mux, donationLog)
 	mux.HandleFunc("/ws", hub.ServeWS)
 
 	overlaySub, err := fs.Sub(web.StaticFS, "overlay")
@@ -264,11 +228,17 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		status := map[string]interface{}{
-			"status":   "online",
-			"state":    engine.GetState(),
-			"port":     cfg.Load().Server.Port,
-			"ai_live":  cfg.Load().AI.APIKey != "" || cfg.Load().AI.Provider == "ollama",
-			"tts_beep": ttsIsBeep(cfg.Load()),
+			"status":            "online",
+			"state":             engine.GetState(),
+			"port":              cfg.Load().Server.Port,
+			"ai_live":           cfg.Load().AI.APIKey != "" || cfg.Load().AI.BaseURL != "" || cfg.Load().AI.Provider == "ollama",
+			"tts_beep":          ttsIsBeep(cfg.Load()),
+			"tts_engine":        cfg.Load().TTS.Engine,
+			"tts_enabled":       cfg.Load().TTS.Enabled,
+			"twitch_configured": cfg.Load().Twitch.Token != "" && cfg.Load().Twitch.Channel != "",
+			"streamer_name":     cfg.Load().Game.StreamerName,
+			"panic_hotkey":      cfg.Load().Safety.PanicHotkey,
+			"trial":             engine.Snapshot(),
 		}
 		if modChat := chat.Load(); modChat != nil {
 			if modErr, bad := modChat.LastModError(); bad {
@@ -277,47 +247,9 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(status)
 	})
+	registerShowControls(mux, func() *config.Config { return cfg.Load() }, engine)
 
-	mux.HandleFunc("/api/trial", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if !checkHTTPAuth(cfg.Load(), r) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		var req struct {
-			Defendant string `json:"defendant"`
-			Crime     string `json:"crime"`
-			Context   string `json:"context"`
-			Viewer    bool   `json:"viewer"`
-		}
-		if err := decodeJSON(w, r, &req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-		req.Defendant = truncateRunes(req.Defendant, 64)
-		req.Crime = truncateRunes(req.Crime, 300)
-		req.Context = truncateRunes(req.Context, 1000)
-		if req.Defendant == "" {
-			req.Defendant = cfg.Load().Game.StreamerName
-		}
-		if req.Crime == "" {
-			req.Crime = cfg.Load().Chat.DefaultCrime
-		}
-		var trialErr error
-		if req.Viewer {
-			trialErr = engine.StartViewerTrial(req.Defendant, req.Crime)
-		} else {
-			trialErr = engine.StartTrial(req.Defendant, req.Crime, req.Context)
-		}
-		if trialErr != nil {
-			http.Error(w, trialErr.Error(), http.StatusConflict)
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-	})
+	mux.HandleFunc("/api/trial", trialHandler(func() *config.Config { return cfg.Load() }, engine))
 
 	mux.HandleFunc("/api/say", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -813,7 +745,7 @@ func main() {
 			user = found.UserLogin
 		}
 		if err := engine.StartUnbanTrial(user, found.Text); err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			writeTrialError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
@@ -946,6 +878,26 @@ func main() {
 			card, err := deck.Add(req.Title, req.Crime, req.Context, req.Tags, "hand")
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			json.NewEncoder(w).Encode(card)
+		case http.MethodPut:
+			if !checkHTTPAuth(cfg.Load(), r) {
+				http.Error(w, "unauthorized", 401)
+				return
+			}
+			var card court.CaseCard
+			if err := decodeJSON(w, r, &card); err != nil || card.ID == "" {
+				http.Error(w, "bad request", 400)
+				return
+			}
+			card.Title = truncateRunes(card.Title, 120)
+			card.Crime = truncateRunes(card.Crime, 300)
+			card.Context = truncateRunes(card.Context, 1000)
+			card.Details = truncateRunes(card.Details, 5000)
+			card.DefenseExample = truncateRunes(card.DefenseExample, 1000)
+			if err := deck.Update(card); err != nil {
+				http.Error(w, err.Error(), 400)
 				return
 			}
 			json.NewEncoder(w).Encode(card)
@@ -1395,136 +1347,7 @@ func main() {
 	gameCtx, stopGame := context.WithCancel(context.Background())
 	defer stopGame()
 
-	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.Method {
-		case http.MethodGet:
-			if !checkHTTPAuth(cfg.Load(), r) {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts":        cfg.Load().Donations.MinAmounts,
-				"default_min":        cfg.Load().Donations.DefaultMin,
-				"streamer_trial_min": cfg.Load().Donations.StreamerTrialMin,
-				"platinum_min":       cfg.Load().Donations.PlatinumMin,
-				"judge_name":         cfg.Load().Courtroom.JudgeName,
-				"theme":              cfg.Load().Courtroom.Theme,
-				"punishments":        cfg.Load().Courtroom.Punishments,
-				"judge_style":        cfg.Load().Courtroom.JudgeStyle,
-				"defense_sec":        cfg.Load().Courtroom.DefenseSec,
-				"testimony_sec":      cfg.Load().Courtroom.TestimonySec,
-				"sue_threshold":      cfg.Load().Courtroom.SueThreshold,
-				"sue_window_sec":     cfg.Load().Courtroom.SueWindowSec,
-				"crime_enabled":      cfg.Load().Courtroom.CrimeEnabled,
-				"streamer_chance":    cfg.Load().Courtroom.StreamerChance,
-				"articles":           cfg.Load().Courtroom.Articles,
-			})
-		case http.MethodPut:
-			if !checkHTTPAuth(cfg.Load(), r) {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			var req struct {
-				MinAmounts       map[string]float64 `json:"min_amounts"`
-				DefaultMin       *float64           `json:"default_min"`
-				StreamerTrialMin *float64           `json:"streamer_trial_min"`
-				PlatinumMin      *float64           `json:"platinum_min"`
-				JudgeName        *string            `json:"judge_name"`
-				Theme            *string            `json:"theme"`
-				Punishments      []string           `json:"punishments"`
-				JudgeStyle       *string            `json:"judge_style"`
-				DefenseSec       *int               `json:"defense_sec"`
-				TestimonySec     *int               `json:"testimony_sec"`
-				SueThreshold     *int               `json:"sue_threshold"`
-				SueWindowSec     *int               `json:"sue_window_sec"`
-				CrimeEnabled     *bool              `json:"crime_enabled"`
-				StreamerChance   *float64           `json:"streamer_chance"`
-				Articles         []string           `json:"articles"`
-			}
-			if err := decodeJSON(w, r, &req); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
-				return
-			}
-			next := cfg.Load().Clone()
-			if req.MinAmounts != nil {
-				next.Donations.MinAmounts = req.MinAmounts
-			}
-			if req.DefaultMin != nil {
-				next.Donations.DefaultMin = *req.DefaultMin
-			}
-			if req.StreamerTrialMin != nil && *req.StreamerTrialMin >= 0 {
-				next.Donations.StreamerTrialMin = *req.StreamerTrialMin
-			}
-			if req.PlatinumMin != nil && *req.PlatinumMin >= 0 {
-				next.Donations.PlatinumMin = *req.PlatinumMin
-			}
-			if req.JudgeName != nil && strings.TrimSpace(*req.JudgeName) != "" {
-				next.Courtroom.JudgeName = strings.TrimSpace(*req.JudgeName)
-			}
-			if req.Theme != nil && strings.TrimSpace(*req.Theme) != "" {
-				next.Courtroom.Theme = strings.TrimSpace(*req.Theme)
-			}
-			if req.Punishments != nil {
-				next.Courtroom.Punishments = req.Punishments
-				engine.SetPunishments(req.Punishments)
-			}
-			if req.Articles != nil {
-				next.Courtroom.Articles = req.Articles
-			}
-			if req.JudgeStyle != nil {
-				switch *req.JudgeStyle {
-				case "cynical":
-					next.Courtroom.JudgeStyle = "cynical"
-				case "random":
-					next.Courtroom.JudgeStyle = "random"
-				default:
-					next.Courtroom.JudgeStyle = "strict"
-				}
-			}
-			if req.DefenseSec != nil && *req.DefenseSec >= 5 && *req.DefenseSec <= 120 {
-				next.Courtroom.DefenseSec = *req.DefenseSec
-			}
-			if req.TestimonySec != nil && *req.TestimonySec >= 5 && *req.TestimonySec <= 120 {
-				next.Courtroom.TestimonySec = *req.TestimonySec
-			}
-			if req.SueThreshold != nil && *req.SueThreshold >= 0 && *req.SueThreshold <= 100 {
-				next.Courtroom.SueThreshold = *req.SueThreshold
-			}
-			if req.SueWindowSec != nil && *req.SueWindowSec >= 60 && *req.SueWindowSec <= 3600 {
-				next.Courtroom.SueWindowSec = *req.SueWindowSec
-			}
-			if req.CrimeEnabled != nil {
-				next.Courtroom.CrimeEnabled = *req.CrimeEnabled
-			}
-			if req.StreamerChance != nil && *req.StreamerChance >= 0 && *req.StreamerChance <= 1 {
-				next.Courtroom.StreamerChance = *req.StreamerChance
-			}
-			if !publish(w, next) {
-				return
-			}
-			donateGate.SetMinimums(next.Donations.MinAmounts, next.Donations.DefaultMin)
-			json.NewEncoder(w).Encode(map[string]any{
-				"min_amounts":        next.Donations.MinAmounts,
-				"default_min":        next.Donations.DefaultMin,
-				"streamer_trial_min": next.Donations.StreamerTrialMin,
-				"platinum_min":       next.Donations.PlatinumMin,
-				"judge_name":         next.Courtroom.JudgeName,
-				"theme":              next.Courtroom.Theme,
-				"punishments":        next.Courtroom.Punishments,
-				"judge_style":        next.Courtroom.JudgeStyle,
-				"defense_sec":        next.Courtroom.DefenseSec,
-				"testimony_sec":      next.Courtroom.TestimonySec,
-				"sue_threshold":      next.Courtroom.SueThreshold,
-				"sue_window_sec":     next.Courtroom.SueWindowSec,
-				"crime_enabled":      next.Courtroom.CrimeEnabled,
-				"streamer_chance":    next.Courtroom.StreamerChance,
-				"articles":           next.Courtroom.Articles,
-			})
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	registerSettings(mux, func() *config.Config { return cfg.Load() }, publish, engine, donateGate)
 
 	mux.HandleFunc("/api/safety", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
