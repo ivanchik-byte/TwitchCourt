@@ -200,6 +200,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerDonationDesk(mux, donationLog)
+	registerAppearance(mux, func() *config.Config { return cfg.Load() }, publish, hub)
 	mux.HandleFunc("/ws", hub.ServeWS)
 
 	overlaySub, err := fs.Sub(web.StaticFS, "overlay")
@@ -248,6 +249,8 @@ func main() {
 		json.NewEncoder(w).Encode(status)
 	})
 	registerShowControls(mux, func() *config.Config { return cfg.Load() }, engine)
+	registerJury(mux, func() *config.Config { return cfg.Load() }, engine)
+	registerCasePacks(mux, func() *config.Config { return cfg.Load() }, engine)
 
 	mux.HandleFunc("/api/trial", trialHandler(func() *config.Config { return cfg.Load() }, engine))
 
@@ -865,17 +868,17 @@ func main() {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
-			var req struct {
-				Title   string   `json:"title"`
-				Crime   string   `json:"crime"`
-				Context string   `json:"context"`
-				Tags    []string `json:"tags"`
-			}
+			var req court.CaseCard
 			if err := decodeJSON(w, r, &req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
 				return
 			}
-			card, err := deck.Add(req.Title, req.Crime, req.Context, req.Tags, "hand")
+			if err := limitCaseMaterials(&req); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			req.Source, req.SourceURL = "hand", ""
+			card, err := deck.AddCard(req)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -891,11 +894,10 @@ func main() {
 				http.Error(w, "bad request", 400)
 				return
 			}
-			card.Title = truncateRunes(card.Title, 120)
-			card.Crime = truncateRunes(card.Crime, 300)
-			card.Context = truncateRunes(card.Context, 1000)
-			card.Details = truncateRunes(card.Details, 5000)
-			card.DefenseExample = truncateRunes(card.DefenseExample, 1000)
+			if err := limitCaseMaterials(&card); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
 			if err := deck.Update(card); err != nil {
 				http.Error(w, err.Error(), 400)
 				return
@@ -1236,7 +1238,7 @@ func main() {
 		// single judge portrait: ?state= is accepted for old overlays but ignored
 		switch r.Method {
 		case http.MethodGet:
-			serveJudgePhoto(w, r)
+			serveJudgePhoto(w, r, cfg.Load().Appearance.JudgePreset)
 		case http.MethodPost:
 			if !checkHTTPAuth(cfg.Load(), r) {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -1251,6 +1253,7 @@ func main() {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			hub.BroadcastEvent(obs.EventAppearance, appearanceView(cfg.Load()))
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1275,6 +1278,7 @@ func main() {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			hub.BroadcastEvent(obs.EventAppearance, appearanceView(cfg.Load()))
 			w.WriteHeader(http.StatusNoContent)
 		case http.MethodDelete:
 			if !checkHTTPAuth(cfg.Load(), r) {
@@ -1282,6 +1286,7 @@ func main() {
 				return
 			}
 			_ = os.Remove(courtBgPath())
+			hub.BroadcastEvent(obs.EventAppearance, appearanceView(cfg.Load()))
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1515,6 +1520,8 @@ func main() {
 	// chatHandler routes every chat line; chat itself is rebuilt on token change
 	chatHandler := func(cmd bot.ChatCommand) {
 		switch cmd.Kind {
+		case bot.CommandVote:
+			engine.VoteJury(cmd.Author, cmd.Argument)
 		case bot.CommandCourt:
 			// a bare seat, no case attached: the trial comes from the deck
 			if joined, pos := engine.JoinPool(cmd.Author, ""); joined {

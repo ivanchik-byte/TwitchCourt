@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Plus, Search, Shuffle, Trash2 } from 'lucide-react'
 import { apiFetch, apiGet, apiNote, apiPost, apiPostJson, apiPut } from '../lib/api'
 import type { ShowCase } from '../lib/show'
+import { CasePackShelf } from '../components/show/CasePackShelf'
+import { CaseEditor } from '../components/show/CaseEditor'
 
 const emptyCase: ShowCase = { id: '', title: '', crime: '', context: '', details: '', defense_example: '' }
 
@@ -14,6 +16,7 @@ export function CasesView() {
   const [editing, setEditing] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
+  const [source, setSource] = useState('all')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [generating, setGenerating] = useState(false)
@@ -43,13 +46,14 @@ export function CasesView() {
     return () => { mounted = false; clearInterval(timer) }
   }, [generating,refresh])
 
-  const visible = cards.filter(card => (filter === 'all' || (filter === 'unused' ? !card.used : card.used)) && `${card.title} ${card.crime}`.toLowerCase().includes(query.toLowerCase()))
+  const visible = cards.filter(card => (filter === 'all' || (filter === 'unused' ? !card.used : card.used)) && (source === 'all' || card.source === source) && `${card.title} ${card.crime} ${(card.tags || []).join(' ')}`.toLowerCase().includes(query.toLowerCase()))
   const available = cards.filter(card => !card.used)
   const select = (card: ShowCase) => { setSelected(card); setEditing(false); setConfirmDelete(false) }
 
   return <div className="deck-workbench">
     <div className="desk-heading"><div className="workspace-title"><h1>Колода дел</h1><span>{remaining} не сыграно · всего {cards.length}</span></div><Link className="quiet-link" to="/settings?section=rules">Правила и автопополнение<ArrowRight size={13} /></Link></div>
-    <div className="deck-toolbar"><div className="deck-search"><Search size={14} /><input aria-label="Поиск дел" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти дело или обвинение" /></div><select aria-label="Статус дел" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Все дела</option><option value="unused">Не сыграно</option><option value="used">Сыграно</option></select><button className="secondary-action" disabled={!available.length || editing} onClick={() => select(available[Math.floor(Math.random()*available.length)])}><Shuffle size={13} /> Выбрать случайное</button><button className="secondary-action" disabled={pending} onClick={() => { setSelected(emptyCase); setEditing(true); setConfirmDelete(false) }}><Plus size={14} /> Новое дело</button><button className="secondary-action" disabled={generating || pending} onClick={async () => {
+    <CasePackShelf onImport={refresh} />
+    <div className="deck-toolbar"><div className="deck-search"><Search size={14} /><input aria-label="Поиск дел" value={query} onChange={event => setQuery(event.target.value)} placeholder="Найти дело или обвинение" /></div><select aria-label="Статус дел" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Все дела</option><option value="unused">Не сыграно</option><option value="used">Сыграно</option></select><select aria-label="Источник дел" value={source} onChange={event => setSource(event.target.value)}><option value="all">Все источники</option><option value="reddit">По мотивам Reddit</option><option value="hand">Свои дела</option><option value="ai">Сгенерированные</option></select><button className="secondary-action" disabled={!available.length || editing} onClick={() => select(available[Math.floor(Math.random()*available.length)])}><Shuffle size={13} /> Выбрать случайное</button><button className="secondary-action" disabled={pending} onClick={() => { setSelected(emptyCase); setEditing(true); setConfirmDelete(false) }}><Plus size={14} /> Новое дело</button><button className="secondary-action" disabled={generating || pending} onClick={async () => {
       setPending(true)
       const response = await apiPost('/api/cases/generate', { count: 5 })
       if (response.ok) { setGenerating(true); setError('') } else setError(response.status === 409 ? 'Генератор уже работает.' : apiNote(response.status))
@@ -62,14 +66,14 @@ export function CasesView() {
       if (response.ok) { await refresh(); setSelected(null) } else setError(apiNote(response.status))
       setPending(false)
     }}>Вернуть сыгранные дела в колоду</button></div></section>
-    <section className="deck-inspector" aria-label="Материалы выбранного дела">{selected ? editing ? <form className="settings-panel" onSubmit={async event => {
-      event.preventDefault()
+    <section className="deck-inspector" aria-label="Материалы выбранного дела">{selected ? editing ? <CaseEditor card={selected} busy={pending} onChange={setSelected} onCancel={() => { setSelected(cards.find(card => card.id === selected.id) || null); setEditing(false) }} onSave={async () => {
       setPending(true)
-      const fields = { title: selected.title.trim(), crime: selected.crime.trim(), context: selected.context || '', details: selected.details || '', defense_example: selected.defense_example || '' }
-      const response = selected.id ? await apiPut('/api/cases', { ...fields, id: selected.id }) : await apiPostJson<ShowCase>('/api/cases', { title: fields.title, crime: fields.crime, context: fields.context })
-      if (response.ok) { setEditing(false); setSelected(null); await refresh() } else setError('Не удалось сохранить дело. Проверьте название, обвинение и связь с сервером.')
+      const fields = { title: selected.title.trim(), crime: selected.crime.trim(), context: selected.context || '', details: selected.details || '', defense_example: selected.defense_example || '', dilemma: selected.dilemma || '', question: selected.question || '', exhibits: selected.exhibits || [] }
+      const response = selected.id ? await apiPut('/api/cases', { ...fields, id: selected.id }) : await apiPostJson<ShowCase>('/api/cases', fields)
+      if (response.ok) { setEditing(false); setSelected(null); await refresh() }
+      else setError('Не удалось сохранить дело. Проверьте материалы и связь с сервером.')
       setPending(false)
-    }}><h2>{selected.id ? 'Изменить дело' : 'Новое дело'}</h2><label>Название<input value={selected.title} required maxLength={120} onChange={event => setSelected({ ...selected,title:event.target.value })} /></label><label>Обвинение<textarea value={selected.crime} required maxLength={300} rows={3} onChange={event => setSelected({ ...selected,crime:event.target.value })} /></label><label>Улика или контекст<textarea value={selected.context || ''} maxLength={1000} rows={3} onChange={event => setSelected({ ...selected,context:event.target.value })} /></label>{selected.id && <><label>Материалы дела<textarea value={selected.details || ''} maxLength={5000} rows={4} onChange={event => setSelected({ ...selected,details:event.target.value })} /></label><label>Подсказка для защиты<textarea value={selected.defense_example || ''} maxLength={1000} rows={3} onChange={event => setSelected({ ...selected,defense_example:event.target.value })} /></label></>}<div className="inspector-actions"><button className="primary-action" disabled={pending}>Сохранить дело</button><button type="button" className="secondary-action" onClick={() => { setSelected(cards.find(card => card.id === selected.id) || null); setEditing(false) }}>Отмена</button></div></form> : <div className="settings-panel"><div className="inspector-meta"><span>{selected.source === 'ai' ? 'Сгенерировано' : 'Из колоды'}</span><span>{selected.used ? 'Сыграно' : 'Готово к заседанию'}</span></div><h2>{selected.title}</h2><h3>Обвинение</h3><p>{selected.crime}</p>{selected.context && <><h3>Улика или контекст</h3><p>{selected.context}</p></>}{selected.details && <><h3>Материалы</h3><p className="case-long-text">{selected.details}</p></>}{selected.defense_example && <><h3>Зацепка для ведущего</h3><p className="case-long-text">{selected.defense_example}</p></>}<div className="inspector-actions"><button className="primary-action" onClick={() => navigate('/', { state: { preparedCase: selected } })}>Подготовить в пульте<ArrowRight size={14} /></button><button className="secondary-action" onClick={() => setEditing(true)}>Изменить</button><button aria-label="Удалить выбранное дело" className="file-text-button" onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></div>{confirmDelete && <div className="delete-case-confirm"><span>Удалить «{selected.title}» из колоды?</span><button disabled={pending} className="stop-button" onClick={async () => {
+    }} /> : <div className="settings-panel"><div className="inspector-meta"><span>{selected.source === 'ai' ? 'Сгенерировано' : selected.source === 'reddit' ? 'По мотивам Reddit' : 'Из колоды'}</span><span>{selected.used ? 'Сыграно' : 'Готово к заседанию'}</span></div><h2>{selected.title}</h2>{selected.source_url?.startsWith('https://www.reddit.com/') && <a className="case-source-link" href={selected.source_url} target="_blank" rel="noreferrer">Исходная история на Reddit</a>}<h3>Обвинение</h3><p>{selected.crime}</p>{selected.context && <><h3>Улика или контекст</h3><p>{selected.context}</p></>}{selected.details && <><h3>Материалы</h3><p className="case-long-text">{selected.details}</p></>}{selected.dilemma && <><h3>О чём спор</h3><p>{selected.dilemma}</p></>}{selected.defense_example && <><h3>Зацепка для ведущего</h3><p className="case-long-text">{selected.defense_example}</p></>}{selected.question && <><h3>Вопрос в зал</h3><p>{selected.question}</p></>}{selected.exhibits?.map((exhibit, index) => <details className="case-exhibit-preview" key={index}><summary>Улика ведущему: {exhibit.title}</summary><p>{exhibit.text}</p><small>Во время заседания приобщается отдельной кнопкой.</small></details>)}<div className="inspector-actions"><button className="primary-action" onClick={() => navigate('/', { state: { preparedCase: selected } })}>Подготовить в пульте<ArrowRight size={14} /></button><button className="secondary-action" onClick={() => setEditing(true)}>Изменить</button><button aria-label="Удалить выбранное дело" className="file-text-button" onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></button></div>{confirmDelete && <div className="delete-case-confirm"><span>Удалить «{selected.title}» из колоды?</span><button disabled={pending} className="stop-button" onClick={async () => {
       setPending(true)
       try { const response = await apiFetch(`/api/cases?id=${encodeURIComponent(selected.id)}`, { method: 'DELETE' }); if (response.ok) { setSelected(null); setConfirmDelete(false); await refresh() } else setError('Не удалось удалить дело.') } catch { setError('Нет связи с сервером.') }
       setPending(false)

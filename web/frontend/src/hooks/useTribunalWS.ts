@@ -158,7 +158,20 @@ export function useTribunalWS() {
           clearTimeout(pongWait)
           setState((s) => ({ ...s, rttMs: Date.now() - pingAt.current }))
           return
-        }        switch (msg.type) {
+        }
+        switch (msg.type) {
+          case 'jury':
+            window.dispatchEvent(new CustomEvent('tribunal-jury', { detail: msg.payload }))
+            break
+          case 'exhibit': {
+            const exhibit = msg.payload as { title: string; text: string }
+            push('exhibit', `${exhibit.title}: ${exhibit.text}`, 'Материалы дела')
+            window.dispatchEvent(new CustomEvent('tribunal-exhibit', { detail: msg.payload }))
+            break
+          }
+          case 'appearance_change':
+            window.dispatchEvent(new CustomEvent('tribunal-appearance', { detail: msg.payload }))
+            break
           case 'state_change': {
             stateEvents += 1
             const p = msg.payload as StateChangePayload
@@ -170,7 +183,7 @@ export function useTribunalWS() {
               caseTitle: p.case_title ?? (p.state === 'idle' ? '' : s.caseTitle),
               defendant: p.state === 'idle' ? '' : (p.defendant ?? s.defendant),
               charge: p.state === 'idle' ? '' : (p.charge ?? s.charge),
-              timeLeft: p.state === 'testimony' || p.state === 'defense' ? (p.time_left_sec ?? null) : null,
+              timeLeft: p.state === 'testimony' || p.state === 'defense' || p.state === 'jury' ? (p.time_left_sec ?? null) : null,
               judgeLine: p.state === 'indictment' || p.state === 'idle' ? '' : s.judgeLine,
               verdict: p.state === 'indictment' ? null : s.verdict,
               stenogram: p.state === 'indictment' ? [] : s.stenogram,

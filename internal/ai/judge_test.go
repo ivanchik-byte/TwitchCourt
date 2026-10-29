@@ -57,3 +57,12 @@ func TestQuoteMarksUntrusted(t *testing.T) {
 		t.Fatal("trust invariant must ride along")
 	}
 }
+
+func TestCounterSeesMaterialsAndKeepsThemQuoted(t *testing.T) {
+	prompt := BuildCounterArgumentPromptWithContext("Это была общая покупка", "Переписка: долю предложили выкупить", "Проверь довод")
+	for _, text := range []string{"«Это была общая покупка»", "«Переписка: долю предложили выкупить»", "[objection]"} {
+		if !strings.Contains(prompt, text) {
+			t.Fatal("counter argument lost context or trust boundary", text)
+		}
+	}
+}

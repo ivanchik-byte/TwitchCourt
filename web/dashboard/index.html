@@ -4,8 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stream Tribunal · Пульт</title>
-    <script type="module" crossorigin src="./assets/index-DhepZb3f.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-8WG7Cmdt.css">
+    <script>
+      try {
+        const theme = localStorage.getItem('tribunal-theme');
+        document.documentElement.dataset.theme = ['graphite', 'slate', 'walnut'].includes(theme) ? theme : 'graphite';
+      } catch {
+        document.documentElement.dataset.theme = 'graphite';
+      }
+    </script>
+    <script type="module" crossorigin src="./assets/index-DlF5AzoV.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-4y76fXt0.css">
   </head>
   <body>
     <div id="root"></div>

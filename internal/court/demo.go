@@ -78,9 +78,17 @@ func (e *Engine) runDemo(ctx context.Context, cancel context.CancelFunc, gen uin
 		line  string
 	}{
 		{StateTestimony, ""}, {StateDefense, ""},
-		{StateObjection, script.response}, {StateVerdict, script.penalty},
+		{StateObjection, script.response}, {StateJury, ""}, {StateVerdict, script.penalty},
 	}
 	for _, step := range steps {
+		if step.state == StateJury {
+			e.mu.RLock()
+			enabled := e.currCase != nil && e.currCase.Jury != nil
+			e.mu.RUnlock()
+			if !enabled {
+				continue
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return

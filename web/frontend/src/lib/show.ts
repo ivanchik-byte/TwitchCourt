@@ -11,6 +11,10 @@ export interface ShowCase {
   source?: string
   used?: boolean
   hint?: string
+  source_url?: string
+  dilemma?: string
+  question?: string
+  exhibits?: { title: string; text: string }[]
 }
 
 export interface ShowStatus {
@@ -47,6 +51,7 @@ export const starterCases: Record<Exclude<CourtMode, 'unban'>, ShowCase[]> = {
 export const phaseLabels: Record<string, string> = {
   idle: 'Готовимся к заседанию', indictment: 'Открытие дела', testimony: 'Показания',
   defense: 'Ваше слово', objection: 'Ответ суда', deliberation: 'Суд совещается', verdict: 'Вердикт',
+  jury: 'Мнение присяжных',
 }
 
 export const phaseOrder = ['indictment', 'testimony', 'defense', 'objection', 'verdict']

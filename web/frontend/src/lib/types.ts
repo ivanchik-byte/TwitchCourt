@@ -8,6 +8,32 @@ export type TribunalEventType =
   | 'donation'
   | 'testimony'
   | 'queue_change'
+  | 'appearance_change'
+  | 'exhibit'
+  | 'jury'
+
+export interface JuryRound {
+  id: string
+  number: number
+  status: 'open' | 'closed'
+  closes_at_ms?: number
+  total: number
+  guilty?: number
+  innocent?: number
+}
+
+export interface JuryStatus {
+  epoch: string
+  revision: number
+  trial_id: number
+  demo: boolean
+  can_first: boolean
+  can_second: boolean
+  open_round: number
+  first?: JuryRound
+  second?: JuryRound
+  comparison?: { compared: number; changed: number }
+}
 
 export interface StateChangePayload {
   state: string

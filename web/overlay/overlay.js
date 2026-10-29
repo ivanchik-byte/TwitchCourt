@@ -21,6 +21,7 @@ function markLive(ok) {
     const court = el("court");
     const prosecutor = el("prosecutor");
     const mouth = el("mouth");
+    const judgePortrait = el("judge-portrait");
     const caseNo = el("case-no");
     const charge = el("charge");
     const subtitles = el("subtitles");
@@ -30,6 +31,9 @@ function markLive(ok) {
     const objection = el("objection");
     const verdict = el("verdict");
     const verdictText = el("verdict-text");
+    const juryPanel = el("jury");
+    let lastJury = null;
+    let juryClock = 0;
     const phaseName = el("phase-name");
     const participant = el("participant");
     const speakerName = el("speaker-name");
@@ -38,6 +42,77 @@ function markLive(ok) {
     let objectionTimer = 0;
     let briefCourtTimer = 0;
     let currentStageState = "idle";
+    const preview = new URLSearchParams(location.search).get("preview") === "1";
+    if (preview)
+        link.remove();
+    function showJury(view) {
+        if (lastJury?.epoch === view.epoch && lastJury.revision > view.revision)
+            view = lastJury;
+        lastJury = view;
+        window.clearInterval(juryClock);
+        juryPanel.replaceChildren();
+        const visible = !!view.first && currentStageState !== "idle";
+        juryPanel.classList.toggle("hidden", !visible);
+        document.body.classList.toggle("jury-visible", visible);
+        if (!visible)
+            return;
+        const heading = document.createElement("div");
+        heading.className = "jury-heading";
+        heading.textContent = "МНЕНИЕ ПРИСЯЖНЫХ";
+        juryPanel.appendChild(heading);
+        const open = view.open_round === 1 ? view.first : view.open_round === 2 ? view.second : undefined;
+        if (open) {
+            const title = document.createElement("p");
+            title.className = "jury-prompt";
+            title.textContent = "Виновен или невиновен?";
+            const commands = document.createElement("p");
+            commands.className = "jury-commands";
+            commands.textContent = "!vote 1 — виновен     !vote 2 — невиновен";
+            const status = document.createElement("p");
+            status.className = "jury-status";
+            const tick = () => {
+                const left = Math.max(0, Math.ceil(((open.closes_at_ms ?? 0) - Date.now()) / 1000));
+                status.textContent = `Голосов: ${open.total} · ${left > 0 ? left + " сек." : "подсчёт…"}`;
+            };
+            tick();
+            juryClock = window.setInterval(tick, 250);
+            juryPanel.append(title, commands, status);
+        }
+        for (const round of [view.first, view.second]) {
+            if (!round || round.status !== "closed")
+                continue;
+            const row = document.createElement("div");
+            row.className = "jury-result";
+            const title = document.createElement("p");
+            title.textContent = `${round.number === 1 ? "До защиты" : "После обсуждения"} · голосов: ${round.total}`;
+            row.appendChild(title);
+            if (round.total > 0) {
+                const guilty = Math.round((round.guilty ?? 0) * 100 / round.total);
+                const bar = document.createElement("div");
+                bar.className = "jury-bar";
+                const fill = document.createElement("span");
+                fill.style.width = guilty + "%";
+                bar.appendChild(fill);
+                const counts = document.createElement("p");
+                counts.className = "jury-counts";
+                counts.textContent = `Виновен ${guilty}% (${round.guilty}) · Невиновен ${100 - guilty}% (${round.innocent})`;
+                row.append(bar, counts);
+            }
+            else {
+                const empty = document.createElement("p");
+                empty.className = "jury-counts";
+                empty.textContent = "Никто не проголосовал";
+                row.appendChild(empty);
+            }
+            juryPanel.appendChild(row);
+        }
+        if (view.comparison) {
+            const summary = document.createElement("p");
+            summary.className = "jury-comparison";
+            summary.textContent = view.comparison.compared > 0 ? `Изменили решение: ${view.comparison.changed} из ${view.comparison.compared}, голосовавших оба раза` : "Никто не проголосовал оба раза";
+            juryPanel.appendChild(summary);
+        }
+    }
     let audioEpoch = 0;
     let audioCtx = null;
     let analyser = null;
@@ -70,10 +145,13 @@ function markLive(ok) {
         }
         const rms = Math.sqrt(sum / data.length);
         mouth.classList.toggle("open", rms > 0.02);
+        judgePortrait.classList.toggle("is-speaking", rms > 0.02);
         if (playing)
             lipRaf = requestAnimationFrame(lipTick);
-        else
+        else {
             mouth.classList.remove("open");
+            judgePortrait.classList.remove("is-speaking");
+        }
     }
     function enqueueAudio(base64) {
         const epoch = audioEpoch;
@@ -97,6 +175,7 @@ function markLive(ok) {
             playing = false;
             currentSource = null;
             mouth.classList.remove("open");
+            judgePortrait.classList.remove("is-speaking");
             return;
         }
         playing = true;
@@ -125,6 +204,7 @@ function markLive(ok) {
         }
         currentSource = null;
         mouth.classList.remove("open");
+        judgePortrait.classList.remove("is-speaking");
     }
     function thump(when) {
         try {
@@ -322,6 +402,7 @@ function markLive(ok) {
         };
         ws.onopen = () => {
             failures = 0;
+            void CourtAppearance.refresh().catch(() => console.warn("Не удалось обновить оформление сцены."));
             const revision = stateEvents;
             void fetch("/api/status" + location.search).then(async (response) => {
                 if (!response.ok)
@@ -330,10 +411,15 @@ function markLive(ok) {
                 if (revision !== stateEvents || ws.readyState !== WebSocket.OPEN || !status.trial)
                     return;
                 handleEvent({ type: "state_change", payload: status.trial });
+                if (status.trial.jury)
+                    showJury(status.trial.jury);
                 if (status.trial.line)
                     handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: status.trial.line } });
                 if (status.trial.verdict)
                     handleEvent({ type: "verdict", payload: status.trial.verdict });
+                const exhibit = status.trial.exhibits?.filter(entry => entry.revealed).slice(-1)[0];
+                if (exhibit && status.trial.state !== "idle")
+                    handleEvent({ type: "exhibit", payload: exhibit });
             }).catch(() => markLive(false));
             lastFrame = Date.now();
             markLive(true);
@@ -365,12 +451,23 @@ function markLive(ok) {
     }
     function handleEvent(msg) {
         switch (msg.type) {
+            case "jury":
+                showJury(msg.payload);
+                break;
+            case "appearance_change":
+                CourtAppearance.apply(msg.payload);
+                break;
+            case "exhibit":
+                testimonyAuthor.textContent = "Улика · " + msg.payload.title;
+                testimonyText.textContent = msg.payload.text;
+                testimony.classList.remove("hidden");
+                break;
             case "state_change": {
                 const state = String(msg.payload.state || "idle");
                 currentStageState = state;
                 if (typeof msg.payload.demo === "boolean")
                     demoSession = msg.payload.demo;
-                const labels = { indictment: "Открытие дела", testimony: "Показания", defense: "Слово ведущего", objection: "Ответ суда", deliberation: "Совещание", verdict: "Вердикт" };
+                const labels = { indictment: "Открытие дела", testimony: "Показания", defense: "Слово ведущего", objection: "Ответ суда", jury: "Мнение присяжных", deliberation: "Совещание", verdict: "Вердикт" };
                 phaseName.textContent = labels[state] || "Заседание";
                 if (msg.payload.defendant)
                     participant.textContent = msg.payload.defendant;
@@ -379,6 +476,10 @@ function markLive(ok) {
                     subtitles.textContent = "";
                 }
                 if (state === "idle") {
+                    window.clearInterval(juryClock);
+                    lastJury = null;
+                    juryPanel.classList.add("hidden");
+                    document.body.classList.remove("jury-visible");
                     stopBgm();
                     stopCrowd();
                     resetStage();
@@ -395,6 +496,11 @@ function markLive(ok) {
                     if (msg.payload.charge)
                         charge.textContent = "Обвинение: " + msg.payload.charge;
                 }
+                if (msg.payload.jury)
+                    showJury(msg.payload.jury);
+                const revealed = msg.payload.exhibits?.filter(entry => entry.revealed).slice(-1)[0];
+                if (revealed && state !== "idle")
+                    handleEvent({ type: "exhibit", payload: revealed });
                 break;
             }
             case "subtitles":
@@ -433,6 +539,10 @@ function markLive(ok) {
                 testimony.classList.remove("hidden");
                 break;
             case "panic":
+                window.clearInterval(juryClock);
+                lastJury = null;
+                juryPanel.classList.add("hidden");
+                document.body.classList.remove("jury-visible");
                 stopBgm();
                 resetStage();
                 break;
@@ -440,6 +550,29 @@ function markLive(ok) {
                 break;
         }
     }
-    window.addEventListener("click", () => ctx(), { once: true });
-    connect();
+    if (preview) {
+        const showPreview = (phase) => {
+            resetStage();
+            handleEvent({ type: "state_change", payload: { state: phase, demo: true, defendant: "night_viewer", case_title: "ЧЕТЫРЕ ЧАСА ДО СНА", charge: "Объявил, что идёт спать, и ещё четыре часа давал советы в чате." } });
+            handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: "Подсудимый, суд ознакомился с вашим «я на пять минут». Прошло четыре часа." } });
+            if (phase === "testimony")
+                handleEvent({ type: "testimony", payload: { author: "Свидетель из чата", text: "Он ещё дважды пожелал всем спокойной ночи." } });
+            if (phase === "verdict")
+                handleEvent({ type: "verdict", payload: { verdict: "ОПРАВДАН", guilty_votes: 0, total_votes: 1, penalty: "Нёс ночную вахту и спасал прохождение." } });
+        };
+        window.addEventListener("message", (event) => {
+            if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== "tribunal-preview")
+                return;
+            const settings = event.data.appearance;
+            CourtAppearance.apply({ ...settings, photo_url: "/api/judge/photo?preset=" + encodeURIComponent(settings.judge_preset) + "&v=" + event.data.mediaTick });
+            showPreview(event.data.phase);
+        });
+        if (window.parent === window)
+            void CourtAppearance.refresh().catch(() => console.warn("Предпросмотр использует стандартное оформление."));
+        showPreview("indictment");
+    }
+    else {
+        window.addEventListener("click", () => ctx(), { once: true });
+        connect();
+    }
 })();

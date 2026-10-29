@@ -11,16 +11,19 @@
     <div id="court" class="hidden">
       <img id="court-bg" src="/api/court/photo" alt="" aria-hidden="true">
       <header id="court-heading"><span class="court-brand">TRIBUNAL</span><span id="phase-name">Заседание</span><span id="participant"></span></header>
+      <img id="judge-portrait" data-judge-portrait src="/api/judge/photo" alt="Судья">
       <div id="docket">
         <div id="case-meta"><span id="case-no">ЗАСЕДАНИЕ</span><span id="prosecutor"><span id="mouth"></span><span id="speaker-name">Судья</span></span></div>
         <div id="charge">Зал суда готов</div>
         <div id="subtitles" aria-live="off"></div>
       </div>
       <div id="testimony" class="hidden"><div id="testimony-author">Подсудимый</div><div id="testimony-text"></div></div>
+      <section id="jury" class="hidden" aria-label="Мнение присяжных"></section>
     </div>
     <div id="objection" class="hidden">ПРОТЕСТ</div>
     <div id="verdict" class="hidden"><span class="verdict-label">РЕШЕНИЕ СУДА</span><span id="verdict-text">ВИНОВЕН</span><span id="verdict-detail"></span></div>
   </div>
+  <script src="appearance.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

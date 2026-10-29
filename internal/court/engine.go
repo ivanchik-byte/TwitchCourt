@@ -31,21 +31,25 @@ const (
 	StateTestimony    State = "testimony"
 	StateDefense      State = "defense"
 	StateObjection    State = "objection"
+	StateJury         State = "jury"
 	StateDeliberation State = "deliberation"
 	StateVerdict      State = "verdict"
 )
 
 type TrialCase struct {
-	Defendant   string
-	Crime       string
-	ChatContext string
-	Witnesses   []Witness
-	Judge       ai.JudgeStyle
-	Defense     string
-	Viewer      string
-	Testimony   []string
-	Bribe       *BribeOffer
-	Bribes      []BribeOffer
+	Jury             *juryBallot
+	Exhibits         []CaseExhibit
+	RevealedExhibits map[int]bool
+	Defendant        string
+	Crime            string
+	ChatContext      string
+	Witnesses        []Witness
+	Judge            ai.JudgeStyle
+	Defense          string
+	Viewer           string
+	Testimony        []string
+	Bribe            *BribeOffer
+	Bribes           []BribeOffer
 	// Prosecutor marks trials where the AI prosecutor leads the charge.
 	Prosecutor bool
 	Demo       bool
@@ -102,6 +106,9 @@ type Engine struct {
 	cases             *CaseDeck
 	phaseAdvance      chan struct{}
 	phaseDeadline     time.Time
+	phaseWake         chan struct{}
+	juryEpoch         string
+	juryRevision      uint64
 }
 
 func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audio.Synthesizer, filter *safety.Filter) *Engine {
@@ -112,6 +119,7 @@ func NewEngine(cfg *config.Config, hub *obs.Hub, aiClient *ai.Client, voice audi
 		filter:            filter,
 		state:             StateIdle,
 		pendingPunishment: Punishment{Kind: "timeout", Secs: 90},
+		juryEpoch:         fmt.Sprintf("%x", time.Now().UnixNano()),
 	}
 	e.recall.Store(memory.NewStore(""))
 	if cfg != nil {
@@ -231,6 +239,7 @@ func (e *Engine) GetState() State {
 
 func (e *Engine) TriggerPanic() {
 	e.mu.Lock()
+	e.stopJuryLocked()
 	if e.cancelFn != nil {
 		e.cancelFn()
 		e.cancelFn = nil
@@ -273,10 +282,13 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 		}
 		context += "МАТЕРИАЛЫ ДЕЛА:\n" + d
 	}
-	if viewer {
-		return e.startTrialWithMode(defendant, card.Crime, context, defendant, false)
+	if card.Dilemma != "" {
+		context += "\nПРЕДМЕТ СПОРА:\n" + card.Dilemma
 	}
-	return e.startTrialWithMode(defendant, card.Crime, context, "", true)
+	if viewer {
+		return e.startTrialWithCard(defendant, card.Crime, context, defendant, false, card.Exhibits)
+	}
+	return e.startTrialWithCard(defendant, card.Crime, context, "", true, card.Exhibits)
 }
 
 // StartUnbanTrial opens an unban pardon hearing.
@@ -294,6 +306,10 @@ func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) er
 }
 
 func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string, prosecutor bool) error {
+	return e.startTrialWithCard(defendant, crime, chatContext, viewer, prosecutor, nil)
+}
+
+func (e *Engine) startTrialWithCard(defendant, crime, chatContext, viewer string, prosecutor bool, exhibits []CaseExhibit) error {
 	e.mu.Lock()
 	if e.state != StateIdle {
 		e.mu.Unlock()
@@ -314,18 +330,25 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 	gen := e.trialGen
 	e.state = StateIndictment
 	e.currCase = &TrialCase{
-		Defendant:   e.filter.Sanitize(truncateRunes(defendant, 80)),
-		Crime:       e.filter.Sanitize(truncateRunes(crime, 300)),
-		ChatContext: e.filter.Sanitize(truncateRunes(chatContext, 1000)),
-		Judge:       ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
-		Viewer:      e.filter.Sanitize(viewer),
-		Prosecutor:  prosecutor,
-		Mode:        trialMode(viewer, prosecutor),
+		Exhibits:         append([]CaseExhibit(nil), exhibits...),
+		RevealedExhibits: make(map[int]bool),
+		Defendant:        e.filter.Sanitize(truncateRunes(defendant, 80)),
+		Crime:            e.filter.Sanitize(truncateRunes(crime, 300)),
+		ChatContext:      e.filter.Sanitize(truncateRunes(chatContext, 1000)),
+		Judge:            ai.JudgeFor(e.cfg.Load().Courtroom.JudgeStyle, e.cfg.Load().Prompts),
+		Viewer:           e.filter.Sanitize(viewer),
+		Prosecutor:       prosecutor,
+		Mode:             trialMode(viewer, prosecutor),
 	}
 	currentCase := e.currCase
+	for i := range currentCase.Exhibits {
+		currentCase.Exhibits[i].Title = e.filter.Sanitize(truncateRunes(currentCase.Exhibits[i].Title, 80))
+		currentCase.Exhibits[i].Text = e.filter.Sanitize(truncateRunes(currentCase.Exhibits[i].Text, 500))
+	}
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
+		TrialID:   gen,
 		State:     string(StateIndictment),
 		CaseTitle: "ДЕЛО №" + fmt.Sprintf("%d", time.Now().Unix()%1000),
 		Defendant: currentCase.Defendant,
@@ -445,6 +468,10 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 		e.restIdle(gen)
 		return
 	}
+	e.runJuryWindow(ctx, c)
+	if ctx.Err() != nil {
+		return
+	}
 
 	// read queued testimony before the bench retires
 	if interlude := e.drainWitnessInterlude(c); interlude != "" {
@@ -470,6 +497,7 @@ func (e *Engine) restIdle(gen uint64) {
 		e.mu.Unlock()
 		return
 	}
+	e.stopJuryLocked()
 	e.state = StateIdle
 	e.currCase = nil
 	e.phaseAdvance = nil
@@ -610,6 +638,12 @@ func (e *Engine) caseTestimony(c *TrialCase) string {
 	e.mu.RUnlock()
 	cfg := e.cfg.Load()
 	parts := []string{}
+	if c.Crime != "" {
+		parts = append(parts, "ОБВИНЕНИЕ:\n"+c.Crime)
+	}
+	if c.ChatContext != "" {
+		parts = append(parts, "ИСХОДНЫЕ МАТЕРИАЛЫ:\n"+c.ChatContext)
+	}
 	for _, t := range testimony {
 		if t = strings.TrimSpace(t); t != "" {
 			if p := cfg.Courtroom.TestimonyPrefix; p != "" {
@@ -691,11 +725,7 @@ func (e *Engine) runTestimonyWindow(ctx context.Context, c *TrialCase) {
 		TimeLeftSec: dur,
 	})
 
-	select {
-	case <-ctx.Done():
-	case <-advance:
-	case <-time.After(time.Duration(dur) * time.Second):
-	}
+	e.waitPhaseWindow(ctx, c, advance)
 }
 
 // runDefenseWindow opens the floor to the streamer and returns what was said
@@ -718,12 +748,7 @@ func (e *Engine) runDefenseWindow(ctx context.Context, c *TrialCase) string {
 		TimeLeftSec: dur,
 	})
 
-	select {
-	case <-ctx.Done():
-		return ""
-	case <-advance:
-	case <-time.After(time.Duration(dur) * time.Second):
-	}
+	e.waitPhaseWindow(ctx, c, advance)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -753,7 +778,7 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}
 	messages := []ai.ChatMessage{
 		{Role: "system", Content: e.accuserSystem(c)},
-		{Role: "user", Content: ai.BuildCounterArgumentPromptWithTask(defense, counterTask)},
+		{Role: "user", Content: ai.BuildCounterArgumentPromptWithContext(defense, e.caseTestimony(c), counterTask)},
 	}
 	chunker := ai.NewSentenceChunker()
 	index := startIndex

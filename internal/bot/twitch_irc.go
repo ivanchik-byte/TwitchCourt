@@ -25,11 +25,16 @@ const (
 	CommandCourt  = "court"
 	CommandSue    = "sue"
 	CommandLeave  = "leave"
+	CommandVote   = "vote"
 )
 
 func ParseChatLine(author, text string) ChatCommand {
 	trimmed := strings.TrimSpace(text)
 	lower := strings.ToLower(trimmed)
+	words := strings.Fields(trimmed)
+	if len(words) > 0 && strings.EqualFold(words[0], "!vote") {
+		return ChatCommand{Author: author, Kind: CommandVote, Argument: strings.TrimSpace(trimmed[len(words[0]):])}
+	}
 	switch {
 	case strings.HasPrefix(lower, "!crime"):
 		return ChatCommand{Author: author, Kind: CommandCrime, Argument: strings.TrimSpace(trimmed[len("!crime"):])}

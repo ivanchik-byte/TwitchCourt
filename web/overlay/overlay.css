@@ -2,8 +2,11 @@
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/ibm-plex-sans-cyrillic-400-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
 @font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/ibm-plex-sans-cyrillic-500-normal.woff2") format("woff2"); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+:root { --scene-panel: #171b20f2; --scene-line: #75859955; --scene-text: #e1e4e9; --scene-muted: #b0bac7; --scene-accent: #b6c3d5; }
+body[data-theme="slate"] { --scene-panel: #14202df2; --scene-line: #7b99ba55; --scene-text: #e2eaf3; --scene-muted: #acbfd6; --scene-accent: #a7bfd9; }
+body[data-theme="walnut"] { --scene-panel: #241e18f2; --scene-line: #b49d7c55; --scene-text: #eee4d8; --scene-muted: #c6b8a7; --scene-accent: #cbb394; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #e6e5df; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: var(--scene-text); }
 .hidden { display: none !important; }
 #stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
 #court { position: absolute; inset: 0; background: #181614; }
@@ -13,19 +16,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: transparen
 .court-brand { font-size: 1.1vw; letter-spacing: .18em; padding-right: 1.7vw; border-right: 1px solid #a99f8b66; }
 #phase-name { font-size: .85vw; color: #b6afa1; }
 #participant { margin-left: auto; padding: .6vw .9vw; border: 1px solid #a99f8b55; border-radius: 3px; background: #151310aa; font-size: .85vw; }
-#docket { position: absolute; z-index: 2; bottom: 4.4vh; left: 3.3vw; right: 3.3vw; background: #191816ed; border: 1px solid #6f67564d; border-radius: 5px; box-shadow: 0 12px 45px #00000040; padding: 1.35vw 1.65vw; }
-#case-meta { display: flex; justify-content: space-between; align-items: center; color: #b4ad9d; font-size: .65vw; letter-spacing: .12em; }
+#docket { position: absolute; z-index: 2; bottom: 4.4vh; left: 3.3vw; right: 3.3vw; background: var(--scene-panel); border: 1px solid var(--scene-line); border-radius: 5px; box-shadow: 0 12px 45px #00000040; padding: 1.35vw 1.65vw; }
+#case-meta { display: flex; justify-content: space-between; align-items: center; color: var(--scene-muted); font-size: .65vw; letter-spacing: .12em; }
 #prosecutor { display: inline-flex; align-items: center; gap: .45vw; font-size: .7vw; letter-spacing: .03em; }
 #mouth { width: .3vw; height: .3vw; background: #817b6e; border-radius: 50%; }
 #mouth.open { background: #d4d1bc; }
-#charge { margin-top: .8vw; padding-bottom: .9vw; border-bottom: 1px solid #655f524a; font-size: 1.15vw; line-height: 1.45; color: #bcb7aa; max-height: 5vw; overflow: hidden; }
+#charge { margin-top: .8vw; padding-bottom: .9vw; border-bottom: 1px solid #655f524a; font-size: 1.15vw; line-height: 1.45; color: var(--scene-muted); max-height: 5vw; overflow: hidden; }
 #subtitles { margin-top: .95vw; min-height: 3.9vw; font-size: 1.8vw; font-weight: 400; line-height: 1.5; max-width: 90%; text-wrap: pretty; }
-#testimony { position: absolute; z-index: 3; right: 3.3vw; top: 14vh; max-width: 29vw; min-width: 18vw; padding: 1.1vw 1.3vw; background: #1b1916ed; border: 1px solid #6f675666; border-left: 2px solid #a89d85; border-radius: 3px; }
-#testimony-author { font-size: .75vw; color: #c2b79e; margin-bottom: .55vw; }
+#testimony { position: absolute; z-index: 3; left: 3.3vw; top: 14vh; max-width: 29vw; min-width: 18vw; padding: 1.1vw 1.3vw; background: var(--scene-panel); border: 1px solid var(--scene-line); border-left: 2px solid var(--scene-accent); border-radius: 3px; }
+#testimony-author { font-size: .75vw; color: var(--scene-accent); margin-bottom: .55vw; }
 #testimony-text { font-size: 1.15vw; line-height: 1.5; }
 #objection { position: absolute; z-index: 5; left: 3.3vw; bottom: 36vh; padding: .7vw 1.1vw; color: #ded8cc; background: #332c24f2; border-left: 3px solid #c4aa84; border-radius: 2px; font-size: 1.3vw; letter-spacing: .12em; }
 #objection.show { animation: objection-in 180ms ease-out; }
-#verdict { position: absolute; z-index: 4; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 44vw; max-width: 900px; padding: 2vw 2.5vw; background: #1b1a17f5; border: 1px solid #8b806955; border-radius: 5px; box-shadow: 0 20px 90px #00000070; text-align: center; }
+#verdict { position: absolute; z-index: 4; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 44vw; max-width: 900px; padding: 2vw 2.5vw; background: var(--scene-panel); border: 1px solid var(--scene-line); border-radius: 5px; box-shadow: 0 20px 90px #00000070; text-align: center; }
 .verdict-label { display: block; font-size: .65vw; letter-spacing: .2em; color: #b6ae9e; margin-bottom: .9vw; }
 #verdict-text { display: block; font-size: 3vw; font-weight: 500; letter-spacing: .06em; }
 #verdict.guilty #verdict-text { color: #d6b6a4; }
@@ -33,5 +36,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: transparen
 #verdict-detail { display: block; max-width: 35vw; margin: 1vw auto 0; font-size: 1vw; line-height: 1.55; color: #c1bbae; }
 #verdict.drop { animation: verdict-in 220ms ease-out; }
 @keyframes objection-in { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes verdict-in { from { opacity: 0; margin-top: 8px; } to { opacity: 1; margin-top: 0; } }
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+@keyframes verdict-in { from { opacity: 0; transform: translate(-50%, -46%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+#judge-portrait { position: absolute; z-index: 1; right: 3vw; bottom: 24vh; width: 31vw; height: 65vh; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 12px 20px #00000055); transition: filter 130ms; }
+#judge-portrait.is-speaking { filter: brightness(1.05) drop-shadow(0 12px 20px #00000055); }
+body[data-show-judge="false"] #judge-portrait, body.portrait-unavailable #judge-portrait { display: none; }
+body[data-reduce-motion="true"] * { animation: none !important; transition: none !important; }
+
+#jury { position: absolute; z-index: 3; left: 3.3vw; top: 14vh; width: 35vw; padding: 1.2vw 1.4vw; background: var(--scene-panel); border: 1px solid var(--scene-line); border-radius: 4px; }
+.jury-heading { font-size: .65vw; letter-spacing: .12em; color: var(--scene-accent); }
+.jury-prompt { margin-top: .8vw; font-size: 1.5vw; }
+.jury-commands { margin-top: .6vw; font-size: .85vw; color: var(--scene-text); }
+.jury-status { margin-top: .6vw; font-size: .8vw; color: var(--scene-muted); font-variant-numeric: tabular-nums; }
+.jury-result { margin-top: 1vw; border-top: 1px solid var(--scene-line); padding-top: .8vw; font-size: .85vw; }
+.jury-bar { height: .35vw; margin: .65vw 0; background: var(--scene-line); }
+.jury-bar > span { display: block; height: 100%; background: var(--scene-accent); }
+.jury-counts { color: var(--scene-muted); font-size: .8vw; }
+.jury-comparison { margin-top: .9vw; font-size: .85vw; line-height: 1.5; color: var(--scene-text); }
+body.jury-visible #testimony { left: 41vw; max-width: 23vw; min-width: 0; }

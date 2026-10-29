@@ -30,13 +30,13 @@ html, body {
 
 @keyframes judge-talk {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  50% { transform: translateY(-2px); }
 }
 
 @keyframes judge-bang {
   0% { transform: scale(1) rotate(0); }
-  25% { transform: scale(1.12) rotate(-2deg); }
-  55% { transform: scale(0.97) rotate(1deg); }
+  25% { transform: scale(1.025) rotate(-1deg); }
+  55% { transform: scale(0.99) rotate(.5deg); }
   100% { transform: scale(1) rotate(0); }
 }
 
@@ -46,3 +46,6 @@ html, body {
     animation: none;
   }
 }
+
+body[data-reduce-motion="true"] #judge { animation: none; }
+body.portrait-unavailable #judge { display: none; }

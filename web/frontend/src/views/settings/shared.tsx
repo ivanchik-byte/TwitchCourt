@@ -2,8 +2,8 @@ import { toast } from 'sonner'
 import { apiNote } from '../../lib/api'
 
 export const inputCls =
-  'mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm text-white outline-none focus:border-amber-400/50'
-export const labelCls = 'block text-xs text-zinc-400'
+  'settings-input'
+export const labelCls = 'settings-label'
 
 export function roundTemp(v: number): number {
   return Number(v.toFixed(2))
@@ -30,7 +30,7 @@ export function SaveButton({ onSave }: { onSave: () => void }) {
   return (
     <button
       onClick={onSave}
-      className="pressable rounded-lg bg-amber-400/90 px-4 py-1.5 text-sm font-bold text-black"
+      className="primary-action"
     >
       Сохранить
     </button>

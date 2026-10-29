@@ -52,11 +52,17 @@ func BuildCounterArgumentPrompt(streamerDefense string) string {
 }
 
 func BuildCounterArgumentPromptWithTask(streamerDefense, task string) string {
+	return BuildCounterArgumentPromptWithContext(streamerDefense, "", task)
+}
+
+func BuildCounterArgumentPromptWithContext(streamerDefense, testimony, task string) string {
 	return fmt.Sprintf(`ОПРАВДАНИЕ СТРИМЕРА: %s
+
+МАТЕРИАЛЫ И ПРИОБЩЁННЫЕ ПОКАЗАНИЯ: %s
 
 %s%sЗАДАЧА:
 %s`,
-		quote(streamerDefense), invariantObjection+"\n\n", invariantTrust+"\n\n", task)
+		quote(streamerDefense), quote(testimony), invariantObjection+"\n\n", invariantTrust+"\n\n", task)
 }
 
 func BuildDeliberationPrompt(defendant, crime, testimony string) string {

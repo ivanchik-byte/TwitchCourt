@@ -4,6 +4,7 @@ import { Toaster } from 'sonner'
 import { TopNav } from './components/TopNav'
 import { TribunalProvider, useTribunalPhase } from './tribunal/TribunalContext'
 import { CockpitView } from './views/CockpitView'
+import { AppearanceProvider } from './tribunal/AppearanceContext'
 
 const CasesView = lazy(() => import('./views/CasesView').then((m) => ({ default: m.CasesView })))
 const SettingsView = lazy(() => import('./views/SettingsView').then((m) => ({ default: m.SettingsView })))
@@ -19,7 +20,8 @@ function Shell() {
         <Suspense fallback={<p className="p-4 text-sm text-zinc-500">Загрузка…</p>}>
           <Routes>
             <Route path="/" element={<CockpitView />} />
-            <Route path="/cases" element={<CasesView />} />            <Route path="/modes" element={<Navigate to="/settings?section=rules" replace />} />
+            <Route path="/cases" element={<CasesView />} />
+            <Route path="/modes" element={<Navigate to="/settings?section=rules" replace />} />
             <Route path="/obs" element={<OBSRemoteView />} />
             <Route path="/settings" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -34,9 +36,11 @@ function Shell() {
 export function App() {
   return (
     <BrowserRouter>
-      <TribunalProvider>
-        <Shell />
-      </TribunalProvider>
+      <AppearanceProvider>
+        <TribunalProvider>
+          <Shell />
+        </TribunalProvider>
+      </AppearanceProvider>
     </BrowserRouter>
   )
 }

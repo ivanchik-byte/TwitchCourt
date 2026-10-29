@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { apiGet, apiPut, apiPost, apiUpload, apiFetch, apiNote } from '../lib/api'
+import { apiGet, apiPut, apiPost, apiNote } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
 import { SecretField } from '../components/SecretField'
 import { roundTemp, inputCls, labelCls, saveSection, SaveButton, type AiState, type TtsState, type TwitchState, type ProfileState, type SafetyState, type VoiceLists } from './settings/shared'
@@ -11,6 +11,7 @@ import { IntegrationsSection } from './settings/IntegrationsSection'
 import { ProfileSection } from './settings/ProfileSection'
 import { DonationRulesSection } from './settings/DonationRulesSection'
 import { ShowRulesSection } from './settings/ShowRulesSection'
+import { AppearanceSection } from './settings/AppearanceSection'
 import { SafetySection } from './settings/SafetySection'
 import { PromptsSection, emptyPrompts, type PromptsState } from './settings/PromptsSection'
 
@@ -68,9 +69,6 @@ export function SettingsView() {
     notes: '',
   })
 
-  const [sfx, setSfx] = useState<{ name: string; size: number }[]>([])
-  const [photoTick, setPhotoTick] = useState(0)
-  const [courtTick, setCourtTick] = useState(0)
   const [voices, setVoices] = useState<VoiceLists>({ edge: [], silero: [] })
   const [safety, setSafety] = useState<SafetyState>({ filterEnabled: true, blacklist: '', panicHotkey: 'escape', banConfirm: false })
   const [prompts, setPrompts] = useState<PromptsState>(emptyPrompts)
@@ -91,7 +89,6 @@ export function SettingsView() {
         }>('/api/tts'),
         apiGet<Record<string, string | boolean>>('/api/integrations'),
         apiGet<{ name: string; titles: string[]; traits: string[]; running_gags: string[]; mercy: string; auto_notes: string[] }>('/api/profile'),
-        apiGet<{ sfx: { name: string; size: number }[] }>('/api/sfx'),
         apiGet<{ filter_enabled: boolean; custom_blacklist: string[]; panic_hotkey: string; ban_confirm: boolean }>('/api/safety'),
         apiGet<{ streamer_name: string }>('/api/game'),
         apiGet<{ host: string; port: number; secret_set: boolean }>('/api/server'),
@@ -101,7 +98,7 @@ export function SettingsView() {
           bribe_note: string; condemn_note: string; gen_prompt: string; confession: string
         }>('/api/prompts'),
       ])
-      const [aiR, ttsR, intR, profR, sfxR, safR, gameR, srvR, prmR] = settled
+      const [aiR, ttsR, intR, profR, safR, gameR, srvR, prmR] = settled
 
       if (aiR.status === 'fulfilled') {
         const d = aiR.value
@@ -171,7 +168,6 @@ export function SettingsView() {
           notes: (d.auto_notes ?? []).join('\n'),
         })
       }
-      if (sfxR.status === 'fulfilled') setSfx(sfxR.value.sfx ?? [])
       if (safR.status === 'fulfilled') {
         const d = safR.value
         setSafety({
@@ -206,30 +202,17 @@ export function SettingsView() {
     void load()
   }, [promptsTick])
 
-  const uploadPhoto = async (file: File | undefined) => {
-    if (!file) return
-    const form = new FormData()
-    form.append('photo', file)
-    const ok = await apiUpload('/api/judge/photo', form)
-    if (ok) {
-      toast.success('Фото судьи обновлено')
-      setPhotoTick((n) => n + 1)
-    } else {
-      toast.error('Ошибка загрузки: проверьте ключ доступа')
-    }
-  }
-
   return (
     <div className="setup-page">
-      <div className="desk-heading"><div><p className="eyebrow">Перед первым заседанием</p><h1>Подготовка<span>.</span></h1></div><Link to="/" className="quiet-link">Вернуться в эфир</Link></div>
+      <div className="desk-heading"><div><p className="eyebrow">Параметры шоу</p><h1>Подготовка</h1></div><Link to="/" className="quiet-link">Вернуться в эфир</Link></div>
       <nav className="setup-tabs" aria-label="Разделы подготовки">
         {[['ai', '01', 'Языковая модель'], ['voice', '02', 'Голос судьи'], ['twitch', '03', 'Подключения'], ['donations', '04', 'Донаты'], ['rules', '05', 'Правила суда'], ['appearance', '06', 'Оформление'], ['advanced', '07', 'Дополнительно']].map(([key, number, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} onClick={() => setSearchParams({ section: key })}><span>{number}</span>{label}</button>)}
       </nav>
-      <div className="card p-3">
-        <div className="min-w-[220px] max-w-prose">
-          <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { setSecretLocal(v); setSecret(v); location.reload() }} placeholder="X-Secret" />
-        </div>
-      </div>
+      <details className="access-settings">
+        <summary>Доступ к управлению</summary>
+        <p>Нужен только если на сервере задан секретный ключ.</p>
+        <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { if (v === getSecret()) return; setSecretLocal(v); setSecret(v); location.reload() }} placeholder="X-Secret" />
+      </details>
 
       <div className="setup-content">
         {section === 'donations' && <DonationRulesSection />}
@@ -239,81 +222,7 @@ export function SettingsView() {
         {section === 'twitch' && <IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} />}
         {section === 'advanced' && <ProfileSection profile={profile} setProfile={setProfile} />}
 
-        {section === 'appearance' && <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">Фото судьи для оверлея</h2>
-          <p className="text-xs text-zinc-500">Портрет отображается на оверлее во время речи судьи.</p>
-          <label className="block cursor-pointer text-center text-xs text-zinc-400">
-            <img
-              src={`/api/judge/photo?t=${photoTick}`}
-              alt="Судья"
-              className="mx-auto mb-1 aspect-square w-40 rounded-lg border border-white/10 bg-black/40 object-cover"
-              onError={(e) => {
-                ;(e.target as HTMLImageElement).style.opacity = '0.25'
-              }}
-              onLoad={(e) => {
-                ;(e.target as HTMLImageElement).style.opacity = '1'
-              }}
-            />
-            Нажмите для выбора файла
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => void uploadPhoto(e.target.files?.[0])}
-            />
-          </label>
-        </section>}
-
-        {section === 'appearance' && <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">Фон зала суда</h2>
-          <img
-            src={`/api/court/photo?t=${courtTick}`}
-            alt="Фон суда"
-            className="aspect-video w-full rounded-lg border border-white/10 bg-black/40 object-cover"
-            onError={(e) => {
-              ;(e.target as HTMLImageElement).style.opacity = '0.25'
-            }}
-            onLoad={(e) => {
-              ;(e.target as HTMLImageElement).style.opacity = '1'
-            }}
-          />
-          <div className="flex gap-1.5">
-            <label className="pressable cursor-pointer rounded-lg border border-white/10 px-3 py-1.5 text-sm">
-              Заменить
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  const form = new FormData()
-                  form.append('photo', file)
-                  if (await apiUpload('/api/court/photo', form)) {
-                    toast.success('Фон суда обновлён')
-                    setCourtTick((n) => n + 1)
-                  } else {
-                    toast.error('Ошибка загрузки: проверьте ключ доступа')
-                  }
-                }}
-              />
-            </label>
-            <button
-              onClick={async () => {
-                const res = await apiFetch('/api/court/photo', { method: 'DELETE' })
-                if (res.ok) {
-                  toast.success('Установлен стандартный фон')
-                  setCourtTick((n) => n + 1)
-                } else {
-                  toast.error('Ошибка сброса: проверьте ключ доступа')
-                }
-              }}
-              className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
-            >
-              Стандартный
-            </button>
-          </div>
-        </section>}
+        {section === 'appearance' && <AppearanceSection />}
 
         {section === 'advanced' && <SafetySection safety={safety} setSafety={setSafety} />}
 
@@ -357,43 +266,7 @@ export function SettingsView() {
           </div>
         </section>}
 
-        {section === 'appearance' && <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">OBS Sandbox</h2>
-          <div className="overflow-hidden rounded-lg border border-white/10">
-            <iframe title="overlay preview" src={`/overlay/${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`} className="h-48 w-full bg-black" />
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              onClick={() => {
-                void navigator.clipboard?.writeText(`${location.origin}/overlay/`)
-                toast.success('URL оверлея скопирован (без ключа)')
-              }}
-              className="pressable rounded-lg border border-white/10 px-3 py-1.5 text-sm"
-            >
-              Скопировать URL для OBS
-            </button>
-            {secret && (
-              <button
-                onClick={() => {
-                  void navigator.clipboard?.writeText(`${location.origin}/overlay/?secret=${encodeURIComponent(secret)}`)
-                  toast.success('URL с ключом скопирован — не свети его на стриме')
-                }}
-                className="pressable rounded-lg border border-amber-400/30 px-3 py-1.5 text-sm text-amber-200"
-              >
-                URL с ключом — один раз
-              </button>
-            )}
-          </div>
-          <div className="space-y-1">
-            {sfx.map((f) => (
-              <div key={f.name} className="flex items-center gap-2 text-xs text-zinc-400">
-                <span className="flex-1 truncate font-mono">{f.name}</span>
-                <audio controls preload="none" src={`/overlay/sfx/${encodeURIComponent(f.name)}`} className="h-7 w-44" />
-              </div>
-            ))}
-            {sfx.length === 0 && <p className="text-xs text-zinc-600">Звуковые эффекты не найдены.</p>}
-          </div>
-        </section>}
+
       </div>
     </div>
   )

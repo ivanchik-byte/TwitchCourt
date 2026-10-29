@@ -44,12 +44,13 @@
     const ws = new WebSocket(protocol + "//" + location.host + "/ws" + location.search);
     let pingTimer = 0;
     ws.onmessage = (event: MessageEvent<string>) => {
-      let msg: { type?: string; payload?: { name?: string; state?: string } };
+      let msg: { type?: string; payload?: { name?: string; state?: string } & Partial<CourtAppearance.Settings> };
       try {
         msg = JSON.parse(event.data) as typeof msg;
       } catch {
         return;
       }
+      if (msg.type === "appearance_change") { CourtAppearance.apply(msg.payload as CourtAppearance.Settings); return; }
       link.style.color = "#34d399";
       if (msg.type === "subtitles" || msg.type === "audio_chunk") {
         startTalking();
@@ -65,6 +66,7 @@
     };
     ws.onopen = () => {
       failures = 0;
+      void CourtAppearance.refresh().catch(() => console.warn("Не удалось обновить портрет судьи."));
       link.style.color = "#34d399";
       window.clearInterval(pingTimer);
       pingTimer = window.setInterval(() => {

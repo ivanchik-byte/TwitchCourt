@@ -22,16 +22,26 @@ func judgePhotoPath() string {
 	return filepath.Join("data", "judge.jpg")
 }
 
-func serveJudgePhoto(w http.ResponseWriter, r *http.Request) {
-	if _, err := os.Stat(judgePhotoPath()); err == nil {
-		serveImageFile(w, r, judgePhotoPath(), "")
+func serveJudgePhoto(w http.ResponseWriter, r *http.Request, preset string) {
+	w.Header().Set("Cache-Control", "no-cache")
+	if requested := r.URL.Query().Get("preset"); requested != "" {
+		preset = requested
+	}
+	if preset == "magistrate" {
+		serveImageFile(w, r, "", "overlay/assets/judge-magistrate.png")
 		return
+	}
+	if preset != "original" {
+		if _, err := os.Stat(judgePhotoPath()); err == nil {
+			serveImageFile(w, r, judgePhotoPath(), "")
+			return
+		}
 	}
 	if _, err := web.StaticFS.ReadFile("overlay/assets/judge.png"); err == nil {
-		serveImageFile(w, r, judgePhotoPath(), "overlay/assets/judge.png")
+		serveImageFile(w, r, "", "overlay/assets/judge.png")
 		return
 	}
-	serveImageFile(w, r, judgePhotoPath(), "overlay/assets/judge.jpg")
+	serveImageFile(w, r, "", "overlay/assets/judge.jpg")
 }
 
 func serveCourtBg(w http.ResponseWriter, r *http.Request) {

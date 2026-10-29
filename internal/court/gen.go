@@ -14,36 +14,23 @@ import (
 	"stream-tribunal/internal/tmpl"
 )
 
-// Variety axes are rolled in Go, not by the model: the LLM obeys frames,
-// it must not choose them, otherwise every batch converges to sandwich theft.
+// Select different conflicts before generation so one batch does not repeat itself.
 var genSettings = []string{
-	"прямо на стриме", "в дискорде стримера", "в чате", "за кулисами трансляции",
-	"в катке", "в донатах", "в личных сообщениях модератору",
+	"общая квартира", "рабочий чат", "игровой вечер", "подготовка эфира",
+	"соседский двор", "совместная поездка", "домашний праздник",
 }
-
-var genEras = []string{
-	"каменный век", "средневековье", "дикий запад", "киберпанк",
-	"советская столовая", "пиратский корабль", "древний рим",
-}
-
 var genObjects = []string{
-	"микрофон", "клавиатура", "стримерское кресло", "кот",
-	"наушники", "вебка", "глобальный чат", "сабскрайб", "клип", "камера",
+	"общая покупка", "обещанный перерыв", "счёт за услугу", "право доступа",
+	"очередь", "чужое угощение", "правила игры", "общее фото",
 }
-
-var genAbsurd = []string{
-	"бытовая мелочь", "эпичный фейл", "заговор", "мистическое происшествие", "бюрократический кошмар",
-}
-
-var genScale = []string{
-	"личная обида", "чатный скандал", "угроза репутации канала",
+var genConflicts = []string{
+	"неоговорённое правило", "мелкая ложь ради сохранения лица", "слишком буквальное обещание",
+	"услуга без обозначенного срока", "ответная мера сильнее исходной обиды", "разные представления о справедливости",
 }
 
 func rollAxes() string {
-	pick := func(xs []string) string { return xs[rand.Intn(len(xs))] }
-	return "Сеттинг: " + pick(genSettings) + ". Эпоха: " + pick(genEras) +
-		". Объект спора: " + pick(genObjects) + ". Градус: " + pick(genAbsurd) +
-		". Масштаб: " + pick(genScale) + "."
+	pick := func(choices []string) string { return choices[rand.Intn(len(choices))] }
+	return "Место: " + pick(genSettings) + ". Предмет: " + pick(genObjects) + ". Спор: " + pick(genConflicts) + "."
 }
 
 func tokens(s string) map[string]bool {

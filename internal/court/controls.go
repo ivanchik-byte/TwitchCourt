@@ -1,6 +1,7 @@
 package court
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -22,6 +23,7 @@ func trialMode(viewer string, prosecutor bool) string {
 
 func (e *Engine) openPhaseWindowLocked(seconds int) <-chan struct{} {
 	e.phaseAdvance = make(chan struct{})
+	e.phaseWake = make(chan struct{}, 1)
 	e.phaseDeadline = time.Now().Add(time.Duration(seconds) * time.Second)
 	return e.phaseAdvance
 }
@@ -34,7 +36,10 @@ func (e *Engine) AdvancePhase(expected State) error {
 	if e.state != expected || e.phaseAdvance == nil {
 		return fmt.Errorf("phase is no longer available for advance")
 	}
-	if (e.currCase == nil || !e.currCase.Demo) && e.state != StateTestimony && e.state != StateDefense && e.state != StateVerdict {
+	if e.juryOpenLocked() != nil {
+		return fmt.Errorf("close the jury ballot before advancing")
+	}
+	if (e.currCase == nil || !e.currCase.Demo) && e.state != StateTestimony && e.state != StateDefense && e.state != StateJury && e.state != StateVerdict {
 		return fmt.Errorf("wait for the current speech to finish")
 	}
 	close(e.phaseAdvance)
@@ -46,16 +51,57 @@ func (e *Engine) AdvancePhase(expected State) error {
 func (e *Engine) Snapshot() obs.StateChangePayload {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	s := obs.StateChangePayload{State: string(e.state)}
+	return e.snapshotLocked()
+}
+
+func (e *Engine) snapshotLocked() obs.StateChangePayload {
+	s := obs.StateChangePayload{State: string(e.state), Jury: e.juryViewLocked()}
 	if c := e.currCase; c != nil {
+		s.TrialID = e.trialGen
+		for i, exhibit := range c.Exhibits {
+			s.Exhibits = append(s.Exhibits, obs.ExhibitView{Index: i, Title: exhibit.Title, Text: exhibit.Text, Revealed: c.RevealedExhibits[i]})
+		}
 		s.Defendant, s.Charge, s.Demo, s.Mode = c.Defendant, c.Crime, c.Demo, c.Mode
 		s.Line, s.Verdict = c.LastLine, c.Verdict
 	}
-	if e.state == StateTestimony || e.state == StateDefense {
+	if e.state == StateTestimony || e.state == StateDefense || e.state == StateJury {
 		remaining := time.Until(e.phaseDeadline)
+		if round := e.juryOpenLocked(); round != nil && !e.currCase.Demo {
+			remaining -= max(time.Until(round.deadline), 0)
+		}
 		if remaining > 0 {
 			s.TimeLeftSec = int((remaining + time.Second - 1) / time.Second)
 		}
 	}
 	return s
+}
+
+func (e *Engine) waitPhaseWindow(ctx context.Context, c *TrialCase, advance <-chan struct{}) {
+	for {
+		e.mu.RLock()
+		deadline, wake := e.phaseDeadline, e.phaseWake
+		current := e.currCase == c
+		e.mu.RUnlock()
+		if !current || ctx.Err() != nil {
+			return
+		}
+		timer := time.NewTimer(max(time.Until(deadline), 0))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-advance:
+			timer.Stop()
+			return
+		case <-wake:
+			timer.Stop()
+		case <-timer.C:
+			e.mu.RLock()
+			expired := !time.Now().Before(e.phaseDeadline) && e.juryOpenLocked() == nil
+			e.mu.RUnlock()
+			if expired {
+				return
+			}
+		}
+	}
 }

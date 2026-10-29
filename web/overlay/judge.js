@@ -45,6 +45,10 @@
             catch {
                 return;
             }
+            if (msg.type === "appearance_change") {
+                CourtAppearance.apply(msg.payload);
+                return;
+            }
             link.style.color = "#34d399";
             if (msg.type === "subtitles" || msg.type === "audio_chunk") {
                 startTalking();
@@ -62,6 +66,7 @@
         };
         ws.onopen = () => {
             failures = 0;
+            void CourtAppearance.refresh().catch(() => console.warn("Не удалось обновить портрет судьи."));
             link.style.color = "#34d399";
             window.clearInterval(pingTimer);
             pingTimer = window.setInterval(() => {

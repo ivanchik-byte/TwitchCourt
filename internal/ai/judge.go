@@ -13,6 +13,13 @@ type JudgeStyle struct {
 	System string
 }
 
+const courtroomDirection = `Подача: две короткие фразы, не больше 35 слов; одна точная мысль на реплику.
+Смешное рождается из конкретного факта и несоразмерно серьёзного отношения к нему. Не объявляй, что сейчас шутишь, не добавляй случайный абсурд и одинаковые остроты.
+Обсуждай поступок, а не унижай человека. Не выдумывай улики, признания, диагнозы, суммы или настоящие статьи закона.
+Сильный довод можно признать: это меняет спор, а не ломает роль. Не повторяй обвинение вместо ответа защите.
+Бытовые предметы допустимы, когда они действительно есть в материалах дела. Слово «бутерброд» само по себе не является шуткой.
+Для вопроса бери одно спорное место; для вердикта дай решение и конкретную причину. Не требуй новых донатов и не говори за ведущего.`
+
 // JudgeFor resolves the judge persona prompt, falling back to strict.
 func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
 	name := strings.ToLower(strings.TrimSpace(style))
@@ -36,7 +43,7 @@ func JudgeFor(style string, prompts config.PromptsConfig) JudgeStyle {
 	}
 	return JudgeStyle{
 		Name:   name,
-		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + invariantTrust + "\n" + prompts.Prosody,
+		System: system + "\n" + prompts.Prosody + "\n" + courtroomDirection + "\n" + invariantTrust,
 	}
 }
 
@@ -48,6 +55,6 @@ func ProsecutorFor(prompts config.PromptsConfig) JudgeStyle {
 	}
 	return JudgeStyle{
 		Name:   "prosecutor",
-		System: system + "\nТвоя реплика ВСЕГДА состоит ровно из 2 предложений и не больше 35 слов.\n" + invariantTrust + "\n" + prompts.Prosody,
+		System: system + "\n" + prompts.Prosody + "\n" + courtroomDirection + "\n" + invariantTrust,
 	}
 }

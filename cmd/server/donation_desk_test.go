@@ -26,6 +26,7 @@ func TestDonationRouting(t *testing.T) {
 		want                    string
 	}{
 		{"regular testimony", "RUB", "Есть улика", 100, court.StateTestimony, false, "witness"},
+		{"jury closes materials", "RUB", "Есть улика", 100, court.StateJury, false, "too_late"},
 		{"below minimum", "RUB", "взятка", 99, court.StateTestimony, false, "below_minimum"},
 		{"bribe by words", "USD", "это ВЗЯТКА", 2, court.StateDefense, false, "bribe"},
 		{"bribe by amount", "RUB", "на чай", 400, court.StateDefense, false, "bribe"},

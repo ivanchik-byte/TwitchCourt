@@ -12,6 +12,9 @@ const (
 	EventDonation     EventType = "donation"
 	EventTestimony    EventType = "testimony"
 	EventQueueChanged EventType = "queue_change"
+	EventAppearance   EventType = "appearance_change"
+	EventExhibit      EventType = "exhibit"
+	EventJury         EventType = "jury"
 )
 
 type EventMessage struct {
@@ -20,6 +23,9 @@ type EventMessage struct {
 }
 
 type StateChangePayload struct {
+	Jury        *JuryPayload    `json:"jury,omitempty"`
+	TrialID     uint64          `json:"trial_id,omitempty"`
+	Exhibits    []ExhibitView   `json:"exhibits,omitempty"`
 	State       string          `json:"state"`
 	CaseTitle   string          `json:"case_title,omitempty"`
 	Defendant   string          `json:"defendant,omitempty"`
@@ -29,6 +35,20 @@ type StateChangePayload struct {
 	Mode        string          `json:"mode,omitempty"`
 	Line        string          `json:"line,omitempty"`
 	Verdict     *VerdictPayload `json:"verdict,omitempty"`
+}
+
+type ExhibitView struct {
+	Index    int    `json:"index"`
+	Title    string `json:"title"`
+	Text     string `json:"text"`
+	Revealed bool   `json:"revealed"`
+}
+
+type ExhibitPayload struct {
+	TrialID uint64 `json:"trial_id"`
+	Index   int    `json:"index"`
+	Title   string `json:"title"`
+	Text    string `json:"text"`
 }
 
 type AudioChunkPayload struct {

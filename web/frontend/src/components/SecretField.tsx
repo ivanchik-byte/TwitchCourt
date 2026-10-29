@@ -24,9 +24,9 @@ export function SecretField({
   }, [copied])
 
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs text-zinc-400">{label}</span>
-      <div className="flex gap-1.5">
+    <label className="secret-field">
+      <span >{label}</span>
+      <div className="secret-input-row">
         <input
           type={visible ? 'text' : 'password'}
           value={value}
@@ -37,12 +37,12 @@ export function SecretField({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onCommit?.((e.target as HTMLInputElement).value)
           }}
-          className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none focus:border-amber-400/50"
+
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="pressable rounded-lg border border-white/10 px-2 text-zinc-400 hover:text-white"
+
           aria-label={visible ? 'Скрыть' : 'Показать'}
         >
           {visible ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -53,7 +53,7 @@ export function SecretField({
             void navigator.clipboard?.writeText(value)
             setCopied(true)
           }}
-          className="pressable rounded-lg border border-white/10 px-2 text-zinc-400 hover:text-white"
+
           aria-label="Копировать"
         >
           {copied ? <Check size={15} /> : <Copy size={15} />}

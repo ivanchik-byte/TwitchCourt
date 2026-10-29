@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stream Tribunal · Пульт</title>
+    <script>
+      try {
+        const theme = localStorage.getItem('tribunal-theme');
+        document.documentElement.dataset.theme = ['graphite', 'slate', 'walnut'].includes(theme) ? theme : 'graphite';
+      } catch {
+        document.documentElement.dataset.theme = 'graphite';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

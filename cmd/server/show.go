@@ -21,6 +21,31 @@ func writeTrialError(w http.ResponseWriter, err error) {
 
 func registerShowControls(mux *http.ServeMux, currentConfig func() *config.Config, engine *court.Engine) {
 	registerQueue(mux, currentConfig, engine)
+	mux.HandleFunc("/api/trial/exhibit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if !checkHTTPAuth(currentConfig(), r) {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		var request struct {
+			TrialID uint64 `json:"trial_id"`
+			Index   int    `json:"index"`
+		}
+		if err := decodeJSON(w, r, &request); err != nil || request.TrialID == 0 {
+			http.Error(w, "trial id required", 400)
+			return
+		}
+		exhibit, err := engine.RevealExhibit(request.TrialID, request.Index)
+		if err != nil {
+			http.Error(w, err.Error(), 409)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(exhibit)
+	})
 	mux.HandleFunc("/api/tts/preview", voicePreview(currentConfig, engine))
 	mux.HandleFunc("/api/demo", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

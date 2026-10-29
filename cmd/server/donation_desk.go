@@ -52,7 +52,7 @@ func planDonation(cfg *config.Config, d bot.Donation, phase court.State, demo bo
 	if !bot.NewGate(cfg.Donations.MinAmounts, cfg.Donations.DefaultMin).Pass(bot.DonationEvent{Amount: d.Amount, Currency: code}) {
 		return donationPlan{Action: "below_minimum", Note: "Сумма ниже порога участия в суде."}
 	}
-	if phase == court.StateDeliberation || phase == court.StateVerdict {
+	if phase == court.StateJury || phase == court.StateDeliberation || phase == court.StateVerdict {
 		return donationPlan{Action: "too_late", Note: "Суд уже совещается или огласил решение. Новые показания не меняют это дело."}
 	}
 	amount := d.Amount
@@ -173,7 +173,7 @@ func registerDonationDesk(mux *http.ServeMux, desk *donationDesk) {
 			return
 		}
 		switch req.Phase {
-		case court.StateIdle, court.StateIndictment, court.StateTestimony, court.StateDefense, court.StateObjection, court.StateDeliberation, court.StateVerdict:
+		case court.StateIdle, court.StateIndictment, court.StateTestimony, court.StateDefense, court.StateObjection, court.StateJury, court.StateDeliberation, court.StateVerdict:
 		default:
 			http.Error(w, "unknown phase", 400)
 			return
