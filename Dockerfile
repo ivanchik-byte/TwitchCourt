@@ -1,5 +1,5 @@
 # Local-first image: dashboard is baked in, config + memory ride on a volume.
-# Run: docker build -t tribunal . && docker run -p 7890:7890 -v tribunal-data:/data tribunal
+# Run: docker build -t tribunal . && docker run -p 3236:3236 -v tribunal-data:/data tribunal
 
 FROM node:22-alpine AS dashboard
 WORKDIR /build
@@ -26,6 +26,6 @@ COPY README.md LICENSE ./
 RUN chown -R tribunal:tribunal /app
 USER tribunal
 VOLUME ["/app/data"]
-EXPOSE 7890
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:7890/api/status || exit 1
+EXPOSE 3236
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:3236/api/status || exit 1
 ENTRYPOINT ["./StreamTribunal"]

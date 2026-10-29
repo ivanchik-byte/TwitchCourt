@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Eye, EyeOff, Copy, Check } from 'lucide-react'
 
 export function SecretField({
@@ -7,11 +7,13 @@ export function SecretField({
   onChange,
   onCommit,
   placeholder,
+  help,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   onCommit?: (v: string) => void
+  help?: ReactNode
   placeholder?: string
 }) {
   const [visible, setVisible] = useState(false)
@@ -25,7 +27,7 @@ export function SecretField({
 
   return (
     <label className="secret-field">
-      <span >{label}</span>
+      <span>{label}{help}</span>
       <div className="secret-input-row">
         <input
           type={visible ? 'text' : 'password'}

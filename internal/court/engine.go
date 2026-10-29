@@ -51,11 +51,13 @@ type TrialCase struct {
 	Bribe            *BribeOffer
 	Bribes           []BribeOffer
 	// Prosecutor marks trials where the AI prosecutor leads the charge.
-	Prosecutor bool
-	Demo       bool
-	Mode       string
-	LastLine   string
-	Verdict    *obs.VerdictPayload
+	Prosecutor  bool
+	Demo        bool
+	Mode        string
+	LastRole    string
+	LastSpeaker string
+	LastLine    string
+	Verdict     *obs.VerdictPayload
 }
 
 // BribeOffer represents donor money offered during a trial.
@@ -161,11 +163,15 @@ func (e *Engine) currentVoice() audio.Synthesizer {
 
 // speak serializes voice profile switch, synthesis itself runs without the lock
 func (e *Engine) speak(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker, voice, rate string) error {
+	return e.speakAs(ctx, s, index, isLast, "judge", speaker, voice, rate)
+}
+
+func (e *Engine) speakAs(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, role, speaker, voice, rate string) error {
 	e.speakMu.Lock()
 	e.applyVoiceProfile(voice, rate)
 	voiceSynth := e.currentVoice()
 	e.speakMu.Unlock()
-	return e.dispatchSpeechChunkWith(ctx, s, index, isLast, speaker, voiceSynth)
+	return e.dispatchRoleSpeech(ctx, s, index, isLast, speaker, role, voiceSynth)
 }
 
 // castVoice maps Edge voice name to Silero speaker when Silero engine is active
@@ -374,6 +380,16 @@ func (e *Engine) accuserSystem(c *TrialCase) string {
 	return c.Judge.System
 }
 
+func (e *Engine) accuserRole(c *TrialCase) (string, string) {
+	if c.Mode == "unban" {
+		return "advocate", "Адвокат"
+	}
+	if c.Prosecutor || c.Mode == "streamer" {
+		return "prosecutor", "Прокурор"
+	}
+	return "judge", e.cfg.Load().Courtroom.JudgeName
+}
+
 func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64) {
 	defer e.finishTrial(gen)
 	defer e.restIdle(gen)
@@ -397,14 +413,15 @@ func (e *Engine) runTrialPipeline(ctx context.Context, c *TrialCase, gen uint64)
 		index int
 		last  bool
 	}
+	openingRole, openingName := e.accuserRole(c)
 	speechQueue := make(chan queued, 16)
 	speechDone := make(chan struct{})
 
 	go func() {
 		defer close(speechDone)
 		for item := range speechQueue {
-			if err := e.speak(ctx, item.chunk, item.index, item.last,
-				e.cfg.Load().Courtroom.JudgeName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
+			if err := e.speakAs(ctx, item.chunk, item.index, item.last, openingRole,
+				openingName, e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge), e.cfg.Load().TTS.JudgeRate); err != nil {
 				return
 			}
 		}
@@ -789,13 +806,13 @@ func (e *Engine) runObjection(ctx context.Context, c *TrialCase, startIndex int,
 	}
 	objQueue := make(chan queuedObjection, 16)
 	objDone := make(chan struct{})
-	objJudge := e.cfg.Load().Courtroom.JudgeName
+	objRole, objJudge := e.accuserRole(c)
 	objVoice := e.castVoice(e.cfg.Load().TTS.JudgeVoice, e.cfg.Load().TTS.SileroJudge)
 	objRate := e.cfg.Load().TTS.JudgeRate
 	go func() {
 		defer close(objDone)
 		for item := range objQueue {
-			if err := e.speak(ctx, item.chunk, item.index, false, objJudge, objVoice, objRate); err != nil {
+			if err := e.speakAs(ctx, item.chunk, item.index, false, objRole, objJudge, objVoice, objRate); err != nil {
 				log.Printf("objection speech failed: %v", err)
 				return
 			}
@@ -886,6 +903,10 @@ func (e *Engine) dispatchSpeechChunk(ctx context.Context, s ai.SentenceChunk, in
 }
 
 func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker string, voice audio.Synthesizer) error {
+	return e.dispatchRoleSpeech(ctx, s, index, isLast, speaker, "judge", voice)
+}
+
+func (e *Engine) dispatchRoleSpeech(ctx context.Context, s ai.SentenceChunk, index int, isLast bool, speaker, role string, voice audio.Synthesizer) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -908,9 +929,11 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 	e.mu.Lock()
 	if e.currCase != nil {
 		e.currCase.LastLine = shown
+		e.currCase.LastRole, e.currCase.LastSpeaker = role, speaker
 	}
 	e.mu.Unlock()
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
+		Role:    role,
 		Speaker: speaker,
 		Text:    shown,
 	})
@@ -921,7 +944,15 @@ func (e *Engine) dispatchSpeechChunkWith(ctx context.Context, s ai.SentenceChunk
 
 	synthCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	rawBytes, err := voice.Synthesize(synthCtx, speechText)
+	var rawBytes []byte
+	var err error
+	if cast, ok := voice.(interface {
+		SynthesizeRole(context.Context, string, string) ([]byte, error)
+	}); ok {
+		rawBytes, err = cast.SynthesizeRole(synthCtx, speechText, role)
+	} else {
+		rawBytes, err = voice.Synthesize(synthCtx, speechText)
+	}
 	if err != nil {
 		log.Printf("tts synthesis error: %v", err)
 		return err

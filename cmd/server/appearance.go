@@ -11,20 +11,21 @@ import (
 )
 
 type appearanceSettings struct {
-	Theme               string `json:"theme"`
-	JudgePreset         string `json:"judge_preset"`
-	ShowJudge           bool   `json:"show_judge"`
-	ReduceMotion        bool   `json:"reduce_motion"`
-	HasCustomJudge      bool   `json:"has_custom_judge"`
-	HasCustomBackground bool   `json:"has_custom_background"`
-	PhotoURL            string `json:"photo_url"`
-	BackgroundURL       string `json:"background_url"`
+	RolePhotos          map[string]string `json:"role_photos"`
+	Theme               string            `json:"theme"`
+	JudgePreset         string            `json:"judge_preset"`
+	ShowJudge           bool              `json:"show_judge"`
+	ReduceMotion        bool              `json:"reduce_motion"`
+	HasCustomJudge      bool              `json:"has_custom_judge"`
+	HasCustomBackground bool              `json:"has_custom_background"`
+	PhotoURL            string            `json:"photo_url"`
+	BackgroundURL       string            `json:"background_url"`
 }
 
 func appearanceView(cfg *config.Config) appearanceSettings {
-	view := appearanceSettings{Theme: cfg.Appearance.Theme, JudgePreset: cfg.Appearance.JudgePreset, ShowJudge: cfg.Appearance.ShowJudge, ReduceMotion: cfg.Appearance.ReduceMotion}
+	view := appearanceSettings{RolePhotos: map[string]string{"prosecutor": rolePhotoURL("prosecutor"), "advocate": rolePhotoURL("advocate")}, Theme: cfg.Appearance.Theme, JudgePreset: cfg.Appearance.JudgePreset, ShowJudge: cfg.Appearance.ShowJudge, ReduceMotion: cfg.Appearance.ReduceMotion}
 	if view.Theme != "graphite" && view.Theme != "slate" && view.Theme != "walnut" {
-		view.Theme = "graphite"
+		view.Theme = "walnut"
 	}
 	var revision int64
 	if info, err := os.Stat(judgePhotoPath()); err == nil {

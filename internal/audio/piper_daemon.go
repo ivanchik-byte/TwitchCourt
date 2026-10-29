@@ -1,209 +1,112 @@
 package audio
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"math"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 
 	"stream-tribunal/internal/config"
 )
 
 type PiperDaemon struct {
-	cfg    config.TTSConfig
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	mu     sync.Mutex
-	sem    chan struct{}
-	isMock bool
-	closed bool
+	cfg     config.TTSConfig
+	sem     chan struct{}
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	closed  bool
+	problem error
 }
-
-type PiperInput struct {
-	Text      string `json:"text"`
-	SpeakerID int    `json:"speaker_id,omitempty"`
-}
-
-func (p *PiperDaemon) IsMock() bool { return p.isMock }
 
 func NewPiperDaemon(cfg config.TTSConfig) (*PiperDaemon, error) {
-	daemon := &PiperDaemon{cfg: cfg, sem: make(chan struct{}, 1)}
-
+	p := &PiperDaemon{cfg: cfg, sem: make(chan struct{}, 1)}
 	if !cfg.Enabled {
-		daemon.isMock = true
-		log.Printf("piper TTS disabled, mock beep mode active")
-		return daemon, nil
+		return p, nil
 	}
-
-	if _, err := os.Stat(cfg.PiperBinary); errors.Is(err, os.ErrNotExist) {
-		log.Printf("piper binary not found at '%s', fallback to audio synthesis mock mode", cfg.PiperBinary)
-		daemon.isMock = true
-		return daemon, nil
+	if _, err := exec.LookPath(cfg.PiperBinary); err != nil {
+		p.problem = errors.New("Piper: не найден исполняемый файл, проверьте путь к Piper")
+	} else if _, err := os.Stat(cfg.ModelPath); err != nil {
+		p.problem = errors.New("Piper: не найден файл модели .onnx")
+	} else if _, err := os.Stat(cfg.ConfigPath); err != nil {
+		p.problem = errors.New("Piper: не найден конфиг модели .onnx.json")
 	}
-
-	if err := daemon.startProcess(); err != nil {
-		log.Printf("failed to launch piper process (%v), fallback to mock mode", err)
-		daemon.isMock = true
-		return daemon, nil
-	}
-
-	return daemon, nil
+	return p, nil
 }
 
-func (p *PiperDaemon) startProcess() error {
-	cmd := exec.Command(p.cfg.PiperBinary,
-		"--model", p.cfg.ModelPath,
-		"--config", p.cfg.ConfigPath,
-		"--json-input",
-		"--output_file", "-",
-	)
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("stdin pipe error: %w", err)
-	}
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		stdin.Close()
-		return fmt.Errorf("stdout pipe error: %w", err)
-	}
-
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		stdin.Close()
-		stdoutPipe.Close()
-		return fmt.Errorf("stderr pipe error: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		stdin.Close()
-		stdoutPipe.Close()
-		return fmt.Errorf("process start error: %w", err)
-	}
-
-	go func() {
-		drain := make([]byte, 4096)
-		for {
-			if _, err := stderrPipe.Read(drain); err != nil {
-				return
-			}
-		}
-	}()
-
-	p.cmd = cmd
-	p.stdin = stdin
-	p.stdout = bufio.NewReader(stdoutPipe)
-	return nil
-}
+func (p *PiperDaemon) IsMock() bool { return !p.cfg.Enabled }
 
 func (p *PiperDaemon) Synthesize(ctx context.Context, text string) ([]byte, error) {
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	// Serialize pipe I/O without holding mu: Close() never blocks on synthesis.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case p.sem <- struct{}{}:
 	}
 	defer func() { <-p.sem }()
-
 	p.mu.Lock()
-	isMock := p.isMock
-	closed := p.closed
-	stdin := p.stdin
-	stdout := p.stdout
-	speaker := p.cfg.SpeakerID
-	p.mu.Unlock()
-
-	if closed {
-		return nil, fmt.Errorf("piper daemon closed")
+	if p.closed {
+		p.mu.Unlock()
+		return nil, errors.New("Piper: движок остановлен")
 	}
-	if isMock {
+	runCtx, cancel := context.WithCancel(ctx)
+	p.cancel = cancel
+	p.mu.Unlock()
+	defer cancel()
+	if !p.cfg.Enabled {
 		return generateMockBeepWav(text)
 	}
-
-	req := PiperInput{
-		Text:      text,
-		SpeakerID: speaker,
+	if p.problem != nil {
+		return nil, p.problem
 	}
-	encoded, err := json.Marshal(req)
+	output, err := os.CreateTemp("", "tribunal-piper-*.wav")
 	if err != nil {
 		return nil, err
 	}
-	encoded = append(encoded, '\n')
-
-	type ioResult struct {
-		data []byte
-		err  error
+	output.Close()
+	defer os.Remove(output.Name())
+	speed := p.cfg.Speed
+	if speed <= 0 {
+		speed = 1
 	}
-	done := make(chan ioResult, 1)
-	go func() {
-		if _, err := stdin.Write(encoded); err != nil {
-			done <- ioResult{nil, fmt.Errorf("failed writing to piper stdin: %w", err)}
-			return
-		}
-
-		header := make([]byte, 44)
-		if _, err := io.ReadFull(stdout, header); err != nil {
-			done <- ioResult{nil, fmt.Errorf("failed reading wav header: %w", err)}
-			return
-		}
-
-		dataSize := binary.LittleEndian.Uint32(header[40:44])
-		if dataSize > 25*1024*1024 {
-			done <- ioResult{nil, fmt.Errorf("invalid wav chunk size: %d", dataSize)}
-			return
-		}
-
-		audioBuffer := make([]byte, dataSize)
-		if _, err := io.ReadFull(stdout, audioBuffer); err != nil {
-			done <- ioResult{nil, fmt.Errorf("failed reading audio payload: %w", err)}
-			return
-		}
-
-		fullWav := make([]byte, 0, 44+dataSize)
-		fullWav = append(fullWav, header...)
-		fullWav = append(fullWav, audioBuffer...)
-		done <- ioResult{fullWav, nil}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case r := <-done:
-		return r.data, r.err
+	cmd := exec.CommandContext(runCtx, p.cfg.PiperBinary, "--model", p.cfg.ModelPath,
+		"--config", p.cfg.ConfigPath, "--output_file", output.Name(),
+		"--speaker", strconv.Itoa(p.cfg.SpeakerID), "--length_scale", strconv.FormatFloat(1/speed, 'f', 3, 64))
+	cmd.Stdin = strings.NewReader(text + "\n")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("Piper не смог синтезировать речь: %w", err)
 	}
+	stat, err := os.Stat(output.Name())
+	if err != nil {
+		return nil, err
+	}
+	if stat.Size() > 8<<20 {
+		return nil, errors.New("Piper: слишком большой аудиофайл")
+	}
+	clip, err := os.ReadFile(output.Name())
+	if err != nil {
+		return nil, err
+	}
+	if len(clip) < 44 || !bytes.HasPrefix(clip, []byte("RIFF")) {
+		return nil, errors.New("Piper: получен некорректный WAV")
+	}
+	return clip, nil
 }
 
 func (p *PiperDaemon) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
 	p.closed = true
-	if p.stdin != nil {
-		p.stdin.Close()
-	}
-	if p.cmd != nil && p.cmd.Process != nil {
-		return p.cmd.Process.Kill()
+	if p.cancel != nil {
+		p.cancel()
 	}
 	return nil
 }

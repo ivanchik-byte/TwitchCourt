@@ -58,7 +58,7 @@ func TestAppearanceUpdatesRequireAuthAndPreserveOtherSettings(t *testing.T) {
 
 func TestAppearanceFailureDoesNotPublishOrLoseDefaults(t *testing.T) {
 	cfg := config.DefaultConfig()
-	if !cfg.Appearance.ShowJudge || cfg.Appearance.Theme != "graphite" {
+	if !cfg.Appearance.ShowJudge || cfg.Appearance.Theme != "walnut" {
 		t.Fatal("missing defaults")
 	}
 	mux := http.NewServeMux()
@@ -68,7 +68,7 @@ func TestAppearanceFailureDoesNotPublishOrLoseDefaults(t *testing.T) {
 	}, obs.NewHub(nil))
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/appearance", strings.NewReader(`{"theme":"slate"}`)))
-	if response.Code != 500 || cfg.Appearance.Theme != "graphite" {
+	if response.Code != 500 || cfg.Appearance.Theme != "walnut" {
 		t.Fatal("failed save changed appearance")
 	}
 }

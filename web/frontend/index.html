@@ -7,9 +7,9 @@
     <script>
       try {
         const theme = localStorage.getItem('tribunal-theme');
-        document.documentElement.dataset.theme = ['graphite', 'slate', 'walnut'].includes(theme) ? theme : 'graphite';
+        document.documentElement.dataset.theme = ['graphite', 'slate', 'walnut'].includes(theme) ? theme : 'walnut';
       } catch {
-        document.documentElement.dataset.theme = 'graphite';
+        document.documentElement.dataset.theme = 'walnut';
       }
     </script>
   </head>

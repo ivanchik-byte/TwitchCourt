@@ -42,9 +42,10 @@ func TestVoicePreviewDoesNotSaveOrFallBack(t *testing.T) {
 			}))
 			defer voiceService.Close()
 			cfg := config.DefaultConfig()
-			cfg.TTS.SileroURL = voiceService.URL
+			cfg.TTS.SileroURL = "http://127.0.0.1:1"
 			engine := court.NewEngine(cfg, obs.NewHub(nil), nil, nil, safety.NewFilter(nil))
-			request := httptest.NewRequest(http.MethodPost, "/api/tts/preview", strings.NewReader(`{"engine":"silero","voice":"eugene"}`))
+			draft, _ := json.Marshal(map[string]string{"engine": "silero", "voice": "eugene", "silero_url": voiceService.URL})
+			request := httptest.NewRequest(http.MethodPost, "/api/tts/preview", bytes.NewReader(draft))
 			w := httptest.NewRecorder()
 			voicePreview(func() *config.Config { return cfg }, engine)(w, request)
 			want := http.StatusBadGateway
@@ -54,7 +55,7 @@ func TestVoicePreviewDoesNotSaveOrFallBack(t *testing.T) {
 			if w.Code != want {
 				t.Fatalf("want %d, got %d: %s", want, w.Code, w.Body.String())
 			}
-			if speaker != "eugene" || cfg.TTS.SileroJudge == "eugene" || cfg.TTS.Engine != "edge" {
+			if speaker != "eugene" || cfg.TTS.SileroJudge == "eugene" || cfg.TTS.Engine != "edge" || cfg.TTS.SileroURL != "http://127.0.0.1:1" {
 				t.Fatal("preview used the wrong speaker or changed the saved configuration")
 			}
 			if available && w.Header().Get("Content-Type") != "audio/wav" {
@@ -81,7 +82,7 @@ func TestShowControlsAuthenticationAndValidation(t *testing.T) {
 		{"/api/demo", `{"mode":"viewer","unexpected":true}`, "test-secret", 400},
 		{"/api/trial/advance", `{}`, "test-secret", 400},
 		{"/api/tts/preview", `{"engine":"silero","voice":"kseniya"}`, "", 401},
-		{"/api/tts/preview", `{"engine":"mock"}`, "test-secret", 412},
+		{"/api/tts/preview", `{"engine":"mock"}`, "test-secret", 200},
 		{"/api/demo", `{"mode":"viewer"}`, "test-secret", 202},
 		{"/api/demo", `{"mode":"streamer"}`, "test-secret", 409},
 	} {
@@ -90,7 +91,7 @@ func TestShowControlsAuthenticationAndValidation(t *testing.T) {
 		w := httptest.NewRecorder()
 		mux.ServeHTTP(w, req)
 		if w.Code != tc.status {
-			t.Fatalf("%s %s: want %d, got %d %s", tc.path, tc.body, tc.status, w.Code, w.Body.String())
+			t.Fatalf("%s %s: want %d, got %d", tc.path, tc.body, tc.status, w.Code)
 		}
 	}
 }

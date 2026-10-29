@@ -1,23 +1,35 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { apiGet, apiPut, apiPost, apiNote } from '../lib/api'
+import { apiGet, apiPut } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
 import { SecretField } from '../components/SecretField'
-import { roundTemp, inputCls, labelCls, saveSection, SaveButton, type AiState, type TtsState, type TwitchState, type ProfileState, type SafetyState, type VoiceLists } from './settings/shared'
+import { roundTemp, inputCls, labelCls, saveSection, SaveButton, type AiState, type TtsState, type TwitchState, type ProfileState, type SafetyState, type VoiceLists, type RoleVoice } from './settings/shared'
 import { AiSection } from './settings/AiSection'
 import { TtsSection } from './settings/TtsSection'
 import { IntegrationsSection } from './settings/IntegrationsSection'
 import { ProfileSection } from './settings/ProfileSection'
 import { DonationRulesSection } from './settings/DonationRulesSection'
 import { ShowRulesSection } from './settings/ShowRulesSection'
+import { SetupFold } from './settings/SetupFold'
+import { SetupGuide, sectionMeta } from './settings/SetupGuide'
 import { AppearanceSection } from './settings/AppearanceSection'
 import { SafetySection } from './settings/SafetySection'
 import { PromptsSection, emptyPrompts, type PromptsState } from './settings/PromptsSection'
 
 export function SettingsView() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const section = searchParams.get('section') || 'ai'
+  const requested = searchParams.get('section') || 'guide'
+  const legacy: Record<string,[string,string]> = {voice:['connections','voice'],ai:['connections','model'],twitch:['connections','services'],donations:['rules','donations'],safety:['rules','safety'],people:['advanced','profile'],prompts:['advanced','prompts'],server:['advanced','server']}
+  const section = legacy[requested]?.[0] || (['guide','appearance','connections','rules','advanced'].includes(requested)?requested:'guide')
+  const panel = searchParams.get('panel') ?? legacy[requested]?.[1] ?? ({connections:'',rules:'',advanced:''} as Record<string,string>)[section] ?? ''
+  const openPanels = new Set(panel.split(',').filter(Boolean))
+  const togglePanel = (next: string) => {
+    const selected = new Set(openPanels)
+    selected.has(next) ? selected.delete(next) : selected.add(next)
+    setSearchParams({section,panel:[...selected].join(',')})
+  }
+  const groupPanels: Record<string,string[]> = {connections:['model','voice','services'],rules:['show','donations','safety'],advanced:['profile','prompts','server']}
+  const allOpen = groupPanels[section]?.every(key=>openPanels.has(key)) ?? false
   const [secret, setSecretLocal] = useState(getSecret())
 
   const [ai, setAi] = useState<AiState>({ provider: 'groq', model: '', temperature: 0.85, baseUrl: '', extraBody: '' })
@@ -25,6 +37,8 @@ export function SettingsView() {
   const [aiFlags, setAiFlags] = useState<{ has_key: boolean; live: boolean; has_extra_body?: boolean } | null>(null)
 
   const [tts, setTts] = useState<TtsState>({
+    roles: {}, delivery: 'natural',
+    elevenKey: '', elevenHasKey: false, elevenVoiceId: '', elevenModelId: 'eleven_multilingual_v2',
     engine: 'edge',
     voice: 'ru-RU-SvetlanaNeural',
     customVoice: '',
@@ -81,6 +95,8 @@ export function SettingsView() {
       const settled = await Promise.allSettled([
         apiGet<{ provider: string; model: string; temperature: number; base_url: string; has_key: boolean; live: boolean; has_extra_body: boolean }>('/api/ai'),
         apiGet<{
+          roles: Record<string, RoleVoice>; delivery: string
+          eleven_has_key: boolean; eleven_voice_id: string; eleven_model_id: string
           engine: string; voice: string; rate: string; volume: string; pitch: string
           judge_voice: string; judge_rate: string; silero_url: string; silero_judge: string
           enabled: boolean; auto_fallback: boolean; piper_binary: string; model_path: string
@@ -118,6 +134,8 @@ export function SettingsView() {
         setVoices({ edge, silero })
         setTts((t) => ({
           ...t,
+          roles: d.roles || {}, delivery: d.delivery || 'natural',
+          elevenHasKey: d.eleven_has_key, elevenVoiceId: d.eleven_voice_id ?? '', elevenModelId: d.eleven_model_id || 'eleven_multilingual_v2',
           engine: d.engine,
           voice: edge.includes(d.voice) ? d.voice : 'custom',
           customVoice: edge.includes(d.voice) ? '' : (d.voice ?? ''),
@@ -204,70 +222,40 @@ export function SettingsView() {
 
   return (
     <div className="setup-page">
-      <div className="desk-heading"><div><p className="eyebrow">Параметры шоу</p><h1>Подготовка</h1></div><Link to="/" className="quiet-link">Вернуться в эфир</Link></div>
-      <nav className="setup-tabs" aria-label="Разделы подготовки">
-        {[['ai', '01', 'Языковая модель'], ['voice', '02', 'Голос судьи'], ['twitch', '03', 'Подключения'], ['donations', '04', 'Донаты'], ['rules', '05', 'Правила суда'], ['appearance', '06', 'Оформление'], ['advanced', '07', 'Дополнительно']].map(([key, number, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} onClick={() => setSearchParams({ section: key })}><span>{number}</span>{label}</button>)}
-      </nav>
-      <details className="access-settings">
-        <summary>Доступ к управлению</summary>
-        <p>Нужен только если на сервере задан секретный ключ.</p>
-        <SecretField label="Ключ доступа к API" value={secret} onChange={setSecretLocal} onCommit={(v) => { if (v === getSecret()) return; setSecretLocal(v); setSecret(v); location.reload() }} placeholder="X-Secret" />
-      </details>
-
+      <div className="desk-heading"><div><p className="eyebrow">Параметры шоу</p><h1>Настройки</h1></div><Link to="/" className="quiet-link">Вернуться в эфир</Link></div>
+      <div className="setup-shell">
+      <aside className="setup-sidebar"><nav aria-label="Разделы настроек">
+        {[['guide','Перед эфиром','Короткий маршрут запуска'],['appearance','Оформление','Тема, зал и персонажи'],['connections','Звук и подключения','Голоса, модель и сервисы'],['rules','Правила шоу','Этапы, донаты и наказания'],['advanced','Дополнительно','Память и тонкая настройка']].map(([key,title,note]) => <button key={key} aria-current={section===key?'page':undefined} onClick={() => setSearchParams({section:key})}><span>{title}</span><small>{note}</small></button>)}
+      </nav><div className="sidebar-status"><span className="connection-dot is-connected"/><span>Перед эфиром<small>Модель → голос → сцена OBS</small></span></div></aside>
+      <div className="setup-main">
+      {section === 'guide' && <SetupGuide />}
+      {section !== 'guide' && <div className="section-intro"><p className="eyebrow">{sectionMeta[section]?.[0] || 'Настройки шоу'}</p><h2>{sectionMeta[section]?.[1] || 'Подготовка'}</h2><p>{sectionMeta[section]?.[2]}</p></div>}
+      {groupPanels[section] && <div className="settings-disclosure-bar"><span>Можно открыть несколько блоков. Изменения применяются после сохранения.</span><button type="button" className="quiet-link" onClick={()=>setSearchParams({section,panel:allOpen?'':groupPanels[section].join(',')})}>{allOpen?'Свернуть все':'Показать все параметры'}</button></div>}
       <div className="setup-content">
-        {section === 'donations' && <DonationRulesSection />}
-        {section === 'rules' && <ShowRulesSection />}
-        {section === 'ai' && <AiSection ai={ai} setAi={setAi} apiKey={apiKey} setApiKey={setApiKey} flags={aiFlags} />}
-        {section === 'voice' && <TtsSection tts={tts} setTts={setTts} voices={voices} />}
-        {section === 'twitch' && <IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} />}
-        {section === 'advanced' && <ProfileSection profile={profile} setProfile={setProfile} />}
-
         {section === 'appearance' && <AppearanceSection />}
-
-        {section === 'advanced' && <SafetySection safety={safety} setSafety={setSafety} />}
-
-        {section === 'advanced' && <PromptsSection prompts={prompts} setPrompts={setPrompts} onReset={() => setPromptsTick((n) => n + 1)} />}
-
-        {section === 'advanced' && <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">Стример</h2>
-          <label className={labelCls}>
-            Имя стримера (подсудимый по донатам и !sue)
-            <input value={streamerName} onChange={(e) => setStreamerName(e.target.value)} className={inputCls} />
-          </label>
-          <div>
-            <SaveButton
-              onSave={() =>
-                saveSection('Стример', () => apiPut('/api/game', { streamer_name: streamerName }))
-              }
-            />
-          </div>
-        </section>}
-
-        {section === 'advanced' && <section className="card space-y-2 p-4">
-          <h2 className="font-semibold">Сервер</h2>
-          <p className="tabular font-mono text-sm text-zinc-300">
-            {server.host || '-'}:{server.port || '-'} · ключ доступа {server.secretSet ? 'задан' : 'не задан'}
-          </p>
-          <p className="text-xs text-zinc-500">
-            Параметры host, port и secret настраиваются в config.yaml и требуют перезапуска.
-          </p>
-          <div>
-            <button
-              onClick={async () => {
-                if (!window.confirm('Перезапустить сервер? Панель управления временно потеряет связь.')) return
-                const r = await apiPost('/api/restart', {})
-                if (r.ok) toast.success('Сервер перезапускается. Обновите страницу через несколько секунд.')
-                else toast.error(`Ошибка перезапуска: ${apiNote(r.status)}`)
-              }}
-              className="pressable rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-sm"
-            >
-              Перезапустить сервер
-            </button>
-          </div>
-        </section>}
-
-
+        {section === 'connections' && <div className="setup-folds">
+          <SetupFold title="Модель, которая пишет реплики" note={aiFlags?.live?'Параметры заданы · здесь можно проверить ответ':'Нужна для настоящего заседания; репетиция работает без неё'} open={openPanels.has('model')} onToggle={()=>togglePanel('model')}><AiSection ai={ai} setAi={setAi} apiKey={apiKey} setApiKey={setApiKey} flags={aiFlags} onSaved={setAiFlags} /></SetupFold>
+          <SetupFold title="Голоса участников" note="Источник речи, тембры трёх ролей и прослушивание" open={openPanels.has('voice')} onToggle={()=>togglePanel('voice')}><TtsSection tts={tts} setTts={setTts} voices={voices} /></SetupFold>
+          <SetupFold title="Twitch и донат-сервисы" note="Канал, бот, DonationAlerts и DonatePay — все ключи в одном месте" open={openPanels.has('services')} onToggle={()=>togglePanel('services')}><IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} /></SetupFold>
+        </div>}
+        {section === 'rules' && <div className="setup-folds">
+          <SetupFold title="Ход заседания" note="Время этапов, очередь зрителей и игровые задания" open={openPanels.has('show')} onToggle={()=>togglePanel('show')}><ShowRulesSection /></SetupFold>
+          <SetupFold title="Что дают донаты" note="Показания, взятки, приоритетная очередь и проверка правил" open={openPanels.has('donations')} onToggle={()=>togglePanel('donations')}><DonationRulesSection /></SetupFold>
+          <SetupFold title="Контроль эфира" note="Замена слов, ручные наказания и клавиша остановки" open={openPanels.has('safety')} onToggle={()=>togglePanel('safety')}><SafetySection safety={safety} setSafety={setSafety} /></SetupFold>
+        </div>}
+        {section === 'advanced' && <div className="setup-folds">
+          <SetupFold title="Характер и память" note="Имя стримера, привычки и контекст для реплик" open={openPanels.has('profile')} onToggle={()=>togglePanel('profile')}>
+            <ProfileSection profile={profile} setProfile={setProfile} />
+            <section className="settings-panel"><h2>Имя в делах</h2><label className={labelCls}>Как называть стримера при !sue и суде по донату<input value={streamerName} onChange={event=>setStreamerName(event.target.value)} className={inputCls} /></label><SaveButton onSave={()=>saveSection('Имя стримера',()=>apiPut('/api/game',{streamer_name:streamerName}))} /></section>
+          </SetupFold>
+          <SetupFold title="Инструкции модели" note="Редактор промптов; для первого эфира можно оставить как есть" open={openPanels.has('prompts')} onToggle={()=>togglePanel('prompts')}><PromptsSection prompts={prompts} setPrompts={setPrompts} onReset={()=>setPromptsTick(n=>n+1)} /></SetupFold>
+          <SetupFold title="Сервер и доступ" note="Адрес локального сервера и ключ управления" open={openPanels.has('server')} onToggle={()=>togglePanel('server')}>
+            <section className="settings-panel"><h2>Доступ к управлению</h2><p>Этот ключ нужен только если на сервере задан секрет. Это не ключ языковой модели или ElevenLabs.</p><SecretField label="Ключ управления приложением" value={secret} onChange={setSecretLocal} onCommit={value=>{if(value===getSecret())return;setSecretLocal(value);setSecret(value);location.reload()}} /></section>
+            <section className="settings-panel"><h2>Локальный сервер</h2><p>{server.host||'—'}:{server.port||'—'} · ключ доступа {server.secretSet?'задан':'не задан'}</p><p>Параметры host, port и secret задаются в config.yaml. После изменения остановите dev.sh клавишами Ctrl+C и запустите снова.</p><pre className="setup-command">./dev.sh</pre></section>
+          </SetupFold>
+        </div>}
       </div>
+      </div></div>
     </div>
   )
 }

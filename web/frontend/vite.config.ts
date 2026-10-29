@@ -11,9 +11,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:7890',
-      '/overlay': 'http://localhost:7890',
-      '/ws': { target: 'ws://localhost:7890', ws: true },
+      '/api': 'http://localhost:3236',
+      '/overlay': 'http://localhost:3236',
+      '/ws': { target: 'ws://localhost:3236', ws: true },
     },
   },
   build: {

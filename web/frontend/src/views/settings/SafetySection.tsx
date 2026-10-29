@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { HelpTip } from '../../components/HelpTip'
 import { apiPut } from '../../lib/api'
 import { labelCls, lines, saveSection, SaveButton, type SafetyState } from './shared'
 
@@ -17,7 +18,7 @@ export const SafetySection = memo(function SafetySection({ safety, setSafety }: 
           checked={safety.filterEnabled}
           onChange={(e) => setSafety({ ...safety, filterEnabled: e.target.checked })}
         />
-        Фильтр токсичности в суде
+        Замена слов в материалах суда <HelpTip label="Фильтр слов">Заменяет слова и фразы из вашего списка нейтральным словом в материалах, которые проходят фильтр суда. Регистр не важен. Это не ИИ-проверка токсичности и не модерация всего чата; баны фильтр не отправляет.</HelpTip>
       </label>
       <label className="flex items-center gap-1.5 text-xs text-zinc-300">
         <input
@@ -25,10 +26,10 @@ export const SafetySection = memo(function SafetySection({ safety, setSafety }: 
           checked={safety.banConfirm}
           onChange={(e) => setSafety({ ...safety, banConfirm: e.target.checked })}
         />
-        Блокировки и таймауты только вручную
+        Блокировки и таймауты только вручную <HelpTip label="Ручные наказания">Судья объявляет решение, но для применения наказания нужен ваш отдельный выбор в пульте. Если выключить эту настройку, вердикт может автоматически вызвать бан или таймаут при подключённом боте.</HelpTip>
       </label>
       <label className={labelCls}>
-        Чёрный список (по строке)
+        Слова и фразы для замены <HelpTip label="Список слов">Одна запись на строку, без запятых и регулярных выражений. Пустой список ничего не заменяет. Совпадение ищется по целому слову или фразе.</HelpTip>
         <textarea
           value={safety.blacklist} onChange={(e) => setSafety({ ...safety, blacklist: e.target.value })}
           rows={3}
@@ -36,7 +37,7 @@ export const SafetySection = memo(function SafetySection({ safety, setSafety }: 
         />
       </label>
       <label className={labelCls}>
-        Хоткей паники
+        Клавиша остановки суда <HelpTip label="Остановка суда">Отменяет текущее дело и голосование в открытом пульте. Работает, когда страница в фокусе и вы не печатаете в поле ввода; это не глобальная клавиша Windows или Linux.</HelpTip>
         <select
           value={safety.panicHotkey}
           onChange={(e) => setSafety({ ...safety, panicHotkey: e.target.value })}

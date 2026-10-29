@@ -185,7 +185,7 @@
 
 ## 5. Протокол WebSocket (/ws)
 
-Сервер обслуживает двустороннее WebSocket соединение по адресу `ws://localhost:7890/ws`.
+Сервер обслуживает двустороннее WebSocket соединение по адресу `ws://localhost:3236/ws`.
 
 ### Исходящие события сервера (Server -> Client):
 * `state_change`: смена текущей фазы суда (`idle`, `indictment`, `testimony`, `defense`, `objection`, `deliberation`, `verdict`), передача таймера и информации о деле.

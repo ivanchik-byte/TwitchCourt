@@ -28,3 +28,8 @@ server.log
 *.log
 .env
 web/compiled/
+
+# Local speech runtime
+/.venv-tts/
+/tools/v5_ru.pt
+/tools/v5_ru.pt.part

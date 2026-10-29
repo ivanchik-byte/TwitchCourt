@@ -46,23 +46,36 @@ type AIConfig struct {
 	ExtraBody   map[string]any `yaml:"extra_body"`
 }
 
+type RoleVoice struct {
+	EdgeVoice      string `yaml:"edge_voice" json:"edge_voice"`
+	SileroVoice    string `yaml:"silero_voice" json:"silero_voice"`
+	ElevenVoiceID  string `yaml:"eleven_voice_id" json:"eleven_voice_id"`
+	PiperModelPath string `yaml:"piper_model_path" json:"piper_model_path"`
+	Rate           string `yaml:"rate" json:"rate"`
+}
+
 type TTSConfig struct {
-	Enabled      bool    `yaml:"enabled"`
-	Engine       string  `yaml:"engine"`
-	Voice        string  `yaml:"voice"`
-	Rate         string  `yaml:"rate"`
-	Volume       string  `yaml:"volume"`
-	Pitch        string  `yaml:"pitch"`
-	AutoFallback bool    `yaml:"auto_fallback"`
-	JudgeVoice   string  `yaml:"judge_voice"`
-	JudgeRate    string  `yaml:"judge_rate"`
-	SileroURL    string  `yaml:"silero_url"`
-	SileroJudge  string  `yaml:"silero_judge"`
-	PiperBinary  string  `yaml:"piper_binary"`
-	ModelPath    string  `yaml:"model_path"`
-	ConfigPath   string  `yaml:"config_path"`
-	SpeakerID    int     `yaml:"speaker_id"`
-	Speed        float64 `yaml:"speed"`
+	Roles         map[string]RoleVoice `yaml:"roles"`
+	Delivery      string               `yaml:"delivery"`
+	ElevenAPIKey  string               `yaml:"eleven_api_key"`
+	ElevenVoiceID string               `yaml:"eleven_voice_id"`
+	ElevenModelID string               `yaml:"eleven_model_id"`
+	Enabled       bool                 `yaml:"enabled"`
+	Engine        string               `yaml:"engine"`
+	Voice         string               `yaml:"voice"`
+	Rate          string               `yaml:"rate"`
+	Volume        string               `yaml:"volume"`
+	Pitch         string               `yaml:"pitch"`
+	AutoFallback  bool                 `yaml:"auto_fallback"`
+	JudgeVoice    string               `yaml:"judge_voice"`
+	JudgeRate     string               `yaml:"judge_rate"`
+	SileroURL     string               `yaml:"silero_url"`
+	SileroJudge   string               `yaml:"silero_judge"`
+	PiperBinary   string               `yaml:"piper_binary"`
+	ModelPath     string               `yaml:"model_path"`
+	ConfigPath    string               `yaml:"config_path"`
+	SpeakerID     int                  `yaml:"speaker_id"`
+	Speed         float64              `yaml:"speed"`
 }
 
 type CourtroomConfig struct {
@@ -237,7 +250,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
 			Host: "127.0.0.1",
-			Port: 7890,
+			Port: 3236,
 		},
 		AI: AIConfig{
 			Provider:    "groq",
@@ -247,24 +260,26 @@ func DefaultConfig() *Config {
 			Stream:      true,
 		},
 		TTS: TTSConfig{
-			Enabled:      true,
-			Engine:       "edge",
-			Voice:        "ru-RU-SvetlanaNeural",
-			Rate:         "+0%",
-			Volume:       "+0%",
-			Pitch:        "+0Hz",
-			AutoFallback: true,
-			JudgeVoice:   "ru-RU-SvetlanaNeural",
-			JudgeRate:    "-10%",
-			SileroURL:    "http://127.0.0.1:7892",
-			SileroJudge:  "kseniya",
-			PiperBinary:  binaryName,
-			ModelPath:    filepath.Join("models", "ru_irina.onnx"),
-			ConfigPath:   filepath.Join("models", "ru_irina.onnx.json"),
-			SpeakerID:    0,
-			Speed:        1.15,
+			Delivery:      "natural",
+			ElevenModelID: "eleven_multilingual_v2",
+			Enabled:       true,
+			Engine:        "edge",
+			Voice:         "ru-RU-SvetlanaNeural",
+			Rate:          "+0%",
+			Volume:        "+0%",
+			Pitch:         "+0Hz",
+			AutoFallback:  true,
+			JudgeVoice:    "ru-RU-SvetlanaNeural",
+			JudgeRate:     "-10%",
+			SileroURL:     "http://127.0.0.1:7892",
+			SileroJudge:   "kseniya",
+			PiperBinary:   binaryName,
+			ModelPath:     filepath.Join("models", "ru_irina.onnx"),
+			ConfigPath:    filepath.Join("models", "ru_irina.onnx.json"),
+			SpeakerID:     0,
+			Speed:         1.15,
 		},
-		Appearance: AppearanceConfig{Theme: "graphite", ShowJudge: true},
+		Appearance: AppearanceConfig{Theme: "walnut", ShowJudge: true},
 		Courtroom: CourtroomConfig{
 			CasesGen:            CasesGenConfig{Batch: 5, LowMark: 3},
 			QueueOpen:           true,
@@ -401,7 +416,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	switch cfg.TTS.Engine {
-	case "edge", "piper", "mock", "silero":
+	case "edge", "piper", "mock", "silero", "elevenlabs":
 	default:
 		cfg.TTS.Engine = "edge"
 	}
@@ -500,6 +515,12 @@ func (c *Config) Clone() *Config {
 		return nil
 	}
 	out := *c
+	if c.TTS.Roles != nil {
+		out.TTS.Roles = make(map[string]RoleVoice, len(c.TTS.Roles))
+		for role, voice := range c.TTS.Roles {
+			out.TTS.Roles[role] = voice
+		}
+	}
 	if c.Donations.MinAmounts != nil {
 		out.Donations.MinAmounts = make(map[string]float64, len(c.Donations.MinAmounts))
 		for k, v := range c.Donations.MinAmounts {

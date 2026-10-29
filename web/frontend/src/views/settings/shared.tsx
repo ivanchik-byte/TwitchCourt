@@ -45,7 +45,21 @@ export interface AiState {
   extraBody: string
 }
 
+export interface RoleVoice {
+ edge_voice?: string
+ silero_voice?: string
+ eleven_voice_id?: string
+ piper_model_path?: string
+ rate?: string
+}
+
 export interface TtsState {
+ roles: Record<string, RoleVoice>
+ delivery: string
+  elevenKey: string
+  elevenHasKey: boolean
+  elevenVoiceId: string
+  elevenModelId: string
   engine: string
   voice: string
   customVoice: string

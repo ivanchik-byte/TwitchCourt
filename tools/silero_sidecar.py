@@ -1,23 +1,11 @@
-"""Silero TTS v5 sidecar for Stream Tribunal.
-
-Serves local neural Russian speech over HTTP so the Go server stays
-dependency-free. Only torch (+stdlib) is required on top of Python.
-
-Setup on the streamer PC (one time):
-    pip install torch --index-url https://download.pytorch.org/whl/cpu
-    pip install numpy
-    python tools/silero_sidecar.py            # listens on 127.0.0.1:7892
-
-Then set `tts.engine: silero` in config.yaml. The v5_ru.pt model
-(~87 MB) downloads itself on first launch.
-
-Protocol: POST /synthesize {"text": str, "speaker": str} -> WAV bytes.
-Speakers: aidar, baya, kseniya, eugene, ... (29 total in v5).
-Stress marks with "+" (вин+овен) pass through to the accentor.
-"""
+"""Local Russian speech for TwitchCourt. Prepare with ./voice.sh silero."""
 
 import io
 import json
+import os
+from pathlib import Path
+import sys
+import threading
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -25,65 +13,85 @@ import torch
 
 MODEL_URL = "https://models.silero.ai/models/tts/ru/v5_ru.pt"
 SAMPLE_RATE = 48000
-
 _model = None
+_status = "loading"
+_synthesis = threading.Lock()
 
 
-def get_model():
-    global _model
-    if _model is None:
+def load_model(server):
+    global _model, _status
+    try:
         torch.set_num_threads(4)
-        _model = torch.package.PackageImporter(_fetch()).load_pickle("tts_models", "model")
-        _model.to(torch.device("cpu"))
-        # Warm-up so the first live replica is not cold.
-        _model.apply_tts(text="Суд слушает.", speaker="aidar", sample_rate=SAMPLE_RATE)
-    return _model
+        local = Path(__file__).resolve().with_name("v5_ru.pt")
+        if not local.is_file():
+            partial = local.with_suffix(".pt.part")
+            torch.hub.download_url_to_file(MODEL_URL, str(partial))
+            os.replace(partial, local)
+        model = torch.package.PackageImporter(str(local)).load_pickle("tts_models", "model")
+        model.to(torch.device("cpu"))
+        model.apply_tts(text="Суд слушает.", speaker="aidar", sample_rate=SAMPLE_RATE)
+        _model = model
+        _status = "ready"
+        print("Silero готов", flush=True)
+    except Exception as error:
+        _status = "error"
+        print(f"Не удалось загрузить модель Silero: {error}", flush=True)
+        server.shutdown()
 
 
-def _fetch():
-    import os
-
-    local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v5_ru.pt")
-    if not os.path.isfile(local):
-        torch.hub.download_url_to_file(MODEL_URL, local)
-    return local
-
-
-def to_wav(samples) -> bytes:
-    import numpy as np
-
-    pcm = (samples.numpy() * 32767).astype("<i2")
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wav:
+def to_wav(samples):
+    pcm = (samples.detach().cpu().numpy().clip(-1, 1) * 32767).astype("<i2")
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
         wav.setframerate(SAMPLE_RATE)
         wav.writeframes(pcm.tobytes())
-    return buf.getvalue()
+    return output.getvalue()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TribunalSilero/1.0"
+    server_version = "TribunalSilero/2.0"
 
-    def log_message(self, *args):
-        pass
+    def do_GET(self):
+        if self.path != "/health":
+            self.send_error(404)
+            return
+        body = json.dumps({"service": "tribunal-silero", "status": _status,
+                           "voices": list(_model.speakers) if _model is not None else []}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self):
         if self.path != "/synthesize":
             self.send_error(404)
             return
+        if _status != "ready":
+            self.send_error(503, "model is not ready")
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length) or b"{}")
-            text = str(body.get("text", ""))[:500]
-            speaker = str(body.get("speaker", "aidar")) or "aidar"
-            if not text.strip():
-                self.send_error(400, "empty text")
+            if length <= 0 or length > 16384:
+                self.send_error(400, "invalid body size")
                 return
-            audio = get_model().apply_tts(text=text, speaker=speaker, sample_rate=SAMPLE_RATE)
-            wav = to_wav(audio)
-        except Exception as exc:  # noqa: BLE001 - report back as 500
-            self.send_error(500, str(exc)[:200])
+            body = json.loads(self.rfile.read(length))
+            text = body.get("text", "")
+            speaker = body.get("speaker", "kseniya")
+            if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                self.send_error(400, "text must contain 1 to 2000 characters")
+                return
+            if speaker not in _model.speakers:
+                self.send_error(400, "unknown speaker")
+                return
+            with _synthesis, torch.inference_mode():
+                clip = _model.apply_tts(text=text, speaker=speaker, sample_rate=SAMPLE_RATE)
+                wav = to_wav(clip)
+        except (ValueError, TypeError, RuntimeError) as error:
+            print(f"Ошибка синтеза Silero: {error}", flush=True)
+            self.send_error(500, "synthesis failed")
             return
         self.send_response(200)
         self.send_header("Content-Type", "audio/wav")
@@ -93,7 +101,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    get_model()
     server = ThreadingHTTPServer(("127.0.0.1", 7892), Handler)
-    print("silero sidecar on http://127.0.0.1:7892")
-    server.serve_forever()
+    threading.Thread(target=load_model, args=(server,), daemon=True).start()
+    print("Silero: http://127.0.0.1:7892, загружается модель", flush=True)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+    if _status == "error":
+        sys.exit(1)

@@ -63,6 +63,7 @@ func (e *Engine) snapshotLocked() obs.StateChangePayload {
 		}
 		s.Defendant, s.Charge, s.Demo, s.Mode = c.Defendant, c.Crime, c.Demo, c.Mode
 		s.Line, s.Verdict = c.LastLine, c.Verdict
+		s.Role, s.Speaker = c.LastRole, c.LastSpeaker
 	}
 	if e.state == StateTestimony || e.state == StateDefense || e.state == StateJury {
 		remaining := time.Until(e.phaseDeadline)

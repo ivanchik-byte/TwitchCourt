@@ -199,8 +199,11 @@ func main() {
 	handleDonation := donationLog.receive
 
 	mux := http.NewServeMux()
+	localVoice := registerLocalVoice(mux, func() *config.Config { return cfg.Load() }, engine)
+	defer localVoice.Close()
 	registerDonationDesk(mux, donationLog)
 	registerAppearance(mux, func() *config.Config { return cfg.Load() }, publish, hub)
+	registerRolePhotos(mux, func() *config.Config { return cfg.Load() }, hub)
 	mux.HandleFunc("/ws", hub.ServeWS)
 
 	overlaySub, err := fs.Sub(web.StaticFS, "overlay")
@@ -530,136 +533,13 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"ms": ms, "mock": mock})
 	})
 
-	mux.HandleFunc("/api/tts", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		ttsStatus := func() map[string]any {
-			return map[string]any{
-				"engine":        cfg.Load().TTS.Engine,
-				"voice":         cfg.Load().TTS.Voice,
-				"rate":          cfg.Load().TTS.Rate,
-				"volume":        cfg.Load().TTS.Volume,
-				"pitch":         cfg.Load().TTS.Pitch,
-				"judge_voice":   cfg.Load().TTS.JudgeVoice,
-				"judge_rate":    cfg.Load().TTS.JudgeRate,
-				"silero_url":    cfg.Load().TTS.SileroURL,
-				"silero_judge":  cfg.Load().TTS.SileroJudge,
-				"enabled":       cfg.Load().TTS.Enabled,
-				"auto_fallback": cfg.Load().TTS.AutoFallback,
-				"beep":          ttsIsBeep(cfg.Load()),
-				"piper_binary":  cfg.Load().TTS.PiperBinary,
-				"model_path":    cfg.Load().TTS.ModelPath,
-				"config_path":   cfg.Load().TTS.ConfigPath,
-				"speaker_id":    cfg.Load().TTS.SpeakerID,
-				"speed":         cfg.Load().TTS.Speed,
-				"voices": map[string]any{
-					"edge":   []string{"ru-RU-SvetlanaNeural", "ru-RU-DmitryNeural"},
-					"silero": []string{"xenia", "kseniya", "baya", "aidar", "eugene"},
-					"piper":  []string{"ru_irina", "ru_dmitri", "ru_ruslan", "ru_denis"},
-				},
-			}
-		}
-		switch r.Method {
-		case http.MethodGet:
-			if !checkHTTPAuth(cfg.Load(), r) {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			json.NewEncoder(w).Encode(ttsStatus())
-		case http.MethodPut:
-			if !checkHTTPAuth(cfg.Load(), r) {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			var req struct {
-				Engine       *string  `json:"engine"`
-				Voice        *string  `json:"voice"`
-				Rate         *string  `json:"rate"`
-				Volume       *string  `json:"volume"`
-				Pitch        *string  `json:"pitch"`
-				JudgeVoice   *string  `json:"judge_voice"`
-				JudgeRate    *string  `json:"judge_rate"`
-				SileroURL    *string  `json:"silero_url"`
-				SileroJudge  *string  `json:"silero_judge"`
-				Enabled      *bool    `json:"enabled"`
-				AutoFallback *bool    `json:"auto_fallback"`
-				PiperBinary  *string  `json:"piper_binary"`
-				ModelPath    *string  `json:"model_path"`
-				ConfigPath   *string  `json:"config_path"`
-				SpeakerID    *int     `json:"speaker_id"`
-				Speed        *float64 `json:"speed"`
-			}
-			if err := decodeJSON(w, r, &req); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
-				return
-			}
-			next := cfg.Load().Clone()
-			if req.Engine != nil {
-				switch *req.Engine {
-				case "edge", "silero", "piper", "mock":
-					next.TTS.Engine = *req.Engine
-				default:
-					http.Error(w, "want engine edge, silero, piper or mock", http.StatusBadRequest)
-					return
-				}
-			}
-			if req.Voice != nil && *req.Voice != "" {
-				next.TTS.Voice = *req.Voice
-			}
-			if req.Rate != nil && *req.Rate != "" {
-				next.TTS.Rate = *req.Rate
-			}
-			if req.Volume != nil && *req.Volume != "" {
-				next.TTS.Volume = *req.Volume
-			}
-			if req.Pitch != nil && *req.Pitch != "" {
-				next.TTS.Pitch = *req.Pitch
-			}
-			if req.JudgeVoice != nil && *req.JudgeVoice != "" {
-				next.TTS.JudgeVoice = *req.JudgeVoice
-			}
-			if req.JudgeRate != nil && *req.JudgeRate != "" {
-				next.TTS.JudgeRate = *req.JudgeRate
-			}
-			if req.SileroURL != nil && *req.SileroURL != "" {
-				next.TTS.SileroURL = *req.SileroURL
-			}
-			if req.SileroJudge != nil && *req.SileroJudge != "" {
-				next.TTS.SileroJudge = *req.SileroJudge
-			}
-			if req.Enabled != nil {
-				next.TTS.Enabled = *req.Enabled
-			}
-			if req.AutoFallback != nil {
-				next.TTS.AutoFallback = *req.AutoFallback
-			}
-			if req.PiperBinary != nil && *req.PiperBinary != "" {
-				next.TTS.PiperBinary = *req.PiperBinary
-			}
-			if req.ModelPath != nil && *req.ModelPath != "" {
-				next.TTS.ModelPath = *req.ModelPath
-			}
-			if req.ConfigPath != nil && *req.ConfigPath != "" {
-				next.TTS.ConfigPath = *req.ConfigPath
-			}
-			if req.SpeakerID != nil && *req.SpeakerID >= 0 {
-				next.TTS.SpeakerID = *req.SpeakerID
-			}
-			if req.Speed != nil && *req.Speed > 0 && *req.Speed <= 3 {
-				next.TTS.Speed = *req.Speed
-			}
-			if !publish(w, next) {
-				return
-			}
-			voiceMu.Lock()
-			old := voice
-			voice = buildSynthesizer(next)
-			engine.SetVoice(voice)
-			_ = old.Close()
-			voiceMu.Unlock()
-			json.NewEncoder(w).Encode(ttsStatus())
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
+	registerTTS(mux, func() *config.Config { return cfg.Load() }, publish, engine, func(next *config.Config) {
+		voiceMu.Lock()
+		defer voiceMu.Unlock()
+		old := voice
+		voice = buildSynthesizer(next)
+		engine.SetVoice(voice)
+		_ = old.Close()
 	})
 
 	mux.HandleFunc("/api/history", func(w http.ResponseWriter, r *http.Request) {

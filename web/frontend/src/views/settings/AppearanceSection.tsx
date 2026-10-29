@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Check, Copy, ImagePlus, RotateCcw, Maximize2 } from 'lucide-react'
+import { RolePortraits } from './RolePortraits'
 import { apiFetch, apiUpload, getSecret } from '../../lib/api'
 import { previewTheme, useAppearance, type Appearance, type ConsoleTheme } from '../../tribunal/AppearanceContext'
 
@@ -20,9 +21,13 @@ export function AppearanceSection() {
   const [mediaTick, setMediaTick] = useState(0)
   const [copied, setCopied] = useState(false)
   const frame = useRef<HTMLIFrameElement>(null)
+  const appliedTheme = useRef(appearance?.theme)
 
   useEffect(() => {
-    if (appearance) setDraft(current => current ? { ...current, has_custom_judge: appearance.has_custom_judge, has_custom_background: appearance.has_custom_background, photo_url: appearance.photo_url, background_url: appearance.background_url } : appearance)
+    if (!appearance) return
+    const themeChanged = appliedTheme.current !== appearance.theme
+    appliedTheme.current = appearance.theme
+    setDraft(current => current ? { ...current, ...(themeChanged ? { theme: appearance.theme } : {}), has_custom_judge: appearance.has_custom_judge, has_custom_background: appearance.has_custom_background, photo_url: appearance.photo_url, background_url: appearance.background_url } : appearance)
   }, [appearance])
   useEffect(() => {
     if (!appearance) return
@@ -93,7 +98,7 @@ export function AppearanceSection() {
         </div>
         <div className="media-actions"><label className="secondary-action upload-label"><ImagePlus size={14} />Загрузить персонажа<input disabled={busy} type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { void upload('judge', event.target.files?.[0]); event.target.value = '' }} /></label><span>PNG с прозрачностью, JPG или WebP · до 5 МБ</span></div>
         <p className="media-save-note">Загрузка сразу заменяет ваш файл. Выбор между образами сохраните кнопкой «Применить оформление».</p>
-        <label className="setting-switch"><input type="checkbox" disabled={busy} checked={draft.show_judge} onChange={event => update({ show_judge: event.target.checked })} />Показывать судью в основной сцене</label>
+        <label className="setting-switch"><input type="checkbox" disabled={busy} checked={draft.show_judge} onChange={event => update({ show_judge: event.target.checked })} />Показывать портрет говорящего на сцене</label>
         <label className="setting-switch"><input type="checkbox" disabled={busy} checked={draft.reduce_motion} onChange={event => update({ reduce_motion: event.target.checked })} />Убрать движения и переходы</label>
       </section>
       <section className="settings-panel">
@@ -109,6 +114,7 @@ export function AppearanceSection() {
           setBusy(false)
         }}><RotateCcw size={13} />Стандартный фон</button>}</div></div>
       </section>
+      <RolePortraits />
       <div className="appearance-save"><button className="primary-action" disabled={busy}>{busy ? 'Применяем…' : 'Применить оформление'}</button><span role="status">{saved ? 'Сохранено. Сцена OBS обновлена.' : 'Тему и образ можно примерить до применения.'}</span></div>
       {error && <p className="desk-error" role="alert">{error}</p>}
     </form>

@@ -23,6 +23,8 @@ type EventMessage struct {
 }
 
 type StateChangePayload struct {
+	Speaker     string          `json:"speaker,omitempty"`
+	Role        string          `json:"role,omitempty"`
 	Jury        *JuryPayload    `json:"jury,omitempty"`
 	TrialID     uint64          `json:"trial_id,omitempty"`
 	Exhibits    []ExhibitView   `json:"exhibits,omitempty"`
@@ -64,6 +66,7 @@ type AnimationPayload struct {
 }
 
 type SubtitlesPayload struct {
+	Role    string `json:"role,omitempty"`
 	Speaker string `json:"speaker"`
 	Text    string `json:"text"`
 }

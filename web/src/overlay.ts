@@ -13,6 +13,8 @@ namespace Overlay {
     | { type: "panic"; payload: Record<string, unknown> };
 
   export interface StateChange {
+    role?: string;
+    speaker?: string;
     state: string;
     case_title?: string;
     defendant?: string;
@@ -55,6 +57,7 @@ namespace Overlay {
   }
 
   export interface Subtitles {
+    role?: string;
     speaker: string;
     text: string;
   }
@@ -495,7 +498,7 @@ namespace Overlay {
         if (revision !== stateEvents || ws.readyState !== WebSocket.OPEN || !status.trial) return;
         handleEvent({ type: "state_change", payload: status.trial });
         if (status.trial.jury) showJury(status.trial.jury);
-        if (status.trial.line) handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: status.trial.line } });
+        if (status.trial.line) handleEvent({ type: "subtitles", payload: { role: status.trial.role, speaker: status.trial.speaker || "Судья", text: status.trial.line } });
         if (status.trial.verdict) handleEvent({ type: "verdict", payload: status.trial.verdict });
         const exhibit = status.trial.exhibits?.filter(entry => entry.revealed).slice(-1)[0];
         if (exhibit && status.trial.state !== "idle") handleEvent({ type: "exhibit", payload: exhibit });
@@ -576,6 +579,7 @@ namespace Overlay {
       }
       case "subtitles":
         revealCourtBriefly();
+        CourtAppearance.role(msg.payload.role || "judge");
         if (msg.payload.speaker) speakerName.textContent = msg.payload.speaker;
         if (msg.payload.text) subtitles.textContent = msg.payload.text;
         break;

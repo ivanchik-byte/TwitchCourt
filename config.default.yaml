@@ -1,6 +1,6 @@
 server:
   host: "127.0.0.1"
-  port: 7890
+  port: 3236
   secret: ""
 
 ai:
@@ -13,6 +13,11 @@ ai:
   extra_body: {} # router params merged into the request root, e.g. {provider: {service_tier: standard}}
 
 tts:
+  delivery: "natural"
+  roles: {}
+  eleven_api_key: ""
+  eleven_voice_id: ""
+  eleven_model_id: "eleven_multilingual_v2"
   enabled: true
   engine: "edge"
   voice: "ru-RU-SvetlanaNeural"
@@ -31,7 +36,7 @@ tts:
   speed: 1.15
 
 appearance:
-  theme: "graphite"
+  theme: "walnut"
   judge_preset: "" # Preserve an existing custom portrait, otherwise use the original.
   show_judge: true
   reduce_motion: false

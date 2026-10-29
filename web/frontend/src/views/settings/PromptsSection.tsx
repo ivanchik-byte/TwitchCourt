@@ -87,17 +87,18 @@ export const PromptsSection = memo(function PromptsSection({ prompts, setPrompts
       <p className="text-xs text-zinc-500">
         Характер и задачи. Формат ответа (слово вердикта, лимиты, теги) зашит в движок и не ломается правками.
       </p>
-      <Area label="Строгий судья" value={prompts.judgeStrict} onChange={set('judgeStrict')} rows={6} />
+      <details className="prompt-group"><summary>Характеры участников</summary><p className="settings-note">Это поведение персонажей. Не вставляйте сюда API-ключи или технические команды синтеза.</p><Area label="Строгий судья" value={prompts.judgeStrict} onChange={set('judgeStrict')} rows={6} />
       <Area label="Циничный судья" value={prompts.judgeCynical} onChange={set('judgeCynical')} rows={6} />
       <Area label="Прокурор (суды над стримером)" value={prompts.prosecutor} onChange={set('prosecutor')} rows={6} />
-      <Area label="Аудио-режиссура" value={prompts.prosody} onChange={set('prosody')} />
+      </details><details className="prompt-group"><summary>Речь и задачи по этапам</summary><p className="settings-note">Короткие реплики оставляют место ведущему. Эмоциональная манера текста и возможности выбранного голоса настраиваются отдельно.</p><Area label="Аудио-режиссура" value={prompts.prosody} onChange={set('prosody')} />
       <Area label="Задача: обвинение" value={prompts.taskIndictment} onChange={set('taskIndictment')} />
       <Area label="Задача: протест" value={prompts.taskCounter} onChange={set('taskCounter')} rows={3} />
       <Area label="Задача: совещание" value={prompts.taskDeliberation} onChange={set('taskDeliberation')} />
-      <Area label="Приписка о взятке" value={prompts.bribeNote} onChange={set('bribeNote')} rows={2} />
+      </details><details className="prompt-group"><summary>Донаты, фильтр и генерация дел</summary><p className="settings-note">Параметры в фигурных скобках заполняются приложением. Сохраните их написание; удаление может лишить модель контекста.</p><Area label="Приписка о взятке" value={prompts.bribeNote} onChange={set('bribeNote')} rows={2} />
       <Area label="Осуждение запретки" value={prompts.condemnNote} onChange={set('condemnNote')} rows={3} />
       <Area label="Самосуд зрителя (!crime)" value={prompts.confession} onChange={set('confession')} rows={6} />
       <Area label="Промпт генератора дел" value={prompts.genPrompt} onChange={set('genPrompt')} rows={6} />
+      </details><div className="settings-callout"><strong>Сначала проверьте на одном деле</strong><p>Сохранение влияет на следующие запросы к модели. «Сбросить» заменит все ваши тексты встроенными; перед этим скопируйте нужные формулировки.</p></div>
       <div className="flex gap-1.5">
         <SaveButton onSave={save} />
         <button

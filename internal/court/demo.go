@@ -64,8 +64,12 @@ func (e *Engine) demoStepLocked(state State, line string) <-chan struct{} {
 		Demo: true, Mode: e.currCase.Mode,
 	})
 	if line != "" {
-		e.currCase.LastLine = line
-		e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{Speaker: "Судья · репетиция", Text: line})
+		role, name := "judge", e.cfg.Load().Courtroom.JudgeName
+		if state == StateIndictment || state == StateObjection {
+			role, name = e.accuserRole(e.currCase)
+		}
+		e.currCase.LastLine, e.currCase.LastRole, e.currCase.LastSpeaker = line, role, name+" · репетиция"
+		e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{Role: role, Speaker: name + " · репетиция", Text: line})
 	}
 	return advance
 }

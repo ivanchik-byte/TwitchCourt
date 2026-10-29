@@ -16,7 +16,7 @@ if ! flock -n 9; then
     exit 1
 fi
 
-for port in 7890 5173; do
+for port in 3236 5173; do
     if (: >"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
         printf 'Порт %s занят. Останови прежний сервер перед запуском.\n' "$port" >&2
         exit 1
@@ -55,18 +55,18 @@ for ((attempt = 0; attempt < 120; attempt++)); do
         printf 'Сервер остановился. Подробности: .infoslop/dev/server.log\n' >&2
         exit 1
     fi
-    if curl --noproxy '*' --silent --output /dev/null --max-time 1 http://127.0.0.1:7890/api/status; then
+    if curl --noproxy '*' --silent --output /dev/null --max-time 1 http://127.0.0.1:3236/api/status; then
         ready=true
         break
     fi
     sleep 0.5
 done
 if [[ "$ready" != true ]]; then
-    printf 'Сервер не ответил на 127.0.0.1:7890. Проверь server.host/server.port в config.yaml и .infoslop/dev/server.log.\n' >&2
+    printf 'Сервер не ответил на 127.0.0.1:3236. Проверь server.host/server.port в config.yaml и .infoslop/dev/server.log.\n' >&2
     exit 1
 fi
 
-printf '\nПульт: http://127.0.0.1:5173/\nСцена OBS: http://127.0.0.1:7890/overlay/\nОстановка: Ctrl+C. Изменения интерфейса появятся сразу; после правок Go или сцены перезапусти dev.sh.\n\n'
+printf '\nПульт: http://127.0.0.1:5173/\nСцена OBS: http://127.0.0.1:3236/overlay/\nОстановка: Ctrl+C. Изменения интерфейса появятся сразу; после правок Go или сцены перезапусти dev.sh.\n\n'
 setsid npm --prefix web/frontend run dev -- --host 127.0.0.1 --port 5173 --strictPort --open 9>&- &
 processes+=("$!")
 wait -n "${processes[@]}"

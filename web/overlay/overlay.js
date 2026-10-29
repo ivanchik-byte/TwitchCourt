@@ -414,7 +414,7 @@ function markLive(ok) {
                 if (status.trial.jury)
                     showJury(status.trial.jury);
                 if (status.trial.line)
-                    handleEvent({ type: "subtitles", payload: { speaker: "Судья", text: status.trial.line } });
+                    handleEvent({ type: "subtitles", payload: { role: status.trial.role, speaker: status.trial.speaker || "Судья", text: status.trial.line } });
                 if (status.trial.verdict)
                     handleEvent({ type: "verdict", payload: status.trial.verdict });
                 const exhibit = status.trial.exhibits?.filter(entry => entry.revealed).slice(-1)[0];
@@ -505,6 +505,7 @@ function markLive(ok) {
             }
             case "subtitles":
                 revealCourtBriefly();
+                CourtAppearance.role(msg.payload.role || "judge");
                 if (msg.payload.speaker)
                     speakerName.textContent = msg.payload.speaker;
                 if (msg.payload.text)
