@@ -1,7 +1,7 @@
 BINARY := StreamTribunal
 DIST := dist
 
-.PHONY: run test vet build build-win package-win frontend overlay clean
+.PHONY: dev run test vet build build-win package-win frontend overlay clean
 
 frontend:
 	cd web/frontend && npm ci --no-audit --no-fund && npm run build
@@ -11,6 +11,9 @@ overlay:
 
 run:
 	go run ./cmd/server
+
+dev:
+	./dev.sh
 
 test:
 	go test ./... -race -count=1
