@@ -36,6 +36,7 @@ type StateChangePayload struct {
 	Demo        bool            `json:"demo"`
 	Mode        string          `json:"mode,omitempty"`
 	Line        string          `json:"line,omitempty"`
+	FullLine    string          `json:"full_line,omitempty"`
 	Verdict     *VerdictPayload `json:"verdict,omitempty"`
 }
 
@@ -66,9 +67,10 @@ type AnimationPayload struct {
 }
 
 type SubtitlesPayload struct {
-	Role    string `json:"role,omitempty"`
-	Speaker string `json:"speaker"`
-	Text    string `json:"text"`
+	Role     string `json:"role,omitempty"`
+	Speaker  string `json:"speaker"`
+	Text     string `json:"text"`
+	FullLine string `json:"full_line,omitempty"`
 }
 
 type TestimonyPayload struct {

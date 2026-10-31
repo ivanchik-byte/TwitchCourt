@@ -57,6 +57,9 @@ type TrialCase struct {
 	LastRole    string
 	LastSpeaker string
 	LastLine    string
+	FullLine    string
+	speechState State
+	speechIndex int
 	Verdict     *obs.VerdictPayload
 }
 
@@ -926,16 +929,23 @@ func (e *Engine) dispatchRoleSpeech(ctx context.Context, s ai.SentenceChunk, ind
 
 	// strip SSML pause tags from subtitle display
 	shown := strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(speechText, ""))
+	fullLine := shown
 	e.mu.Lock()
 	if e.currCase != nil {
-		e.currCase.LastLine = shown
-		e.currCase.LastRole, e.currCase.LastSpeaker = role, speaker
+		c := e.currCase
+		if index > 0 && index == c.speechIndex+1 && c.speechState == e.state && c.LastRole == role && c.LastSpeaker == speaker && c.FullLine != "" {
+			fullLine = c.FullLine + " " + shown
+		}
+		c.LastLine, c.FullLine = shown, fullLine
+		c.speechState, c.speechIndex = e.state, index
+		c.LastRole, c.LastSpeaker = role, speaker
 	}
 	e.mu.Unlock()
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{
-		Role:    role,
-		Speaker: speaker,
-		Text:    shown,
+		Role:     role,
+		Speaker:  speaker,
+		Text:     shown,
+		FullLine: fullLine,
 	})
 
 	if e.recall.Load() != nil {

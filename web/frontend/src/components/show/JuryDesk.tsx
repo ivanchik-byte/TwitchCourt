@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { HelpTip } from '../HelpTip'
 import { apiGet, apiPostJson } from '../../lib/api'
 import type { JuryRound, JuryStatus } from '../../lib/types'
 
@@ -44,7 +45,7 @@ export function JuryDesk({ phase, connected, onChange }: { phase: string; connec
   }
   const openRound = jury?.open_round === 1 ? jury.first : jury?.open_round === 2 ? jury.second : undefined
   return <section className="desk-panel jury-desk" aria-label="Присяжные">
-    <div className="panel-heading"><h2>Присяжные</h2>{openRound && <BallotClock deadline={openRound.closes_at_ms!} />}</div>
+    <div className="panel-heading"><h2>Присяжные <HelpTip label="Голосование присяжных">Первое мнение собирается на показаниях до защиты и раскрытия улики. Второе — после ответа суда. Один зритель может изменить свой голос до закрытия; результаты появляются после подсчёта.</HelpTip></h2>{openRound && <BallotClock deadline={openRound.closes_at_ms!} />}</div>
     {!jury ? <p>Получаем голосование…</p> : <>
       {openRound ? <>
         <p>{openRound.number === 1 ? 'Первое мнение' : 'После обсуждения'} · голосов: {openRound.total}</p>
@@ -52,9 +53,8 @@ export function JuryDesk({ phase, connected, onChange }: { phase: string; connec
         <p>Можно изменить голос до закрытия. Расклад появится после подсчёта.</p>
         <button className="secondary-action jury-main-action" disabled={pending || !connected} onClick={() => void submit('/api/jury', { action: 'close', poll_id: openRound.id })}>Закрыть голосование</button>
       </> : <>
-        {!jury.first && <p>Первое мнение — до защиты и раскрытия улики. Второе — после ответа суда.</p>}
         {(jury.can_first || jury.can_second) && <div className="jury-start"><label>Длительность<select aria-label="Длительность голосования" value={seconds} disabled={pending} onChange={event => setSeconds(Number(event.target.value))}>{[5, 10, 15, 20, 30, 45, 60].map(value => <option key={value} value={value}>{value} сек.</option>)}</select></label><button className="secondary-action" disabled={pending || !connected} onClick={() => void submit('/api/jury', { action: 'open', round: jury.can_first ? 1 : 2, seconds, revision: jury.revision })}>{jury.can_first ? 'Первое мнение' : 'Второе мнение'}</button></div>}
-        {!jury.first && !jury.can_first && <p>{phase === 'indictment' ? 'Кнопка откроется на этапе показаний.' : 'В этом деле можно продолжить без голосования.'}</p>}
+        {!jury.first && !jury.can_first && <p>{phase === 'indictment' ? 'Голосование доступно на показаниях.' : phase === 'verdict' ? 'Дело прошло без голосования.' : 'Сейчас голосование закрыто.'}</p>}
         {jury.first && !jury.second && !jury.can_second && phase !== 'verdict' && <p>Второе мнение откроется после ответа суда. Приобщите улику и обсудите её до этого.</p>}
       </>}
       {jury.first?.status === 'closed' && <RoundResult round={jury.first} />}

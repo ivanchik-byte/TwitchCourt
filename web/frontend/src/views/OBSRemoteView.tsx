@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { getSecret } from '../lib/api'
 import type OBSWebSocket from 'obs-websocket-js'
 
 interface SceneItem {
@@ -113,6 +114,8 @@ export function OBSRemoteView() {
   const [scene, setScene] = useState('')
   const [items, setItems] = useState<SceneItem[]>([])
   const [canvas, setCanvas] = useState({ w: 1920, h: 1080 })
+  const secret = getSecret()
+  const overlayURL = `${location.origin}/overlay/${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`
   const obsRef = useRef<OBSWebSocket | null>(null)
 
   const disconnect = useCallback(async () => {
@@ -216,34 +219,36 @@ export function OBSRemoteView() {
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-3 p-3">
-      <div className="card space-y-2 p-4">
-        <h2 className="font-semibold">OBS Remote</h2>
+    <div className="setup-page obs-page">
+      <div className="desk-heading"><div><p className="eyebrow">Трансляция</p><h1>OBS</h1></div></div>
+      <section className="settings-panel obs-source"><p className="eyebrow">01 / Браузерный источник</p><h2>Сцена суда</h2><p>Добавьте источник «Браузер» в OBS и вставьте этот адрес.</p>
+        <label>Адрес сцены<div className="obs-url"><input readOnly value={overlayURL} onFocus={event => event.currentTarget.select()} /><button className="secondary-action" onClick={async () => { try { await navigator.clipboard.writeText(overlayURL); toast.success('Адрес сцены скопирован') } catch { toast.error('Выделите и скопируйте адрес вручную') } }}>Копировать</button></div></label>
+        <div className="obs-source-meta"><span>1920 × 1080</span><span>Звук через браузерный источник OBS</span><a className="quiet-link" href={overlayURL} target="_blank" rel="noreferrer">Открыть сцену</a></div>
+        <details><summary>Как проверить изображение и звук</summary><p>Установите размер источника 1920 × 1080. Включите «Управлять звуком через OBS», затем «Мониторинг и вывод» в расширенных свойствах аудио. Репетиция на вкладке «Эфир» проверяет изображение без речи; настоящий голос сначала прослушайте в настройках, затем проверьте на реальном деле.</p></details>
+      </section>
+      <section className="settings-panel obs-remote"><p className="eyebrow">02 / Необязательно</p>
+        <h2>Управление OBS</h2>
         <p className="text-xs text-zinc-500">
-          Прямое подключение к OBS WebSocket (Инструменты → Настройки сервера WebSocket).
-          Работает автономно в браузере.
+          Для переключения сцен включите WebSocket в OBS: «Инструменты → Настройки сервера WebSocket». Для показа самой сцены суда это подключение не требуется.
         </p>
-        <div className="grid gap-1.5 sm:grid-cols-[1fr_110px_1fr_auto]">
-          <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="127.0.0.1" autoComplete="off"
-            className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
-          <input value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ''))} placeholder="4455" inputMode="numeric"
-            className="tabular h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль OBS (только для текущей сессии)" autoComplete="off"
-            className="h-9 rounded-lg border border-white/10 bg-black/40 px-2.5 text-sm outline-none" />
+        <div className="obs-connection-form">
+          <label>Адрес<input value={host} onChange={event => setHost(event.target.value)} placeholder="127.0.0.1" autoComplete="off" /></label>
+          <label>Порт<input value={port} onChange={event => setPort(event.target.value.replace(/[^0-9]/g, ''))} placeholder="4455" inputMode="numeric" /></label>
+          <label>Пароль OBS<input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Из настроек WebSocket" autoComplete="off" /></label>
           {connected ? (
-            <button onClick={() => void disconnect()} className="pressable rounded-lg border border-white/10 px-4 py-1.5 text-sm">
+            <button onClick={() => void disconnect()} className="secondary-action">
               Отключить
             </button>
           ) : (
-            <button onClick={() => void connect()} className="pressable rounded-lg bg-amber-400/90 px-4 py-1.5 text-sm font-bold text-black">
+            <button onClick={() => void connect()} className="primary-action">
               Подключить
             </button>
           )}
         </div>
         <p className={`font-mono text-xs ${connected ? 'text-emerald-300' : 'text-zinc-500'}`}>
-          {connected ? `● подключено · сцена: ${scene || '-'}` : '○ не подключено'}
+          {connected ? `Подключено · сцена: ${scene || '—'}` : 'Не подключено'}
         </p>
-      </div>
+      </section>
 
       {connected && (
         <>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiGet, apiPut } from '../lib/api'
 import { getSecret, setSecret } from '../lib/api'
+import { HelpTip } from '../components/HelpTip'
 import { SecretField } from '../components/SecretField'
 import { roundTemp, inputCls, labelCls, saveSection, SaveButton, type AiState, type TtsState, type TwitchState, type ProfileState, type SafetyState, type VoiceLists, type RoleVoice } from './settings/shared'
 import { AiSection } from './settings/AiSection'
@@ -229,14 +230,14 @@ export function SettingsView() {
       </nav><div className="sidebar-status"><span className="connection-dot is-connected"/><span>Перед эфиром<small>Модель → голос → сцена OBS</small></span></div></aside>
       <div className="setup-main">
       {section === 'guide' && <SetupGuide />}
-      {section !== 'guide' && <div className="section-intro"><p className="eyebrow">{sectionMeta[section]?.[0] || 'Настройки шоу'}</p><h2>{sectionMeta[section]?.[1] || 'Подготовка'}</h2><p>{sectionMeta[section]?.[2]}</p></div>}
-      {groupPanels[section] && <div className="settings-disclosure-bar"><span>Можно открыть несколько блоков. Изменения применяются после сохранения.</span><button type="button" className="quiet-link" onClick={()=>setSearchParams({section,panel:allOpen?'':groupPanels[section].join(',')})}>{allOpen?'Свернуть все':'Показать все параметры'}</button></div>}
+      {section !== 'guide' && <div className="section-intro"><p className="eyebrow">{sectionMeta[section]?.[0] || 'Настройки шоу'}</p><h2>{sectionMeta[section]?.[1] || 'Подготовка'}</h2><p>{section === 'appearance' ? sectionMeta[section]?.[2] : ''}</p></div>}
+      {groupPanels[section] && <div className="settings-disclosure-bar"><span>Параметры раздела <HelpTip label="Настройка раздела">Откройте нужные блоки или разверните все. Сворачивание сохраняет введённые значения. Применение — кнопкой сохранения внутри блока.</HelpTip></span><button type="button" className="quiet-link" onClick={()=>setSearchParams({section,panel:allOpen?'':groupPanels[section].join(',')})}>{allOpen?'Свернуть все':'Раскрыть все'}</button></div>}
       <div className="setup-content">
         {section === 'appearance' && <AppearanceSection />}
         {section === 'connections' && <div className="setup-folds">
           <SetupFold title="Модель, которая пишет реплики" note={aiFlags?.live?'Параметры заданы · здесь можно проверить ответ':'Нужна для настоящего заседания; репетиция работает без неё'} open={openPanels.has('model')} onToggle={()=>togglePanel('model')}><AiSection ai={ai} setAi={setAi} apiKey={apiKey} setApiKey={setApiKey} flags={aiFlags} onSaved={setAiFlags} /></SetupFold>
           <SetupFold title="Голоса участников" note="Источник речи, тембры трёх ролей и прослушивание" open={openPanels.has('voice')} onToggle={()=>togglePanel('voice')}><TtsSection tts={tts} setTts={setTts} voices={voices} /></SetupFold>
-          <SetupFold title="Twitch и донат-сервисы" note="Канал, бот, DonationAlerts и DonatePay — все ключи в одном месте" open={openPanels.has('services')} onToggle={()=>togglePanel('services')}><IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} /></SetupFold>
+          <SetupFold title="Twitch и донат-сервисы" note="Канал, бот, DonationAlerts и DonatePay — все ключи в одном месте" open={openPanels.has('services')} onToggle={()=>togglePanel('services')}><IntegrationsSection twitch={twitch} setTwitch={setTwitch} has={twitchHas} onSaved={setTwitchHas} /></SetupFold>
         </div>}
         {section === 'rules' && <div className="setup-folds">
           <SetupFold title="Ход заседания" note="Время этапов, очередь зрителей и игровые задания" open={openPanels.has('show')} onToggle={()=>togglePanel('show')}><ShowRulesSection /></SetupFold>

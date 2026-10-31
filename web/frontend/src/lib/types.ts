@@ -36,6 +36,7 @@ export interface JuryStatus {
 }
 
 export interface StateChangePayload {
+  trial_id?: number
   state: string
   case_title?: string
   defendant?: string
@@ -44,6 +45,7 @@ export interface StateChangePayload {
   demo?: boolean
   mode?: 'viewer' | 'streamer' | 'unban'
   line?: string
+  full_line?: string
   verdict?: VerdictPayload
 }
 
@@ -59,6 +61,7 @@ export interface VerdictPayload {
 export interface SubtitlesPayload {
   speaker: string
   text: string
+  full_line?: string
 }
 
 export interface TestimonyPayload {

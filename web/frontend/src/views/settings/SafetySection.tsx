@@ -11,7 +11,7 @@ interface Props {
 export const SafetySection = memo(function SafetySection({ safety, setSafety }: Props) {
   return (
     <section className="card space-y-2 p-4">
-      <h2 className="font-semibold">Безопасность</h2>
+
       <label className="flex items-center gap-1.5 text-xs text-zinc-300">
         <input
           type="checkbox"

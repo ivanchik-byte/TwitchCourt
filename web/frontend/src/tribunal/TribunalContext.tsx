@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { toast } from 'sonner'
 import { useTribunalWS, type StenogramEntry } from '../hooks/useTribunalWS'
 import { apiGet, apiPost, apiNote } from '../lib/api'
 import type { PoolSeat, VerdictPayload } from '../lib/types'
 
 export interface TribunalPhase {
+  trialId: number
   connected: boolean
   rttMs: number | null
   retries: number
@@ -23,6 +24,11 @@ export interface TribunalFeed {
   stenogram: StenogramEntry[]
 }
 
+interface DefenseDraft {
+  text: string
+  setText: Dispatch<SetStateAction<string>>
+}
+
 export interface TribunalActions {
 	refreshDock: () => Promise<void>
   gavel: () => void
@@ -33,12 +39,39 @@ const TribunalPhaseContext = createContext<TribunalPhase | null>(null)
 const TribunalFeedContext = createContext<TribunalFeed | null>(null)
 const TribunalPoolContext = createContext<PoolSeat[]>([])
 const TribunalActionsContext = createContext<TribunalActions | null>(null)
+const DefenseDraftContext = createContext<DefenseDraft | null>(null)
 
 export function TribunalProvider({ children }: { children: ReactNode }) {
   const t = useTribunalWS()
   const [pool, setPool] = useState<PoolSeat[]>([])
+  const [defenseDraft, setDefenseDraft] = useState<{ trialId: number; text: string } | null>(null)
   const tRef = useRef(t)
   tRef.current = t
+
+  const trialId = t.trialId
+  const setDefenseText = useCallback((value: SetStateAction<string>) => {
+    setDefenseDraft(current => {
+      if (tRef.current.trialId !== trialId || tRef.current.phase !== 'defense') return current
+      const text = current?.trialId === trialId ? current.text : ''
+      return { trialId, text: typeof value === 'function' ? value(text) : value }
+    })
+  }, [trialId])
+  const defenseText = t.phase === 'defense' && defenseDraft?.trialId === trialId ? defenseDraft.text : ''
+  const defense = useMemo(() => ({ text: defenseText, setText: setDefenseText }), [defenseText, setDefenseText])
+
+  useEffect(() => {
+    if (t.phase !== 'defense') setDefenseDraft(null)
+  }, [t.phase, trialId])
+
+  useEffect(() => {
+    if (!defenseText.trim()) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [defenseText])
 
   const refreshDock = useCallback(async () => {
     try {
@@ -87,6 +120,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   // split identity: stenogram ticks must not re-render phase consumers
   const phase = useMemo<TribunalPhase>(
     () => ({
+      trialId: t.trialId,
       connected: t.connected,
       rttMs: t.rttMs,
       retries: t.retries,
@@ -99,7 +133,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
       demo: t.demo,
       mode: t.mode,
     }),
-    [t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict, t.demo, t.mode],
+    [t.trialId, t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict, t.demo, t.mode],
   )
   const feed = useMemo<TribunalFeed>(
     () => ({ judgeLine: t.judgeLine, stenogram: t.stenogram }),
@@ -110,7 +144,9 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
     <TribunalPhaseContext.Provider value={phase}>
       <TribunalFeedContext.Provider value={feed}>
         <TribunalPoolContext.Provider value={pool}>
-          <TribunalActionsContext.Provider value={actions}>{children}</TribunalActionsContext.Provider>
+          <TribunalActionsContext.Provider value={actions}>
+            <DefenseDraftContext.Provider value={defense}>{children}</DefenseDraftContext.Provider>
+          </TribunalActionsContext.Provider>
         </TribunalPoolContext.Provider>
       </TribunalFeedContext.Provider>
     </TribunalPhaseContext.Provider>
@@ -137,4 +173,10 @@ export function useTribunalActions(): TribunalActions {
   const v = useContext(TribunalActionsContext)
   if (!v) throw new Error('useTribunalActions must be used inside TribunalProvider')
   return v
+}
+
+export function useDefenseDraft(): DefenseDraft {
+  const draft = useContext(DefenseDraftContext)
+  if (!draft) throw new Error('useDefenseDraft must be used inside TribunalProvider')
+  return draft
 }

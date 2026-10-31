@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { apiGet, apiNote, apiPost } from '../lib/api'
 import { modes, phaseLabels, phaseOrder, starterCases, type CourtMode, type ShowCase, type ShowStatus } from '../lib/show'
 import type { JuryStatus, UnbanRequest } from '../lib/types'
-import { useTribunalActions, useTribunalFeed, useTribunalPhase, useTribunalPool } from '../tribunal/TribunalContext'
+import { useDefenseDraft, useTribunalActions, useTribunalFeed, useTribunalPhase, useTribunalPool } from '../tribunal/TribunalContext'
 import { StenogramLog } from '../components/cockpit/StenogramLog'
 import { DefenseDesk } from '../components/show/DefenseDesk'
 import { QueueDesk } from '../components/show/QueueDesk'
@@ -17,7 +17,8 @@ import { JuryDesk } from '../components/show/JuryDesk'
 export function CockpitView() {
   const trial = useTribunalPhase()
   const location = useLocation()
-  const { judgeLine } = useTribunalFeed()
+  const { judgeLine, stenogram } = useTribunalFeed()
+  const speaker = stenogram.filter(entry => entry.kind === 'subtitles').slice(-1)[0]?.speaker
   const { panic, gavel } = useTribunalActions()
   const pool = useTribunalPool()
   const [draft] = useState(() => {
@@ -40,6 +41,7 @@ export function CockpitView() {
   const [error, setError] = useState('')
   const [activeAppeal, setActiveAppeal] = useState('')
   const [resolved, setResolved] = useState(false)
+  const defenseDraft = useDefenseDraft()
   const [jury, setJury] = useState<JuryStatus | null>(null)
   const busyRef = useRef(false)
   const active = trial.phase !== 'idle'
@@ -126,13 +128,14 @@ export function CockpitView() {
 
   const advance = useCallback(async () => {
     if (!canAdvance || busyRef.current) return
+    if (trial.phase === 'defense' && defenseDraft.text.trim()) { toast.error('Аргумент ещё не отправлен. Отправьте его или очистите поле перед переходом.'); return }
     busyRef.current = true
     setPending(true)
     const response = await apiPost('/api/trial/advance', { phase: trial.phase })
     if (!response.ok) toast.error(response.status === 409 ? 'Этап уже сменился. Дождитесь обновления пульта.' : apiNote(response.status))
     setPending(false)
     busyRef.current = false
-  }, [canAdvance, trial.phase])
+  }, [canAdvance, trial.phase, defenseDraft])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -160,33 +163,36 @@ export function CockpitView() {
           : trial.phase === 'jury' ? 'Перейти к вердикту' : trial.demo ? 'Закончить репетицию' : 'Следующее дело'
 
   return (
-    <div className="show-desk">
+    <div className={`show-desk${active ? ' is-live' : ''}`}>
       <div className="desk-heading">
         <div className="workspace-title"><h1>Эфир</h1><span>{active ? phaseLabels[trial.phase] : 'Нет активного дела'}</span></div>
         <div className="desk-heading-actions"><Link to="/settings" className="quiet-link">Подготовка эфира <ArrowRight size={15} /></Link>{active && <button className="stop-button" onClick={panic}><Square size={13} /> Остановить <kbd>Esc</kbd></button>}</div>
       </div>
 
-      <div className="mode-selector" role="group" aria-label="Режим суда">
+      {active ? <div className="session-mode"><span>{modeCopy.name}</span><span>{modeCopy.role}</span>{trial.demo && <span className="session-demo">Репетиция · без звука и действий в Twitch</span>}</div> : <div className="mode-selector" role="group" aria-label="Режим суда">
         {(Object.keys(modes) as CourtMode[]).map((key, index) => (
           <button key={key} disabled={active || pending} aria-pressed={currentMode === key} className={`mode-option ${currentMode === key ? 'is-selected' : ''}`} onClick={() => switchMode(key)}>
             <span className="mode-number" aria-hidden="true">0{index + 1}</span><span><strong>{modes[key].name}</strong><small>{modes[key].role}</small></span>
           </button>
         ))}
-      </div>
+      </div>}
 
       {(error || statusError) && <div className="desk-error" role="alert">{error || statusError} <Link to="/settings">Открыть подготовку</Link></div>}
 
       <div className="desk-layout">
         <div className="desk-main">
-          <section className={`case-file ${active ? 'is-in-session' : ''} ${trial.phase === 'defense' ? 'is-defense' : ''}`} aria-label={active ? 'Текущее дело' : 'Подготовка дела'}>
+          <section className={`case-file ${active ? 'is-in-session' : ''} ${trial.phase === 'defense' ? 'is-defense' : ''} ${trial.phase === 'verdict' ? 'is-verdict' : ''}`} aria-label={active ? 'Текущее дело' : 'Подготовка дела'}>
             <div className="case-file-top"><span><FileText size={14} /> {active ? 'Заседание открыто' : 'Следующее дело'}</span><span>{active && trial.demo ? 'РЕПЕТИЦИЯ' : modeCopy.short}</span></div>
             {active ? <>
               <ol className="trial-progress" style={{ gridTemplateColumns: `repeat(${steps.length},minmax(0,1fr))` }} aria-label="Ход заседания">{steps.map((phase, index) => <li key={phase} className={index === stepIndex ? 'is-current' : index < stepIndex ? 'is-complete' : ''} aria-current={index === stepIndex ? 'step' : undefined}><span>{index < stepIndex ? <Check size={12} /> : `0${index + 1}`}</span>{phase === 'jury' ? 'Присяжные' : phase === 'objection' && trial.phase === 'deliberation' ? 'Совещание' : phaseLabels[phase]}</li>)}</ol>
-              <div className="case-file-body"><div className="case-live-meta"><p className="case-participant">На скамье / {trial.defendant}</p><div className="stage-caption"><span className="stage-dot" />{phaseLabels[trial.phase] ?? trial.phase}<PhaseClock seconds={trial.timeLeft} phase={trial.phase} paused={ballotOpen} /></div></div><h2>{trial.charge}</h2>
-                <div className="judge-quote" aria-live="polite"><span>{trial.demo ? 'Сценарная реплика' : 'Последняя реплика'}</span><p>{judgeLine || 'Суд готовит ответ…'}</p></div>
-                {trial.verdict && <div className="ruling"><strong>{trial.verdict.verdict}</strong><p>{trial.verdict.penalty}</p></div>}
-                {!trial.demo && selected.crime === trial.charge && <CaseReference card={selected} />}
-                {trial.phase === 'testimony' && <p className="floor-prompt">Показания из чата. Когда все высказались, переходите к своему слову.</p>}
+              <div className="case-file-body live-stage">
+                <div className="case-live-meta"><p className="case-participant">На скамье / {trial.defendant}</p><div className="stage-caption"><span className="stage-dot" />{phaseLabels[trial.phase] ?? trial.phase}<PhaseClock seconds={trial.timeLeft} phase={trial.phase} paused={ballotOpen} /></div></div>
+                {trial.phase === 'indictment' && <h2>{trial.charge}</h2>}
+                {trial.verdict ? <div className="ruling" aria-live="polite"><span className="eyebrow">Решение суда</span><strong>{trial.verdict.verdict}</strong><p>{trial.verdict.penalty}</p></div> : <div className="judge-quote" aria-live="polite"><span>{trial.phase === 'defense' ? 'Вопрос суда' : trial.demo ? 'Сценарная реплика' : speaker || 'Слово суда'}</span><p>{judgeLine || 'Суд готовит ответ…'}</p></div>}
+                {trial.phase === 'defense' && <DefenseDesk key={trial.trialId} enabled={!trial.demo && trial.connected} demo={trial.demo} mode={currentMode} text={defenseDraft.text} onTextChange={defenseDraft.setText} />}
+                {trial.phase === 'testimony' && <p className="floor-prompt">Слово чату. Когда все высказались, переходите к защите.</p>}
+                {trial.phase !== 'indictment' && <details className="live-materials"><summary>Обвинение и материалы дела</summary><h3>{trial.charge}</h3>{!trial.demo && selected.crime === trial.charge && <CaseReference card={selected} />}{trial.verdict && judgeLine && judgeLine !== trial.verdict.penalty && <p>{judgeLine}</p>}</details>}
+                {trial.phase === 'indictment' && !trial.demo && selected.crime === trial.charge && <CaseReference card={selected} />}
               </div>
               <div className="case-file-footer"><button className="primary-action" disabled={!canAdvance || pending} onClick={() => void advance()}>{ballotOpen ? 'Идёт голосование' : canAdvance ? nextLabel : trial.phase === 'verdict' ? 'Суд объявляет решение' : 'Судья говорит'}<ArrowRight size={18} /></button><button className="file-secondary" onClick={gavel} disabled={trial.demo || pending}><Gavel size={16} /> Молоток</button></div>
             </> : <>
@@ -219,7 +225,6 @@ export function CockpitView() {
             </>}
           </section>
 
-          {trial.phase === 'defense' && !trial.demo && <DefenseDesk enabled={trial.phase === 'defense'} demo={false} mode={currentMode} />}
           {trial.phase === 'verdict' && currentMode === 'viewer' && !trial.demo && <ModerationDesk user={trial.defendant} />}
           {currentMode === 'unban' && activeAppeal && !trial.demo && (trial.phase === 'verdict' || !active) && <section className="desk-panel appeal-decision"><h2>Решение по апелляции</h2><p>Эти кнопки отправляют ваше решение в Twitch.</p>{resolved ? <p>Решение отправлено.</p> : <div className="flex flex-wrap gap-3">{[true, false].map((approve) => <button className="secondary-action" disabled={pending} key={String(approve)} onClick={async () => {
             setPending(true)
@@ -239,9 +244,8 @@ export function CockpitView() {
           }} />}
 
           {!active && <section className="rehearsal-panel"><h2>Пробный прогон</h2><p>Учебное дело с готовыми репликами. Без ключей, озвучки и действий в Twitch.</p><button className="secondary-action" onClick={() => void start(true)} disabled={!trial.connected || pending}><Play size={15} /> Попробовать репетицию<ArrowRight size={15} /></button></section>}
-          {trial.demo && <section className="rehearsal-panel"><p className="eyebrow">Репетиция</p><p>Это готовый сценарий. Реплики не зависят от вашего ответа. Нажимайте основную кнопку, чтобы пройти все этапы. Звук и модерация выключены.</p></section>}
           {active && <details className="transcript-drawer"><summary>Протокол заседания</summary><StenogramLog /></details>}
-          <section className="desk-panel connections-panel"><p className="eyebrow">Перед эфиром</p><Link to="/settings?section=ai"><span className={`readiness-dot ${status?.ai_live && !statusError ? 'is-ready' : ''}`} /><span>Языковая модель<small>{statusError ? 'Не удалось проверить' : status?.ai_live ? 'Настроена · проверьте ответ' : 'Нужно подключить'}</small></span><ArrowRight size={14} /></Link><Link to="/settings?section=voice"><span className={`readiness-dot ${status?.tts_enabled && !status.tts_beep && !statusError ? 'is-ready' : ''}`} /><span>Голос судьи<small>{status?.tts_enabled ? status.tts_beep ? 'Тестовый сигнал' : `${status.tts_engine} · нужно прослушать` : 'Выключен'}</small></span><ArrowRight size={14} /></Link><Link to="/settings?section=twitch"><span className={`readiness-dot ${status?.twitch_configured && !statusError ? 'is-ready' : ''}`} /><span>Twitch<small>{status?.twitch_configured ? 'Данные подключения заданы' : 'Для очереди и апелляций'}</small></span><ArrowRight size={14} /></Link></section>
+          <details className="connections-panel" open={!active}><summary>Подключения и готовность</summary><div><Link to="/settings?section=ai"><span className={`readiness-dot ${status?.ai_live && !statusError ? 'is-ready' : ''}`} /><span>Языковая модель<small>{statusError ? 'Не удалось проверить' : status?.ai_live ? 'Настроена · проверьте ответ' : 'Нужно подключить'}</small></span><ArrowRight size={14} /></Link><Link to="/settings?section=voice"><span className={`readiness-dot ${status?.tts_enabled && !status.tts_beep && !statusError ? 'is-ready' : ''}`} /><span>Голос судьи<small>{status?.tts_enabled ? status.tts_beep ? 'Тестовый сигнал' : `${status.tts_engine} · нужно прослушать` : 'Выключен'}</small></span><ArrowRight size={14} /></Link><Link to="/settings?section=twitch"><span className={`readiness-dot ${status?.twitch_configured && !statusError ? 'is-ready' : ''}`} /><span>Twitch<small>{status?.twitch_configured ? 'Данные подключения заданы' : 'Для очереди и апелляций'}</small></span><ArrowRight size={14} /></Link></div></details>
           <DonationMonitor />
         </aside>
       </div>

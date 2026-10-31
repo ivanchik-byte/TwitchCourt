@@ -12,6 +12,7 @@ export interface StenogramEntry {
 }
 
 interface TribunalState {
+  trialId: number
 	queueRevision: number
   connected: boolean
   rttMs: number | null
@@ -28,6 +29,7 @@ interface TribunalState {
 }
 
 const initial: TribunalState = {
+  trialId: 0,
 	queueRevision: 0,
   connected: false,
   rttMs: null,
@@ -70,6 +72,7 @@ export function useTribunalWS() {
     setState((s) => ({
       ...s,
       phase: 'idle',
+      trialId: 0,
       caseTitle: '',
       defendant: '',
       charge: '',
@@ -127,10 +130,10 @@ export function useTribunalWS() {
         void apiGet<{ trial: StateChangePayload }>('/api/status').then(({ trial }) => {
           if (closed || wsRef.current !== ws || !trial || revision !== stateEvents) return
           setState((s) => ({
-            ...s, phase: trial.state, defendant: trial.defendant ?? '', charge: trial.charge ?? '',
+            ...s, phase: trial.state, trialId: trial.trial_id ?? 0, defendant: trial.defendant ?? '', charge: trial.charge ?? '',
             caseTitle: trial.case_title ?? '', demo: trial.demo ?? false, mode: trial.mode ?? 'viewer',
             timeLeft: trial.time_left_sec ?? null,
-            judgeLine: trial.line ?? '', verdict: trial.verdict ?? null,
+            judgeLine: trial.full_line ?? trial.line ?? '', verdict: trial.verdict ?? null,
           }))
         }).catch(() => {
           push('local', 'Не удалось восстановить дело. Проверьте связь с сервером.')
@@ -178,6 +181,7 @@ export function useTribunalWS() {
             setState((s) => ({
               ...s,
               phase: p.state ?? s.phase,
+              trialId: p.state === 'idle' ? 0 : (p.trial_id ?? s.trialId),
               demo: p.state === 'idle' ? false : (p.demo ?? s.demo),
               mode: p.mode ?? s.mode,
               caseTitle: p.case_title ?? (p.state === 'idle' ? '' : s.caseTitle),
@@ -193,7 +197,7 @@ export function useTribunalWS() {
           }
           case 'subtitles': {
             const p = msg.payload as SubtitlesPayload
-            setState((s) => ({ ...s, judgeLine: p.text }))
+            setState((s) => ({ ...s, judgeLine: p.full_line ?? p.text }))
             push('subtitles', p.text, p.speaker)
             break
           }

@@ -60,7 +60,7 @@ func (e *Engine) demoStepLocked(state State, line string) <-chan struct{} {
 	e.state = state
 	advance := e.openPhaseWindowLocked(0)
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
-		State: string(state), Defendant: e.currCase.Defendant, Charge: e.currCase.Crime,
+		State: string(state), TrialID: e.trialGen, Defendant: e.currCase.Defendant, Charge: e.currCase.Crime,
 		Demo: true, Mode: e.currCase.Mode,
 	})
 	if line != "" {

@@ -17,7 +17,7 @@ export function QueueDesk({ onSelect, active }: { onSelect: (seat: PoolSeat) => 
     return () => { mounted = false }
   }, [])
 
-  return <section className="desk-panel queue-panel"><div className="panel-heading"><h2>Очередь <span className="count-label">{pool.length}/50</span></h2><button disabled={pending} className="queue-toggle" onClick={async () => {
+  return <details className="queue-disclosure" open={!active}><summary>Очередь <span>{pool.length} / 50{!open ? ' · вход закрыт' : ''}</span></summary><section className="desk-panel queue-panel"><div className="panel-heading"><h2>Вход в очередь</h2><button disabled={pending} className="queue-toggle" onClick={async () => {
     setPending(true)
     const response = await apiPut('/api/settings', { queue_open: !open })
     if (response.ok) { setOpen(!open); setError('') } else setError('Не удалось изменить очередь.')
@@ -43,5 +43,5 @@ export function QueueDesk({ onSelect, active }: { onSelect: (seat: PoolSeat) => 
       setPending(false)
     }}><label className="sr-only" htmlFor="queue-nick">Добавить участника</label><input id="queue-nick" value={nick} onChange={event => setNick(event.target.value)} placeholder="Twitch-ник" maxLength={25} disabled={!open || pending} /><button disabled={!open || !nick.trim() || pending}>Добавить</button></form>
     {error && <p className="panel-error" role="alert">{error}</p>}
-  </section>
+  </section></details>
 }

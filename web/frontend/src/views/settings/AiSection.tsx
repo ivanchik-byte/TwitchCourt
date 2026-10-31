@@ -76,20 +76,6 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
 
   return (
     <section className="card space-y-2 p-4">
-      <div className="flex items-center gap-2">
-        <h2 className="font-semibold">Языковая модель</h2>
-        {flags && (
-          <span className={`font-mono text-xs ${flags.live ? 'text-emerald-300' : 'text-zinc-500'}`}>
-            {flags.live ? 'Параметры заданы' : 'Не подключена'}
-          </span>
-        )}
-        <button
-          onClick={() => setImportOpen(true)}
-          className="pressable ml-auto rounded-lg border border-white/10 px-2.5 py-1 text-xs"
-        >
-          Быстрый импорт
-        </button>
-      </div>
       <label className={labelCls}>
         Провайдер <HelpTip label="Провайдер модели">Сервис, который придумывает реплики и вердикт. Groq и Cerebras работают через интернет по ключу, Ollama — на вашем компьютере. Голос настраивается отдельно.</HelpTip>
         <select
@@ -115,7 +101,7 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
       </label>}
       {provider === 'ollama' && <div className="settings-note"><p>Проверьте установленные модели:</p><pre className="setup-command">ollama list</pre><p>Если Ollama ещё не запущена, откройте отдельный терминал:</p><pre className="setup-command">ollama serve</pre><p>Стандартный адрес — http://127.0.0.1:11434. Модель нужно скачать средствами Ollama до проверки подключения.</p></div>}
       {provider !== 'ollama' && <>
-        <SecretField label={`API-ключ модели${flags?.has_key ? ' · сохранён' : ''}`} value={apiKey} onChange={setApiKey} help={<HelpTip label="API-ключ модели">Ключ из кабинета выбранного провайдера. Пустое поле оставляет сохранённый ключ. При смене провайдера укажите его собственный ключ; ключ ElevenLabs сюда не подходит.</HelpTip>} />
+        <SecretField label="API-ключ модели" saved={flags?.has_key} value={apiKey} onChange={setApiKey} help={<HelpTip label="API-ключ модели">Ключ из кабинета выбранного провайдера. Пустое поле оставляет сохранённый ключ. При смене провайдера укажите его собственный ключ; ключ ElevenLabs сюда не подходит.</HelpTip>} />
         <p className="settings-note">{provider !== 'custom' && <a href={provider === 'cerebras' ? 'https://cloud.cerebras.ai/' : 'https://console.groq.com/keys'} target="_blank" rel="noreferrer">Открыть кабинет {provider === 'cerebras' ? 'Cerebras' : 'Groq'}</a>} Ключ хранится локально в config.yaml; обратно в панель его значение не передаётся.</p>
       </>}
       <label className={labelCls}>
@@ -153,7 +139,7 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
           className="mt-1 w-full"
         />
       </label>
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap items-center gap-3">
         <SaveButton
           onSave={() => {
             let body: Record<string, unknown>
@@ -188,6 +174,7 @@ export const AiSection = memo(function AiSection({ ai, setAi, apiKey, setApiKey,
         >
           Проверить сохранённую модель
         </button>
+        <button type="button" className="quiet-link" onClick={() => setImportOpen(true)}>Быстрый импорт</button>
       </div>
 
       <p className="settings-note">Сначала сохраните изменения, затем проверьте подключение. Проверка отправляет короткий запрос провайдеру.</p>
