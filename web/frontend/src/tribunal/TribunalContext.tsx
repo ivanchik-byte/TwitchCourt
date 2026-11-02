@@ -2,9 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from 'sonner'
 import { useTribunalWS, type StenogramEntry } from '../hooks/useTribunalWS'
 import { apiGet, apiPost, apiNote } from '../lib/api'
-import type { PoolSeat, VerdictPayload } from '../lib/types'
+import type { AppealState, PoolSeat, VerdictPayload } from '../lib/types'
 
 export interface TribunalPhase {
+  appeal: AppealState | null
   trialId: number
   connected: boolean
   rttMs: number | null
@@ -120,6 +121,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
   // split identity: stenogram ticks must not re-render phase consumers
   const phase = useMemo<TribunalPhase>(
     () => ({
+      appeal: t.appeal,
       trialId: t.trialId,
       connected: t.connected,
       rttMs: t.rttMs,
@@ -133,7 +135,7 @@ export function TribunalProvider({ children }: { children: ReactNode }) {
       demo: t.demo,
       mode: t.mode,
     }),
-    [t.trialId, t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict, t.demo, t.mode],
+    [t.appeal, t.trialId, t.connected, t.rttMs, t.retries, t.phase, t.caseTitle, t.defendant, t.charge, t.timeLeft, t.verdict, t.demo, t.mode],
   )
   const feed = useMemo<TribunalFeed>(
     () => ({ judgeLine: t.judgeLine, stenogram: t.stenogram }),

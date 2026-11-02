@@ -48,7 +48,7 @@ func TestSpeechStartsFreshForAnotherTurn(t *testing.T) {
 		{StateObjection, 6, "prosecutor", "<break time=\"100ms\"/> Ещё &quot;довод&quot;.", "Ответ на защиту. Ещё \"довод\"."},
 		{StateObjection, 7, "judge", "Слово судьи.", "Слово судьи."},
 		{StateObjection, 0, "judge", "Новая речь.", "Новая речь."},
-		{StateObjection, -1, "judge", "Отдельная реплика.", "Отдельная реплика."},
+		{StateObjection, -1, "judge", "Отдельная реплика.", "Новая речь."},
 	}
 	for _, step := range steps {
 		engine.state = step.phase
@@ -65,5 +65,24 @@ func TestSpeechStartsFreshForAnotherTurn(t *testing.T) {
 	}
 	if got := engine.Snapshot().FullLine; got != "Другое дело." {
 		t.Fatalf("previous trial leaked into speech: %q", got)
+	}
+}
+
+func TestInterjectionKeepsDefenseQuestion(t *testing.T) {
+	engine := NewEngine(config.DefaultConfig(), obs.NewHub(nil), nil, &castRecorder{}, safety.NewFilter(nil))
+	engine.currCase = &TrialCase{Defendant: "viewer"}
+	engine.state = StateDefense
+	for index, text := range []string{"Что было согласовано?", "Как вы делили расходы?"} {
+		if err := engine.speakAs(context.Background(), ai.SentenceChunk{Text: text}, index, false, "judge", "Судья", "", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := engine.Snapshot()
+	if err := engine.speakAs(context.Background(), ai.SentenceChunk{Text: "Суд слушает."}, -1, false, "judge", "Судья", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	after := engine.Snapshot()
+	if after.FullLine != before.FullLine || after.Line != before.Line {
+		t.Fatalf("interjection replaced question: before=%q after=%q", before.FullLine, after.FullLine)
 	}
 }

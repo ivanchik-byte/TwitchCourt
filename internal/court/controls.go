@@ -57,6 +57,7 @@ func (e *Engine) Snapshot() obs.StateChangePayload {
 func (e *Engine) snapshotLocked() obs.StateChangePayload {
 	s := obs.StateChangePayload{State: string(e.state), Jury: e.juryViewLocked()}
 	if c := e.currCase; c != nil {
+		s.Appeal = c.Appeal
 		s.TrialID = e.trialGen
 		for i, exhibit := range c.Exhibits {
 			s.Exhibits = append(s.Exhibits, obs.ExhibitView{Index: i, Title: exhibit.Title, Text: exhibit.Text, Revealed: c.RevealedExhibits[i]})
@@ -106,4 +107,16 @@ func (e *Engine) waitPhaseWindow(ctx context.Context, c *TrialCase, advance <-ch
 			}
 		}
 	}
+}
+
+func (e *Engine) RecordAppealDecision(id string, approved bool) {
+	e.mu.Lock()
+	if e.currCase == nil || e.currCase.Appeal == nil || e.currCase.Appeal.ID != id {
+		e.mu.Unlock()
+		return
+	}
+	e.currCase.Appeal = &obs.AppealState{ID: id, Resolved: true, Approved: approved}
+	view := e.snapshotLocked()
+	e.mu.Unlock()
+	e.hub.BroadcastEvent(obs.EventStateChange, view)
 }

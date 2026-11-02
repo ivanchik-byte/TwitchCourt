@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { apiNote, apiPost } from '../../lib/api'
+import { apiNote, apiFetch } from '../../lib/api'
 
 export function ModerationDesk({ user }: { user: string }) {
   const [pending, setPending] = useState(false)
@@ -8,10 +8,12 @@ export function ModerationDesk({ user }: { user: string }) {
   const [sent, setSent] = useState('')
 
   const moderate = async (action: string, secs = 0) => {
+    setSent('')
     setPending(true)
-    const response = await apiPost('/api/moderate', { user, action, secs, reason: 'Решение ведущего' })
-    if (response.ok) { setSent('Команда отправлена в Twitch.'); setConfirmation(false) }
-    else toast.error(response.status === 409 ? 'Twitch-чат не подключён.' : apiNote(response.status))
+    const response = await apiFetch('/api/moderate', { method: 'POST', body: JSON.stringify({ user, action, secs, reason: 'Решение ведущего' }) }).catch(() => null)
+    const outcome = response ? await response.json().catch(() => null) : null
+    if (response?.ok && outcome?.confirmed) { setSent('Twitch подтвердил действие.'); setConfirmation(false) }
+    else toast.error(outcome?.error || apiNote(response?.status ?? 0))
     setPending(false)
   }
 

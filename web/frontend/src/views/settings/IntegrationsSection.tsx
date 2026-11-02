@@ -25,7 +25,7 @@ export const IntegrationsSection = memo(function IntegrationsSection({ twitch, s
           <input value={twitch.nick} onChange={(e) => setTwitch({ ...twitch, nick: e.target.value })} className={inputCls} />
         </label>
       </div>
-      <SecretField label="Twitch OAuth" saved={has.twitch_token} help={<HelpTip label="Twitch OAuth">Токен того аккаунта, чей ник указан у бота. Для чтения и отправки сообщений нужны права chat:read и chat:edit. Для наказаний бот должен быть модератором канала; операции Helix требуют дополнительных прав.</HelpTip>} value={twitch.token} onChange={(v) => setTwitch({ ...twitch, token: v })} />
+      <SecretField label="Twitch OAuth" saved={has.twitch_token} help={<HelpTip label="Twitch OAuth">Токен того аккаунта, чей ник указан у бота. Для чтения и отправки сообщений нужны права chat:read и chat:edit. Для наказаний бот должен быть модератором канала; Для банов, таймаутов и разбана нужны Client ID, ID стримера и право токена moderator:manage:banned_users. ID модератора должен принадлежать владельцу токена.</HelpTip>} value={twitch.token} onChange={(v) => setTwitch({ ...twitch, token: v })} />
       <div className="integration-ids">
         <label className={labelCls}>Twitch Client ID <HelpTip label="Twitch Client ID">Идентификатор приложения из Twitch Developer Console для запросов Helix. Это не секретный OAuth-токен.</HelpTip><input value={twitch.clientId} onChange={event => setTwitch({ ...twitch, clientId: event.target.value })} className={inputCls} /></label>
         <label className={labelCls}>ID стримера<input value={twitch.broadcasterId} onChange={event => setTwitch({ ...twitch, broadcasterId: event.target.value })} className={inputCls} placeholder="Для разбанов" /></label>

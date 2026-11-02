@@ -5,7 +5,7 @@ import { apiPostJson } from '../../lib/api'
 import { useShowRules, donationActions } from '../../lib/showRules'
 
 export function DonationRulesSection() {
-  const { rules, setRules, error, saving, saved, save } = useShowRules()
+  const { rules, setRules, dirty, discard, error, saving, saved, save } = useShowRules('donations')
   const [amount, setAmount] = useState('500')
   const [currency, setCurrency] = useState('RUB')
   const [message, setMessage] = useState('Ваша честь, это вам на взятку')
@@ -13,13 +13,12 @@ export function DonationRulesSection() {
   const [preview, setPreview] = useState<{ action: string; note: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [previewError, setPreviewError] = useState('')
-  const [bribeWords, setBribeWords] = useState<string | null>(null)
   if (!rules) return <p role="status">{error || 'Загружаем правила донатов…'}</p>
 
   return <div className="rules-workspace">
     <form className="rules-form" onSubmit={event => {
       event.preventDefault()
-      void save({ witness_enabled: rules.witness_enabled, rule_currency: rules.rule_currency, default_min: rules.default_min, min_amounts: rules.min_amounts, bribe_min: rules.bribe_min, bribe_words: bribeWords === null ? rules.bribe_words : bribeWords.split(',').map(word => word.trim()).filter(Boolean), queue_min: rules.queue_min, streamer_trial_min: rules.streamer_trial_min, platinum_min: rules.platinum_min })
+      void save({ witness_enabled: rules.witness_enabled, rule_currency: rules.rule_currency, default_min: rules.default_min, min_amounts: rules.min_amounts, bribe_min: rules.bribe_min, bribe_words: rules.bribe_words.map(word => word.trim()).filter(Boolean), queue_min: rules.queue_min, streamer_trial_min: rules.streamer_trial_min, platinum_min: rules.platinum_min })
     }}>
       <section className="settings-panel"><div className="settings-panel-heading"><h2>Донаты и взятки</h2><Link to="/settings?section=twitch">Подключения сервисов</Link></div><p>DonationAlerts, DonatePay и Twitch Bits используют общие правила. Сумма сама по себе не гарантирует оправдание.</p>
         <h3>Участие в текущем деле</h3><label className="setting-switch"><input type="checkbox" checked={rules.witness_enabled} onChange={event => setRules({ ...rules, witness_enabled: event.target.checked })} />Приобщать обычные донаты как показания</label><p>От этой суммы сообщение становится показанием. Для неизвестной валюты используется запасной порог.</p>
@@ -31,8 +30,8 @@ export function DonationRulesSection() {
         <div className="rules-number-grid"><label>Считать попыткой подкупа<input type="number" min="0" step="any" required value={rules.bribe_min} onChange={event => setRules({ ...rules, bribe_min: Number(event.target.value) })} /></label><label>Приоритет в очереди <HelpTip label="Приоритет">Даёт приоритет на вход, но не покупает вердикт и не начинает новое дело поверх текущего. В сообщении нужен !court twitch_login причина.</HelpTip><input type="number" min="0" step="any" required value={rules.queue_min} onChange={event => setRules({ ...rules, queue_min: Number(event.target.value) })} /></label><label>Открыть суд над стримером<input type="number" min="0" step="any" required value={rules.streamer_trial_min} onChange={event => setRules({ ...rules, streamer_trial_min: Number(event.target.value) })} /></label><label>Суд по требованию<input type="number" min="0" step="any" required value={rules.platinum_min} onChange={event => setRules({ ...rules, platinum_min: Number(event.target.value) })} /></label></div>
         <p>Приоритет запрашивается сообщением <code>!court twitch_login причина</code>. Начало следующего дела остаётся за ведущим. Автоматический суд открывается только при свободном зале.</p>
       </section>
-      <section className="settings-panel"><h3>Слова для подкупа</h3><p>Достаточно совпадения с одним словом или его частью, например «взятк». Донат должен пройти порог участия. Несколько предложений приобщаются к делу; судья выбирает реакцию.</p><label>Через запятую<input value={bribeWords ?? rules.bribe_words.join(', ')} onChange={event => setBribeWords(event.target.value)} placeholder="взятк, на лапу, подкуп" /></label><p>Сообщения после начала совещания не меняют решение. Во время репетиции донаты не влияют на учебный сценарий.</p></section>
-      <div className="settings-save"><button className="primary-action" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить правила донатов'}</button>{saved && <span role="status">Сохранено</span>}{error && <span role="alert">{error}</span>}</div>
+      <section className="settings-panel"><h3>Слова для подкупа</h3><p>Достаточно совпадения с одним словом или его частью, например «взятк». Донат должен пройти порог участия. Несколько предложений приобщаются к делу; судья выбирает реакцию.</p><label>Через запятую<input value={rules.bribe_words.join(',')} onChange={event => setRules({ ...rules, bribe_words: event.target.value.split(',') })} placeholder="взятк, на лапу, подкуп" /></label><p>Сообщения после начала совещания не меняют решение. Во время репетиции донаты не влияют на учебный сценарий.</p></section>
+      <div className="settings-save"><button className="primary-action" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить правила донатов'}</button>{dirty && <button type="button" className="file-text-button" disabled={saving} onClick={() => { if (window.confirm('Отменить несохранённые изменения этого блока?')) discard() }}>Отменить изменения</button>}{dirty ? <span role="status">Есть несохранённые изменения</span> : saved && <span role="status">Сохранено</span>}{error && <span role="alert">{error}</span>}</div>
     </form>
     <aside className="settings-panel donation-simulator"><h2>Проверка доната</h2><p>Использует сохранённые правила. Не запускает суд, не добавляет людей в очередь и не пишет в историю.</p><form onSubmit={async event => {
       event.preventDefault()

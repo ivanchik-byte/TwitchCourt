@@ -157,6 +157,12 @@ func (t *TwitchIRC) LastModError() (string, bool) {
 	return t.modError, true
 }
 
+func (t *TwitchIRC) SetModError(message string) {
+	t.modMu.Lock()
+	t.modError = message
+	t.modMu.Unlock()
+}
+
 // noteModError tracks moderation failures for dashboard warnings
 func (t *TwitchIRC) noteModError(line string) {
 	if !strings.Contains(line, "NOTICE") {

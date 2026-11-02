@@ -35,7 +35,10 @@ export interface JuryStatus {
   comparison?: { compared: number; changed: number }
 }
 
+export interface AppealState { id: string; resolved: boolean; approved: boolean }
+
 export interface StateChangePayload {
+  appeal?: AppealState
   trial_id?: number
   state: string
   case_title?: string

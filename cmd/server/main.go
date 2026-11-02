@@ -567,6 +567,7 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"requests": unbanBoard.list()})
 	})
 
+	var appealDecisionMu sync.Mutex
 	mux.HandleFunc("/api/unban/resolve", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -585,12 +586,19 @@ func main() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		appealDecisionMu.Lock()
+		defer appealDecisionMu.Unlock()
+		if linked := engine.Snapshot().Appeal; linked != nil && linked.ID == req.ID && linked.Resolved {
+			http.Error(w, "appeal already resolved", http.StatusConflict)
+			return
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		defer cancel()
 		if err := unbanCourt.Load().Resolve(ctx, req.ID, req.Approve, req.Text); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		engine.RecordAppealDecision(req.ID, req.Approve)
 		unbanBoard.refresh(context.Background(), unbanCourt.Load())
 		w.WriteHeader(http.StatusAccepted)
 	})
@@ -627,7 +635,7 @@ func main() {
 		if user == "" {
 			user = found.UserLogin
 		}
-		if err := engine.StartUnbanTrial(user, found.Text); err != nil {
+		if err := engine.StartUnbanAppeal(found.ID, user, found.Text); err != nil {
 			writeTrialError(w, err)
 			return
 		}
@@ -928,56 +936,9 @@ func main() {
 		}
 	})
 
-	mux.HandleFunc("/api/moderate", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if !checkHTTPAuth(cfg.Load(), r) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		var req struct {
-			User   string `json:"user"`
-			Action string `json:"action"`
-			Secs   int    `json:"secs"`
-			Reason string `json:"reason"`
-		}
-		if err := decodeJSON(w, r, &req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-		if !validNick.MatchString(req.User) {
-			http.Error(w, "bad nick", http.StatusBadRequest)
-			return
-		}
-		c := chat.Load()
-		if c == nil {
-			http.Error(w, "chat offline", http.StatusConflict)
-			return
-		}
-		switch req.Action {
-		case "ban":
-			c.Ban(req.User)
-		case "timeout":
-			secs := req.Secs
-			if secs <= 0 {
-				secs = 60
-			}
-			if secs > 1209600 {
-				secs = 1209600
-			}
-			c.Timeout(req.User, secs)
-		case "pardon":
-			c.Unban(req.User)
-		default:
-			http.Error(w, "want action ban, timeout or pardon", http.StatusBadRequest)
-			return
-		}
-		log.Printf("manual moderation: %s %s", req.Action, req.User)
-		json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	})
+	mux.HandleFunc("/api/moderate", moderationHandler(cfg.Load, func(ctx context.Context, user, action string, seconds int, reason string) error {
+		return unbanCourt.Load().Moderate(ctx, user, action, seconds, reason)
+	}))
 
 	mux.HandleFunc("/api/panic", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1509,15 +1470,19 @@ func main() {
 			log.Printf("refusing moderation on bad nick %q", user)
 			return
 		}
-		c := chat.Load()
-		if c == nil {
-			return
-		}
+		action := "timeout"
 		if ban {
-			c.Ban(user)
-			return
+			action = "ban"
 		}
-		c.Timeout(user, secs)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := unbanCourt.Load().Moderate(ctx, user, action, secs, reason); err != nil {
+			log.Printf("automatic moderation failed: %v", err)
+			if c := chat.Load(); c != nil {
+				c.SetModError(err.Error())
+			}
+		}
+
 	}
 
 	engine.SetPunishments(cfg.Load().Courtroom.Punishments)
@@ -1532,7 +1497,7 @@ func main() {
 	}
 	srv = &http.Server{
 		Addr:         addr,
-		Handler:      mux,
+		Handler:      serializeConfigWrites(mux),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}

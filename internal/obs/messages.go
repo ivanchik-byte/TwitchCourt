@@ -22,7 +22,14 @@ type EventMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
+type AppealState struct {
+	ID       string `json:"id"`
+	Resolved bool   `json:"resolved"`
+	Approved bool   `json:"approved"`
+}
+
 type StateChangePayload struct {
+	Appeal      *AppealState    `json:"appeal,omitempty"`
 	Speaker     string          `json:"speaker,omitempty"`
 	Role        string          `json:"role,omitempty"`
 	Jury        *JuryPayload    `json:"jury,omitempty"`

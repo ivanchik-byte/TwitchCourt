@@ -5,16 +5,17 @@ FROM node:22-alpine AS dashboard
 WORKDIR /build
 COPY web/frontend/package.json web/frontend/package-lock.json ./web/frontend/
 RUN cd web/frontend && npm ci --no-audit --no-fund
-COPY web/frontend ./web/frontend
+COPY web ./web
 RUN cd web/frontend && npm run build
+RUN sh web/build.sh
 
 FROM golang:1.22-alpine AS server
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-COPY --from=dashboard /build/web/frontend/dist ./web/dashboard
-RUN sh web/build.sh
+COPY --from=dashboard /build/web/dashboard ./web/dashboard
+COPY --from=dashboard /build/web/overlay ./web/overlay
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/StreamTribunal ./cmd/server
 
 FROM alpine:3.20

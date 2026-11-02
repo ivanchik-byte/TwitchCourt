@@ -1,0 +1,16 @@
+.git
+.infoslop
+node_modules
+**/node_modules
+.venv-tts
+config.yaml
+cases.yaml.tmp
+data
+models
+*.exe
+StreamTribunal
+bin
+dist
+*.log
+tools/v5_ru.pt*
+web/compiled

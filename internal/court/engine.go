@@ -37,6 +37,7 @@ const (
 )
 
 type TrialCase struct {
+	Appeal           *obs.AppealState
 	Jury             *juryBallot
 	Exhibits         []CaseExhibit
 	RevealedExhibits map[int]bool
@@ -302,12 +303,16 @@ func (e *Engine) StartCaseTrial(defendant string, card CaseCard, viewer bool) er
 
 // StartUnbanTrial opens an unban pardon hearing.
 func (e *Engine) StartUnbanTrial(user, appeal string) error {
+	return e.StartUnbanAppeal("", user, appeal)
+}
+
+func (e *Engine) StartUnbanAppeal(id, user, appeal string) error {
 	crime := "Апелляция на разбан: " + appeal
 	chatContext := "UNBAN-ТРИБУНАЛ. Подсудимого нет в чате. " +
 		"ИИ адвокат: защищает " + user + " и требует разбана. " +
 		"Стример в микрофон: выступает обвинителем, его реплики это атака, а не защита. " +
 		"Судья выслушивает обе стороны и выносит вердикт."
-	return e.startTrialWithMode(user, crime, chatContext, "", false)
+	return e.startTrialWithAppeal(user, crime, chatContext, "", false, nil, id)
 }
 
 func (e *Engine) startTrialWith(defendant, crime, chatContext, viewer string) error {
@@ -319,6 +324,10 @@ func (e *Engine) startTrialWithMode(defendant, crime, chatContext, viewer string
 }
 
 func (e *Engine) startTrialWithCard(defendant, crime, chatContext, viewer string, prosecutor bool, exhibits []CaseExhibit) error {
+	return e.startTrialWithAppeal(defendant, crime, chatContext, viewer, prosecutor, exhibits, "")
+}
+
+func (e *Engine) startTrialWithAppeal(defendant, crime, chatContext, viewer string, prosecutor bool, exhibits []CaseExhibit, appealID string) error {
 	e.mu.Lock()
 	if e.state != StateIdle {
 		e.mu.Unlock()
@@ -349,7 +358,11 @@ func (e *Engine) startTrialWithCard(defendant, crime, chatContext, viewer string
 		Prosecutor:       prosecutor,
 		Mode:             trialMode(viewer, prosecutor),
 	}
+	if appealID != "" {
+		e.currCase.Appeal = &obs.AppealState{ID: appealID}
+	}
 	currentCase := e.currCase
+	appeal := currentCase.Appeal
 	for i := range currentCase.Exhibits {
 		currentCase.Exhibits[i].Title = e.filter.Sanitize(truncateRunes(currentCase.Exhibits[i].Title, 80))
 		currentCase.Exhibits[i].Text = e.filter.Sanitize(truncateRunes(currentCase.Exhibits[i].Text, 500))
@@ -357,6 +370,7 @@ func (e *Engine) startTrialWithCard(defendant, crime, chatContext, viewer string
 	e.mu.Unlock()
 
 	e.hub.BroadcastEvent(obs.EventStateChange, obs.StateChangePayload{
+		Appeal:    appeal,
 		TrialID:   gen,
 		State:     string(StateIndictment),
 		CaseTitle: "ДЕЛО №" + fmt.Sprintf("%d", time.Now().Unix()%1000),
@@ -931,7 +945,7 @@ func (e *Engine) dispatchRoleSpeech(ctx context.Context, s ai.SentenceChunk, ind
 	shown := strings.TrimSpace(ssmlDisplayRe.ReplaceAllString(speechText, ""))
 	fullLine := shown
 	e.mu.Lock()
-	if e.currCase != nil {
+	if e.currCase != nil && index >= 0 {
 		c := e.currCase
 		if index > 0 && index == c.speechIndex+1 && c.speechState == e.state && c.LastRole == role && c.LastSpeaker == speaker && c.FullLine != "" {
 			fullLine = c.FullLine + " " + shown
@@ -939,6 +953,8 @@ func (e *Engine) dispatchRoleSpeech(ctx context.Context, s ai.SentenceChunk, ind
 		c.LastLine, c.FullLine = shown, fullLine
 		c.speechState, c.speechIndex = e.state, index
 		c.LastRole, c.LastSpeaker = role, speaker
+	} else if e.currCase != nil {
+		fullLine = e.currCase.FullLine
 	}
 	e.mu.Unlock()
 	e.hub.BroadcastEvent(obs.EventSubtitles, obs.SubtitlesPayload{

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { apiGet, getSecret } from '../lib/api'
-import type { DonationPayload, StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
+import type { AppealState, DonationPayload, StateChangePayload, SubtitlesPayload, TestimonyPayload, TribunalEventType, VerdictPayload } from '../lib/types'
 
 export interface StenogramEntry {
   id: number
@@ -12,6 +12,7 @@ export interface StenogramEntry {
 }
 
 interface TribunalState {
+  appeal: AppealState | null
   trialId: number
 	queueRevision: number
   connected: boolean
@@ -29,6 +30,7 @@ interface TribunalState {
 }
 
 const initial: TribunalState = {
+  appeal: null,
   trialId: 0,
 	queueRevision: 0,
   connected: false,
@@ -72,6 +74,7 @@ export function useTribunalWS() {
     setState((s) => ({
       ...s,
       phase: 'idle',
+      appeal: null,
       trialId: 0,
       caseTitle: '',
       defendant: '',
@@ -130,7 +133,7 @@ export function useTribunalWS() {
         void apiGet<{ trial: StateChangePayload }>('/api/status').then(({ trial }) => {
           if (closed || wsRef.current !== ws || !trial || revision !== stateEvents) return
           setState((s) => ({
-            ...s, phase: trial.state, trialId: trial.trial_id ?? 0, defendant: trial.defendant ?? '', charge: trial.charge ?? '',
+            ...s, appeal: trial.appeal ?? null, phase: trial.state, trialId: trial.trial_id ?? 0, defendant: trial.defendant ?? '', charge: trial.charge ?? '',
             caseTitle: trial.case_title ?? '', demo: trial.demo ?? false, mode: trial.mode ?? 'viewer',
             timeLeft: trial.time_left_sec ?? null,
             judgeLine: trial.full_line ?? trial.line ?? '', verdict: trial.verdict ?? null,
@@ -181,6 +184,7 @@ export function useTribunalWS() {
             setState((s) => ({
               ...s,
               phase: p.state ?? s.phase,
+              appeal: p.state === 'idle' || p.state === 'indictment' ? (p.appeal ?? null) : (p.appeal ?? s.appeal),
               trialId: p.state === 'idle' ? 0 : (p.trial_id ?? s.trialId),
               demo: p.state === 'idle' ? false : (p.demo ?? s.demo),
               mode: p.mode ?? s.mode,

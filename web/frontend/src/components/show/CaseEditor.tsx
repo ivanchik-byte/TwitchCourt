@@ -1,4 +1,5 @@
 import { Plus, X } from 'lucide-react'
+import { readDraft } from '../../lib/drafts'
 import type { ShowCase } from '../../lib/show'
 
 interface CaseEditorProps {
@@ -22,7 +23,7 @@ export function CaseEditor({ card, busy, onChange, onSave, onCancel }: CaseEdito
 
   return <form className="settings-panel case-editor" onSubmit={event => { event.preventDefault(); void onSave() }}>
     <fieldset disabled={busy}>
-      <h2>{card.id ? 'Изменить дело' : 'Новое дело'}</h2>
+      <h2>{card.id ? 'Изменить дело' : 'Новое дело'}</h2>{!!readDraft(`tribunal-case-editor:${card.id || 'new'}`) && <p role="status">Черновик сохранён в этой вкладке. Изменения ещё не применены к колоде.</p>}
       <label>Название<input value={card.title} required maxLength={120} onChange={event => onChange({ ...card, title: event.target.value })} /></label>
       {fields.map(([key, label, maxLength, rows]) => <label key={key}>{label}<textarea value={card[key] || ''} required={key === 'crime'} maxLength={maxLength} rows={rows} onChange={event => onChange({ ...card, [key]: event.target.value })} /></label>)}
       <div className="settings-panel-heading"><h3>Дополнительные улики</h3><button type="button" className="file-text-button" disabled={exhibits.length >= 3} onClick={() => onChange({ ...card, exhibits: [...exhibits, { title: '', text: '' }] })}><Plus size={13} />Добавить улику</button></div>

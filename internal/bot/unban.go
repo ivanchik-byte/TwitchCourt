@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -34,7 +35,7 @@ func NewUnbanClient(token, clientID, broadcasterID, moderatorID string) *UnbanCl
 		moderatorID = broadcasterID
 	}
 	return &UnbanClient{
-		token:         token,
+		token:         strings.TrimPrefix(token, "oauth:"),
 		clientID:      clientID,
 		broadcasterID: broadcasterID,
 		moderatorID:   moderatorID,

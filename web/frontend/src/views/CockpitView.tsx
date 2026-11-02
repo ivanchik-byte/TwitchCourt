@@ -39,8 +39,8 @@ export function CockpitView() {
   const [appealsError, setAppealsError] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  const [activeAppeal, setActiveAppeal] = useState('')
-  const [resolved, setResolved] = useState(false)
+  const activeAppeal = trial.appeal?.id ?? ''
+  const resolved = trial.appeal?.resolved ?? false
   const defenseDraft = useDefenseDraft()
   const [jury, setJury] = useState<JuryStatus | null>(null)
   const busyRef = useRef(false)
@@ -118,10 +118,7 @@ export function CockpitView() {
         ? await apiPost('/api/unban/trial', { id: appealId })
         : await apiPost('/api/trial', { defendant: nick.trim(), crime: selected.crime, context: selected.context, viewer: mode === 'viewer', ...(selected.source || library.some(card => card.id === selected.id) ? { case_id: selected.id } : {}) })
     if (!response.ok) setError(apiNote(response.status))
-    else {
-      setActiveAppeal(!demo && mode === 'unban' ? appealId : '')
-      setResolved(false)
-    }
+
     setPending(false)
     busyRef.current = false
   }
@@ -229,8 +226,8 @@ export function CockpitView() {
           {currentMode === 'unban' && activeAppeal && !trial.demo && (trial.phase === 'verdict' || !active) && <section className="desk-panel appeal-decision"><h2>Решение по апелляции</h2><p>Эти кнопки отправляют ваше решение в Twitch.</p>{resolved ? <p>Решение отправлено.</p> : <div className="flex flex-wrap gap-3">{[true, false].map((approve) => <button className="secondary-action" disabled={pending} key={String(approve)} onClick={async () => {
             setPending(true)
             const response = await apiPost('/api/unban/resolve', { id: activeAppeal, approve, text: '' })
-            if (response.ok) { setResolved(true); void refreshAppeals() }
-            else toast.error(apiNote(response.status))
+            if (response.ok) { void refreshAppeals() }
+            else toast.error(response.status === 409 ? 'Решение по заявке уже принято. Обновите пульт.' : apiNote(response.status))
             setPending(false)
           }}>{approve ? 'Одобрить разбан' : 'Оставить бан'}</button>)}</div>}</section>}
         </div>

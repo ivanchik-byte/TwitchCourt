@@ -836,3 +836,7 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
   .is-live .live-materials { padding-top: 8px; }
   .is-live .desk-footer { padding-top: 8px; }
 }
+
+.deck-layout.is-editing { grid-template-columns: minmax(240px, .8fr) minmax(0, 1.7fr); }
+.case-editor textarea { min-height: 100px; }
+.case-editor textarea[rows="3"] { min-height: 150px; }

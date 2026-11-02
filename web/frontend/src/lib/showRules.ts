@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { readDraft, writeDraft, removeDraft, useDraftWarning } from './drafts'
 import { apiGet, apiPut } from './api'
 
 export interface ShowRules {
@@ -27,29 +28,58 @@ export interface ShowRules {
   cases_gen_low_mark: number
 }
 
-export function useShowRules() {
-  const [rules, setRules] = useState<ShowRules | null>(null)
+export function useShowRules(scope: string) {
+  const key = `tribunal-rules-draft:${scope}`
+  const baseline = useRef<ShowRules | null>(null)
+  const [rules, updateRules] = useState<ShowRules | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   useEffect(() => {
     let active = true
     void apiGet<ShowRules>('/api/settings').then(settings => {
-      if (active) setRules({ ...settings, bribe_words: settings.bribe_words ?? [], min_amounts: settings.min_amounts ?? {}, punishments: settings.punishments ?? [], articles: settings.articles ?? [] })
+      if (!active) return
+      const clean = { ...settings, bribe_words: settings.bribe_words ?? [], min_amounts: settings.min_amounts ?? {}, punishments: settings.punishments ?? [], articles: settings.articles ?? [] }
+      baseline.current = clean
+      updateRules({ ...clean, ...readDraft<Partial<ShowRules>>(key) })
     }).catch(() => { if (active) setError('Не удалось загрузить правила. Проверьте сервер и ключ доступа.') })
     return () => { active = false }
-  }, [])
-
-  const save = async (patch: Partial<ShowRules>) => {
-    setSaving(true)
+  }, [key])
+  const dirty = !!rules && !!baseline.current && JSON.stringify(rules) !== JSON.stringify(baseline.current)
+  useDraftWarning(dirty)
+  const discard = () => { removeDraft(key); updateRules(baseline.current); setSaved(false) }
+  const setRules = (next: ShowRules) => {
+    if (baseline.current) {
+      const changed = Object.fromEntries(Object.entries(next).filter(([field,value]) => JSON.stringify(value) !== JSON.stringify(baseline.current![field as keyof ShowRules])))
+      if (Object.keys(changed).length) writeDraft(key, changed)
+      else removeDraft(key)
+    }
+    updateRules(next)
     setSaved(false)
-    setError('')
+  }
+  const save = async (patch: Partial<ShowRules>) => {
+    setSaving(true); setSaved(false); setError('')
+    const submitted = rules
     const response = await apiPut('/api/settings', patch)
     if (!response.ok) setError(response.status === 401 ? 'Проверьте ключ доступа.' : 'Настройки не сохранены. Проверьте числа и связь с сервером.')
-    else setSaved(true)
+    else {
+      baseline.current = { ...baseline.current!, ...patch }
+      updateRules(current => {
+        if (!current) return current
+        const next = { ...current }
+        for (const field of Object.keys(patch) as (keyof ShowRules)[]) {
+          if (JSON.stringify(current[field]) === JSON.stringify(submitted?.[field])) Object.assign(next, { [field]: patch[field] })
+        }
+        const changed = Object.fromEntries(Object.entries(next).filter(([field,value]) => JSON.stringify(value) !== JSON.stringify(baseline.current![field as keyof ShowRules])))
+        if (Object.keys(changed).length) writeDraft(key, changed)
+        else removeDraft(key)
+        return next
+      })
+      setSaved(true)
+    }
     setSaving(false)
   }
-  return { rules, setRules, error, saving, saved, save }
+  return { rules, setRules, dirty, discard, error, saving, saved, save }
 }
 
 export const donationActions: Record<string, string> = {
