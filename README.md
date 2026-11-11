@@ -1,4 +1,4 @@
-# Stream Tribunal
+# Stream Tribunal(НЕ ЗАКОНЧЕННОЕ)
 
 <p align="center">
   <img src="web/overlay/assets/judge.png" alt="Судья трибунала" width="280">
